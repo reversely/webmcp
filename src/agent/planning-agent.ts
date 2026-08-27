@@ -315,28 +315,47 @@ function historyItems(messages: ChatMessage[], count: number): AgentInputItem[] 
 }
 
 /** One agent turn over the last messages of the project; returns the final assistant text. */
+/** The nudge appended when a turn returns no text and no tool call; the retry carries it as the last user item. */
+const EMPTY_TURN_NUDGE = "Your last turn was empty. Act on the request above with a tool call, or say in one sentence what you need before you can.";
+/** The reply when the retry is empty too, so the chat never stays silent after a message. */
+export const EMPTY_TURN_REPLY = "The planner returned nothing for this request; send it again.";
+
+/**
+ * One agent turn over the last messages of the project; returns the final assistant text. A turn
+ * that ends with no text and no tool call (#74) runs once more with a nudge; a second empty turn
+ * records an issue and returns the stock reply.
+ */
 export async function runPlanningAgent(ctx: AgentContext, history: ChatMessage[], text: string, options: RunOptions = {}): Promise<string> {
   const agent = planningAgent(ctx, options);
   const input: AgentInputItem[] = [...historyItems(history, 20), { role: "user", content: `${ctx.author}: ${text}` }];
   return withSpan(ctx.projectId, { kind: "agent_run", name: "PlanningAgent", prd_ref: "PRD 5", input: { author: ctx.author, text, history_items: input.length - 1, model: MODEL } }, async (span) => {
     try {
-      const result = await run(agent, input, { context: ctx, maxTurns: 12 });
       const usage = { requests: 0, input_tokens: 0, output_tokens: 0 };
-      for (const response of result.rawResponses) {
-        usage.requests += 1;
-        usage.input_tokens += response.usage.inputTokens;
-        usage.output_tokens += response.usage.outputTokens;
-        recordSpan(ctx.projectId, {
-          kind: "model",
-          name: MODEL,
-          input: { response_id: response.responseId ?? null },
-          output: { input_tokens: response.usage.inputTokens, output_tokens: response.usage.outputTokens, output_items: response.output.length },
-          status: "ok"
-        });
+      let attempts = 0;
+      let reply = "";
+      let acted = false;
+      for (const attemptInput of [input, [...input, { role: "user" as const, content: EMPTY_TURN_NUDGE }]]) {
+        attempts += 1;
+        const result = await run(agent, attemptInput, { context: ctx, maxTurns: 12 });
+        for (const response of result.rawResponses) {
+          usage.requests += 1;
+          usage.input_tokens += response.usage.inputTokens;
+          usage.output_tokens += response.usage.outputTokens;
+          recordSpan(ctx.projectId, {
+            kind: "model",
+            name: MODEL,
+            input: { response_id: response.responseId ?? null },
+            output: { input_tokens: response.usage.inputTokens, output_tokens: response.usage.outputTokens, output_items: response.output.length },
+            status: "ok"
+          });
+        }
+        reply = typeof result.finalOutput === "string" ? result.finalOutput : JSON.stringify(result.finalOutput ?? "");
+        acted = result.newItems.some((item) => item.type === "tool_call_item");
+        span.setOutput({ reply, usage, new_items: result.newItems.length, attempts });
+        if (reply.trim() || acted) return reply;
       }
-      const reply = typeof result.finalOutput === "string" ? result.finalOutput : JSON.stringify(result.finalOutput ?? "");
-      span.setOutput({ reply, usage, new_items: result.newItems.length });
-      return reply;
+      recordIssue(ctx.projectId, { source: "agent_run PlanningAgent", severity: "error", message: `The PlanningAgent returned no text and no tool call for "${text.slice(0, 80)}" twice; nothing was recorded for it, so send the message again.` });
+      return EMPTY_TURN_REPLY;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       recordIssue(ctx.projectId, { source: "agent_run PlanningAgent", severity: "error", message: `The PlanningAgent run failed (${message}); the message got no reply, so send it again once the cause is fixed.` });

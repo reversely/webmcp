@@ -5,7 +5,8 @@
 import { Usage, type Model, type ModelRequest, type ModelResponse } from "@openai/agents";
 import { beforeEach, describe, expect, it } from "vitest";
 import { snapshot } from "../server/state";
-import { runPlanningAgent } from "./planning-agent";
+import { issuesFor } from "../server/trace";
+import { EMPTY_TURN_REPLY, runPlanningAgent } from "./planning-agent";
 import { resetState, seedProject } from "./test-helpers";
 
 type Script = (request: ModelRequest, turn: number) => ModelResponse["output"];
@@ -70,5 +71,31 @@ describe("PlanningAgent records a stated item and relation (#59)", () => {
     expect(outputs[0]).toMatchObject({ created: true, type: "required_item", value: { name: "floor lamp", kind: "lighting" } });
     expect(outputs[1]).toMatchObject({ created: true, type: "layout_requirement" });
     expect(reply).toBe("Recorded: floor lamp (lighting), and floor lamp beside the deep couch.");
+  });
+});
+
+describe("PlanningAgent retries an empty turn (#74)", () => {
+  beforeEach(resetState);
+
+  it("runs the turn again with a nudge when the model returns no text and no call, and uses the second answer", async () => {
+    const projectId = seedProject();
+    const model = scriptedModel((request, turn) => {
+      if (turn === 1) return [say("")];
+      const last = (request.input as { role?: string; content?: unknown }[]).at(-1);
+      expect(String(last?.content)).toMatch(/last turn was empty/);
+      return [say("Sourcing the floor lamp now.")];
+    });
+    const reply = await runPlanningAgent({ projectId, author: "Ben" }, [], "Source the floor lamp.", { model });
+    expect(reply).toBe("Sourcing the floor lamp now.");
+    expect(model.requests).toHaveLength(2);
+  });
+
+  it("answers with the stock reply and records an issue when the retry is empty too", async () => {
+    const projectId = seedProject();
+    const model = scriptedModel(() => [say("")]);
+    const reply = await runPlanningAgent({ projectId, author: "Ben" }, [], "Source the floor lamp.", { model });
+    expect(reply).toBe(EMPTY_TURN_REPLY);
+    expect(model.requests).toHaveLength(2);
+    expect(issuesFor(projectId).some((i) => /no text and no tool call/.test(i.message))).toBe(true);
   });
 });
