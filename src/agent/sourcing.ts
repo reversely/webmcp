@@ -33,9 +33,9 @@ import { placeItem, proposeLayout, type Layout, type LayoutInput } from "./layou
 import { evaluateVisualFit } from "./visual";
 
 export const ADDRESS_QUESTION = "What delivery address should I use to check arrival dates?";
-export const NO_WINDOW_NOTE = "No priced item outside the required list is known to the project yet, so the selection takes the best combination under the budget.";
-export const COUNTRY_ONLY_NOTE = "No delivery address yet; the search carried no destination and delivery estimates start once one is set.";
-export const OVER_BUDGET_NOTE = "The budget is already spent, so the cheapest match is added and the overage is reported.";
+export const NO_WINDOW_NOTE = "The project has no priced item outside the required list yet, so the selection takes the highest-ranked combination under the budget.";
+export const COUNTRY_ONLY_NOTE = "No delivery address is set, so the search carried no destination. Delivery estimates start once an address is set.";
+export const OVER_BUDGET_NOTE = "The budget is already spent, so the planner adds the cheapest match and reports the overage.";
 /** The price ceiling of a single-item search when the budget is already spent: none that a catalog price reaches. */
 const NO_CEILING_CENTS = 1_000_000_000;
 /** Candidates per item that get the (slow) visual and delivery checks. */

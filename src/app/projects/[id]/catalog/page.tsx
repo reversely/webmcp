@@ -7,7 +7,7 @@ export default async function CatalogPage({ params }: { params: Promise<{ id: st
   return (
     <>
       <h1 className="page-title">Catalog</h1>
-      <p className="page-summary">Every product this project has ingested, with the dimensions it was read with and where they came from.</p>
+      <p className="page-summary">Every product added to this project, with its dimensions and the merchant text they were read from.</p>
       <CatalogTable projectId={id} products={snap.products} candidates={snap.candidates} />
     </>
   );

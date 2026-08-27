@@ -63,7 +63,7 @@ export function RankingArtifact({ data, title, onApprove, approving = false }: {
     <div className={css.card} data-testid="artifact-ranking" role="group" aria-label={`Replacement ${category}`}>
       <div className={css.title}>{title ?? `Cheaper ${category} options`}</div>
       <div className={css.sub}>
-        Needs {formatMoney(data.required_savings_cents)} in savings, so the new price stays at or under {formatMoney(data.ceiling_cents)}. Rows rank by visual match, then delivery, then price.
+        The budget needs {formatMoney(data.required_savings_cents)} back, so the new price must stay at or under {formatMoney(data.ceiling_cents)}. Rows rank by visual match, then delivery, then price.
       </div>
       <div className={css.tableWrap}>
         <table className={css.table}>
@@ -127,7 +127,7 @@ export function RankingArtifact({ data, title, onApprove, approving = false }: {
       </div>
       {onApprove && (
         <div className={css.actions}>
-          <span className={css.hint}>{selected ? "Approving replaces the item in the BOM." : "Waiting for a selection."}</span>
+          <span className={css.hint}>{selected ? "Approving replaces the item in the project." : "Waiting for a selection."}</span>
           <button className="btn primary" type="button" data-testid="approve-replacement" onClick={onApprove} disabled={!selected || approving}>
             Approve replacement
           </button>

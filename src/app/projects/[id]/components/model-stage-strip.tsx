@@ -18,11 +18,10 @@ export function isRunning(job: ModelJob): boolean {
   return job.status === "queued" || job.status === "generating";
 }
 
-/** Rail tag text for a job: "3D mesh generated" while running, "3D proxy" after a fall-back, nothing when ready. */
+/** Rail tag text for a job: "generating model" while running, "colour proxy" after a fall-back, nothing when ready. */
 export function modelTagFor(job: ModelJob | undefined, status: ModelJob["status"]): string | null {
-  if (job && isRunning(job)) return `3D ${stageLabel(job.stages[job.stages.length - 1]?.name ?? "queued")}`;
-  if (status === "queued" || status === "generating") return "3D generating";
-  if (status === "proxy") return "3D proxy";
+  if ((job && isRunning(job)) || status === "queued" || status === "generating") return "generating model";
+  if (status === "proxy") return "colour proxy";
   return null;
 }
 
@@ -58,7 +57,7 @@ export function ModelStageStrip({ job, productId, projectId, status }: { job: Mo
   if (job.status === "ready") {
     return (
       <div className={css.stages} data-testid="model-stages" data-stage="ready">
-        {current?.detail === "cached" ? "3D from cache" : <>3D generated in <span className={css.mm}>{seconds(job.elapsed_ms)}</span></>}
+        {current?.detail === "cached" ? "Model loaded from cache" : <>Model generated in <span className={css.mm}>{seconds(job.elapsed_ms)}</span></>}
       </div>
     );
   }
@@ -66,8 +65,8 @@ export function ModelStageStrip({ job, productId, projectId, status }: { job: Mo
     return (
       <div className={css.stages} data-testid="model-stages" data-stage="proxy" title={job.error ?? undefined}>
         <span>
-          3D proxy after <span className={css.mm}>{seconds(job.elapsed_ms)}</span>
-          {job.error ? ` · ${job.error}` : ""}
+          Colour proxy after <span className={css.mm}>{seconds(job.elapsed_ms)}</span>
+          {job.error ? `: ${job.error}` : ""}
         </span>
         {retryButton}
       </div>

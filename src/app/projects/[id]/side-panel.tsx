@@ -189,7 +189,7 @@ export function SidePanel({ projectId, children }: { projectId: string; children
           <section className="rail" aria-label="Bill of materials" data-testid="bom-rail">
             <div className="eyebrow">Budget</div>
             <div className={`stat${over ? " over" : ""}`} data-testid="budget-stat" data-state={snap?.budget.state}>
-              {snap && committed !== null ? `${formatMoney(committed)} / ${formatMoney(snap.budget.budget_cents)}` : "—"}
+              {snap && committed !== null ? `${formatMoney(committed)} / ${formatMoney(snap.budget.budget_cents)}` : ""}
             </div>
             {over && (
               <span className="tag red appear" key={snap!.budget.overage_cents}>
@@ -197,7 +197,7 @@ export function SidePanel({ projectId, children }: { projectId: string; children
               </span>
             )}
             <div className="rail-lines">
-              {lines.length === 0 && <div className="empty">No items in the BOM yet.</div>}
+              {lines.length === 0 && <div className="empty">No products added yet.</div>}
               {lines.map((b) => (
                 <div className="rail-line" key={b.id}>
                   {b.product?.primary_image_url ? <img src={b.product.primary_image_url} alt="" /> : <div />}
@@ -206,8 +206,8 @@ export function SidePanel({ projectId, children }: { projectId: string; children
                     <div className="sub">
                       {b.category}
                       {b.product?.spatial_status === "grounded" && b.product.width_mm != null
-                        ? ` · ${formatFeetInches(b.product.width_mm)} × ${formatFeetInches(b.product.depth_mm!)}`
-                        : " · dimensions unknown"}
+                        ? `, ${formatFeetInches(b.product.width_mm)} × ${formatFeetInches(b.product.depth_mm!)}`
+                        : ", dimensions unknown"}
                     </div>
                     {b.product && modelTagFor(snap?.model_jobs?.[b.product.id], b.product.model_status) && (
                       <span className="tag" style={{ marginTop: 4 }} data-testid="model-tag">

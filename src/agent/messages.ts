@@ -28,12 +28,12 @@ function formatAddress(address: DeliveryAddress): string {
 function summarizeOutcome(outcome: SourcingOutcome): string {
   const s = appState();
   if (outcome.status === "waiting_for_user") return outcome.question;
-  if (outcome.status === "no_match") return `I could not find a combination inside the budget for ${outcome.categories.join(", ")}.`;
+  if (outcome.status === "no_match") return `No combination for ${outcome.categories.join(", ")} fits inside the budget.`;
   const picks = Object.entries(outcome.selected).map(([category, productId]) => {
     const product = s.store.products.get(productId!);
     return `${category}: ${product?.title ?? productId} (${formatMoney(product?.price_cents ?? 0, product?.currency)})`;
   });
-  return `Selected ${picks.join("; ")}. Subtotal ${formatMoney(outcome.subtotal_cents)}.${outcome.layout_checked ? " Layout placed and checked." : ""}`;
+  return `Selected ${picks.join("; ")}. Subtotal ${formatMoney(outcome.subtotal_cents)}.${outcome.layout_checked ? " The items are placed and the layout is checked." : ""}`;
 }
 
 /** "Replaced with X." for one line; each line named with its product when the approval replaced several (#64). */
@@ -61,7 +61,7 @@ async function routeMessage(projectId: string, author: string, text: string, dep
       setDeliveryAddress(projectId, address);
       const line = hasDestination(address)
         ? `Checking delivery to ${formatAddress(address)}.`
-        : "Stored the reply as the address line; checking delivery without a destination.";
+        : "The reply is stored as the address line, and delivery checks run without a destination.";
       pushMessage(projectId, { role: "agent", author: "PlanningAgent", text: line });
       const result = await resumeSourcing(projectId, run.id, deps.sourcing);
       pushMessage(projectId, { role: "agent", author: "PlanningAgent", text: summarizeOutcome(result) });

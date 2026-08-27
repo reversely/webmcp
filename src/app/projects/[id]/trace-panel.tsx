@@ -118,7 +118,7 @@ export function TracePanel({ projectId }: { projectId: string }) {
                 <div>
                   <div className="issue-msg">{issue.message}</div>
                   <div className="issue-meta">
-                    {issue.source} · {clock(issue.at)}
+                    {issue.source}, {clock(issue.at)}
                   </div>
                 </div>
               </div>

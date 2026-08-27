@@ -146,8 +146,8 @@ export function ProductSearch({ projectId, items, budget, onAdded, swap = null }
         </div>
         {!swap && selected === OTHER && (
           <div className="field">
-            <label htmlFor="search-item">What is it? (your words)</label>
-            <input id="search-item" className="input" value={otherName} onChange={(e) => setOtherName(e.target.value)} placeholder="Item name" />
+            <label htmlFor="search-item">Item name (your words)</label>
+            <input id="search-item" className="input" value={otherName} onChange={(e) => setOtherName(e.target.value)} />
           </div>
         )}
         <div className="field">
@@ -166,7 +166,7 @@ export function ProductSearch({ projectId, items, budget, onAdded, swap = null }
         </p>
       )}
       {results && !shipsTo && <p className={css.hint}>No delivery address yet, so the search carried no destination. Delivery estimates start once an address is set.</p>}
-      {shipsTo && !shipsTo.postal_code && <p className={css.hint}>Searched with the country only. Delivery estimates improve after an address is set.</p>}
+      {shipsTo && !shipsTo.postal_code && <p className={css.hint}>The search used the country only. Delivery estimates improve after a full address is set.</p>}
       {results && results.length === 0 && <div className="empty">No products matched. Try a broader search or raise the price limit.</div>}
       {results && results.length > 0 && (
         <div className={css.results} style={{ marginTop: 16 }}>

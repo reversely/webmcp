@@ -28,7 +28,7 @@ function funnel(c: SourcingData["categories"][keyof SourcingData["categories"]])
     if (parts.length > 0 && !(n > 0)) break;
     parts.push(`${n ?? 0} ${label}`);
   }
-  return parts.join(" → ");
+  return parts.join(", ");
 }
 
 export function SourcingArtifact({ data, products, title }: { data: SourcingData; products: ProductRef[]; title?: string }) {
@@ -63,7 +63,7 @@ export function SourcingArtifact({ data, products, title }: { data: SourcingData
           <span>{typeof data.subtotal_cents === "number" ? <>Subtotal <strong>{formatMoney(data.subtotal_cents)}</strong></> : "Subtotal pending"}</span>
           {hasWindow && (
             <span>
-              Window {formatMoney(data.window!.min_cents!)} to {formatMoney(data.window!.max_cents!)}
+              Price window {formatMoney(data.window!.min_cents!)} to {formatMoney(data.window!.max_cents!)}
             </span>
           )}
         </div>

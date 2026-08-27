@@ -158,7 +158,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
               </h2>
               {roomItems.length > 0 && (
                 <div className={css.note} data-testid="model-caption">
-                  3D: {generated} generated, {proxies} {proxies === 1 ? "proxy" : "proxies"}
+                  {generated} {generated === 1 ? "model" : "models"} generated, {proxies} colour {proxies === 1 ? "proxy" : "proxies"}
                 </div>
               )}
             </div>
@@ -214,7 +214,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
                 </span>
               );
             })}
-            {geometry && rules.length === 0 && <span className={css.note}>No layout rules were agreed on the board.</span>}
+            {geometry && rules.length === 0 && <span className={css.note}>The approved plan has no layout rules.</span>}
             {error && <span className={css.error}>{error}</span>}
           </div>
           {tray.length > 0 && (
@@ -230,7 +230,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
                       <div style={{ color: "var(--ink)" }}>{b.product?.title ?? b.product_id}</div>
                       <div className={css.sub}>
                         {b.category}
-                        {hasBox(b) ? ` · ${formatFeetInches(b.product!.width_mm!)} × ${formatFeetInches(b.product!.depth_mm!)}` : ""}
+                        {hasBox(b) ? `, ${formatFeetInches(b.product!.width_mm!)} × ${formatFeetInches(b.product!.depth_mm!)}` : ""}
                       </div>
                       {hasBox(b) ? (
                         <button className="btn" type="button" onClick={() => place(b.id)}>

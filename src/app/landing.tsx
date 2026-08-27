@@ -21,11 +21,11 @@ function WhoAmI({ name, role, onName, onRole, idPrefix, takenRoles = [] }: { nam
   return (
     <>
       <div className="field">
-        <label htmlFor={`${idPrefix}-name`}>Your name, as the others will see it</label>
+        <label htmlFor={`${idPrefix}-name`}>Your name as the others will see it</label>
         <input id={`${idPrefix}-name`} className="input" value={name} onChange={(e) => onName(e.target.value)} autoComplete="name" data-testid={`${idPrefix}-name`} required />
       </div>
       <div className="field">
-        <label htmlFor={`${idPrefix}-role`}>Your part in the project</label>
+        <label htmlFor={`${idPrefix}-role`}>Your role in the project</label>
         <input id={`${idPrefix}-role`} className="input" value={role} onChange={(e) => onRole(e.target.value)} data-testid={`${idPrefix}-role`} />
         {takenRoles.length > 0 && <p className={styles.taken}>Already in the project: {takenRoles.join(", ")}.</p>}
       </div>
@@ -110,7 +110,7 @@ export function Landing({ missingId, initialCode, initialProjectId }: { missingI
     <div className={styles.page}>
       <div className={styles.head}>
         <h1>Plan a room together</h1>
-        <p>One person creates the project and shares its six-character code; everyone else joins with the code and says who they are. Nothing is stored beyond the server's memory.</p>
+        <p>One person creates the project and shares its six-character code; the other members join with the code and say who they are. The server holds the project in memory only, so a restart clears it.</p>
       </div>
       {missingId && (
         <div className={styles.message} role="status" data-testid="landing-message">
@@ -131,7 +131,7 @@ export function Landing({ missingId, initialCode, initialProjectId }: { missingI
                 <input id="create-budget" className="input" type="number" min="1" step="1" value={budget} onChange={(e) => setBudget(e.target.value)} data-testid="create-budget" required />
               </div>
               <div className="field">
-                <label htmlFor="create-date">Everything must arrive by</label>
+                <label htmlFor="create-date">Items must arrive by</label>
                 <input id="create-date" className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} data-testid="create-date" required />
               </div>
               {createError && <p className={styles.error}>{createError}</p>}

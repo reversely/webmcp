@@ -7,6 +7,7 @@ import css from "../components/stages.module.css";
 
 type Filter = "all" | "grounded" | "visual_only";
 const MODEL_TAG: Record<Product["model_status"], string> = { no_model: "", queued: "blue", generating: "blue", ready: "green", proxy: "", failed: "red" };
+const MODEL_LABEL: Record<Product["model_status"], string> = { no_model: "no model", queued: "queued", generating: "generating model", ready: "model generated", proxy: "colour proxy", failed: "failed" };
 const DELIVERY_TAG: Record<NonNullable<Candidate["delivery_status"]>, string> = { confirmed: "green", likely: "", unknown: "", fail: "red" };
 
 import { KIND_LABEL } from "../components/item-panel";
@@ -71,11 +72,11 @@ export function CatalogTable({ projectId, products: initialProducts, candidates:
           <input id="catalog-q" className="input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Title or merchant" />
         </div>
         <div className="field">
-          <label>Spatial status</label>
+          <label>Dimensions</label>
           <div className={css.chips}>
             {(["all", "grounded", "visual_only"] as Filter[]).map((f) => (
               <button key={f} type="button" className={css.chip} aria-pressed={filter === f} onClick={() => setFilter(f)}>
-                {f === "all" ? "All" : f === "grounded" ? "Grounded" : "Visual only"} {counts[f]}
+                {f === "all" ? "All" : f === "grounded" ? "Known" : "Unknown"} {counts[f]}
               </button>
             ))}
           </div>
@@ -87,7 +88,7 @@ export function CatalogTable({ projectId, products: initialProducts, candidates:
         </p>
       )}
       {products.length === 0 ? (
-        <div className="empty">No products yet. A product appears here after it is added to a project, from the search panel on the Items stage or a product URL in chat.</div>
+        <div className="empty">No products yet. Products added from the search panel on the Items stage or from a product URL in chat appear here.</div>
       ) : rows.length === 0 ? (
         <div className="empty">No products match this filter.</div>
       ) : (
@@ -102,7 +103,7 @@ export function CatalogTable({ projectId, products: initialProducts, candidates:
                 <th className="num">Price</th>
                 <th>W × D × H</th>
                 <th>Dimension source</th>
-                <th>Spatial</th>
+                <th>Sizing</th>
                 <th>Model</th>
                 <th>Delivery</th>
                 <th>Merchant</th>
@@ -138,10 +139,10 @@ export function CatalogTable({ projectId, products: initialProducts, candidates:
                     <td>{dims ?? <span className="tag">unknown</span>}</td>
                     <td>{p.dimension_source ? <span className={`mono ${css.clip}`} title={p.dimension_source.text} style={{ display: "block" }}>{p.dimension_source.text}</span> : <span className="tag">not stated</span>}</td>
                     <td>
-                      <span className={`tag${p.spatial_status === "visual_only" ? " yellow" : ""}`}>{p.spatial_status === "grounded" ? "grounded" : "visual only"}</span>
+                      <span className={`tag${p.spatial_status === "visual_only" ? " yellow" : ""}`}>{p.spatial_status === "grounded" ? "dimensions known" : "dimensions unknown"}</span>
                     </td>
                     <td>
-                      <span className={`tag ${MODEL_TAG[p.model_status]}`}>{p.model_status.replace("_", " ")}</span>
+                      <span className={`tag ${MODEL_TAG[p.model_status]}`}>{MODEL_LABEL[p.model_status]}</span>
                     </td>
                     <td>{c?.delivery_status ? <span className={`tag ${DELIVERY_TAG[c.delivery_status]}`}>{c.delivery_status}</span> : <span className="tag">pending</span>}</td>
                     <td>

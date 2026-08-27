@@ -130,7 +130,7 @@ const traceCatalogCall: CatalogCallHook = (call, run) => {
       recordIssue(null, {
         source: `${kind} ${call.tool}`,
         severity: "error",
-        message: `The ${call.tool} call to ${host} failed (${message}); this search returned nothing, so the category has fewer candidates until it is retried.`,
+        message: `The ${call.tool} call to ${host} failed (${message}); this search returned nothing, so the item has fewer candidates until it is retried.`,
         detail: JSON.stringify(summarizeCatalogArgs(call.args))
       });
       throw e;
