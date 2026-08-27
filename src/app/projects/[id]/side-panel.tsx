@@ -2,27 +2,57 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { ProjectSnapshot } from "../../../server/state";
+import type { RunEvent, ToolEvent } from "../../../server/run-events";
 import { formatMoney } from "../../../domain/money";
 import { formatFeetInches } from "../../../domain/types";
 import { ArtifactView, type ArtifactMessage } from "./artifacts";
 import { useAnimatedNumber } from "./artifacts/animated-number";
 import { modelTagFor } from "./components/model-stage-strip";
+import { readSse } from "./sse";
 import { TracePanel } from "./trace-panel";
 import { ANONYMOUS, useIdentity } from "../../identity";
 
 type Snapshot = Omit<ProjectSnapshot, "messages"> & { messages: ArtifactMessage[] };
 
+declare global {
+  interface Window {
+    /** Every streamed chat event this page received, in order; for Playwright and the console. */
+    __chat_events?: { type: string; at: number }[];
+  }
+}
+
+/** The list the panel shows: the polled snapshot with the streamed messages laid over it by id. */
+function mergeMessages(base: ArtifactMessage[], live: Map<string, ArtifactMessage>): ArtifactMessage[] {
+  const seen = new Set<string>();
+  const merged = base.map((m) => {
+    seen.add(m.id);
+    return live.get(m.id) ?? m;
+  });
+  for (const [id, m] of live) if (!seen.has(id)) merged.push(m);
+  return merged;
+}
+
+function toolLabel(t: ToolEvent): string {
+  if (t.status === "running") return "running";
+  if (t.status === "error") return "failed";
+  return t.duration_ms !== undefined && t.duration_ms >= 100 ? `${(t.duration_ms / 1000).toFixed(1)} s` : "done";
+}
 
 /**
- * Right column from stage 2 onward: the BOM and budget rail, then the project chat. Polls the
- * snapshot every few seconds until realtime (#18) replaces it. Messages carry optional artifacts
- * (PRD 9.2, 13.1, 5.2) that render as cards in the stream.
+ * Right column from stage 2 onward: the BOM and budget rail, then the project chat. The snapshot
+ * polls every few seconds so the other person's messages arrive; a message this browser sends
+ * streams back as Server-Sent Events (#19), so the assistant's text, the artifacts, and each tool
+ * call show as they happen. Tool calls render as one quiet line each under the message that
+ * started the run. Messages carry optional artifacts (PRD 9.2, 13.1, 5.2) that render as cards.
  */
 export function SidePanel({ projectId, children }: { projectId: string; children: ReactNode }) {
   const pathname = usePathname();
   const wide = pathname.endsWith("/board");
   const identity = useIdentity(projectId);
   const [snap, setSnap] = useState<Snapshot | null>(null);
+  const [live, setLive] = useState<Map<string, ArtifactMessage>>(() => new Map());
+  const [tools, setTools] = useState<Record<string, ToolEvent[]>>({});
+  const [failure, setFailure] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -50,15 +80,70 @@ export function SidePanel({ projectId, children }: { projectId: string; children
     if (!body || sending) return;
     setSending(true);
     setDraft("");
+    setFailure(null);
+    // The run's tool lines hang under the user message that started it; its id arrives in the first text event.
+    let runKey: string | null = null;
+    const upsert = (m: ArtifactMessage) =>
+      setLive((prev) => {
+        const next = new Map(prev);
+        next.set(m.id, m);
+        return next;
+      });
+    const handle = (event: RunEvent) => {
+      (window.__chat_events ??= []).push({ type: event.type, at: Date.now() });
+      switch (event.type) {
+        case "text":
+          if (event.message.role === "user" && !runKey) runKey = event.message.id;
+          upsert(event.message as ArtifactMessage);
+          break;
+        case "artifact":
+        case "question":
+          upsert(event.message as ArtifactMessage);
+          break;
+        case "tool": {
+          const key = runKey ?? "pending";
+          setTools((prev) => {
+            const list = prev[key] ?? [];
+            const i = list.findIndex((t) => t.id === event.tool.id);
+            return { ...prev, [key]: i >= 0 ? list.map((t, j) => (j === i ? event.tool : t)) : [...list, event.tool] };
+          });
+          break;
+        }
+        case "error":
+          setFailure(event.error);
+          break;
+        case "done":
+          break;
+      }
+    };
     try {
-      await fetch(`/api/projects/${projectId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ author: identity?.display_name ?? ANONYMOUS, text: body }) });
+      const res = await fetch(`/api/projects/${projectId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+        body: JSON.stringify({ author: identity?.display_name ?? ANONYMOUS, text: body })
+      });
+      if (res.ok && res.body && (res.headers.get("content-type") ?? "").includes("text/event-stream")) {
+        await readSse(res.body, (e) => {
+          try {
+            handle(JSON.parse(e.data) as RunEvent);
+          } catch {
+            // A malformed frame is skipped; the poll fills any gap.
+          }
+        });
+      } else if (!res.ok) {
+        setFailure(`The planner did not answer (${res.status}). Send the message again.`);
+      }
       await refresh();
+    } catch {
+      setFailure("The connection dropped before the planner answered. Send the message again.");
     } finally {
+      // The snapshot now holds everything the stream delivered.
+      setLive(new Map());
       setSending(false);
     }
   }
 
-  const messages = snap?.messages ?? [];
+  const messages = mergeMessages(snap?.messages ?? [], live);
   const last = messages[messages.length - 1];
 
   // Auto-scroll to the newest message, and to an artifact that changed in place.
@@ -66,7 +151,7 @@ export function SidePanel({ projectId, children }: { projectId: string; children
   useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [lastKey]);
+  }, [lastKey, tools]);
 
   // A new question artifact focuses the input once (PRD 5.2: the next message answers it).
   useEffect(() => {
@@ -80,6 +165,21 @@ export function SidePanel({ projectId, children }: { projectId: string; children
   const committed = useAnimatedNumber(snap ? snap.budget.committed_cents : null);
   const lines = snap?.bom.filter((b) => b.status !== "removed") ?? [];
   const over = snap?.budget.state === "over";
+
+  function toolRows(key: string) {
+    const list = tools[key];
+    if (!list?.length) return null;
+    return (
+      <div className="msg-tools" data-testid="chat-tool-events">
+        {list.map((t) => (
+          <div key={t.id} className="msg-tool" data-testid="chat-tool-event" data-status={t.status} title={t.error}>
+            <span className="msg-tool-name">{t.name}</span>
+            <span className="msg-tool-status">{toolLabel(t)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className={`frame${wide ? " wide" : ""}`}>
@@ -134,12 +234,21 @@ export function SidePanel({ projectId, children }: { projectId: string; children
                   );
                 }
                 return (
-                  <div key={m.id} className={`msg ${m.role}`} data-message-id={m.id}>
-                    {m.role === "user" && <span className="who">{m.author}</span>}
-                    {m.text}
+                  <div key={m.id} className="msg-group" data-message-id={m.id}>
+                    <div className={`msg ${m.role}`}>
+                      {m.role === "user" && <span className="who">{m.author}</span>}
+                      {m.text}
+                    </div>
+                    {toolRows(m.id)}
                   </div>
                 );
               })}
+              {toolRows("pending")}
+              {failure && (
+                <div className="msg-tool" data-testid="chat-failure" data-status="error">
+                  {failure}
+                </div>
+              )}
               {snap && messages.length === 0 && <div className="empty">Ask the planner for a room, or paste a product URL.</div>}
             </div>
             <form

@@ -147,6 +147,19 @@ function push<T>(map: Map<string, T[]>, projectId: string, row: T, cap: number):
   map.set(projectId, list);
 }
 
+type SpanListener = (span: Span) => void;
+const spanListeners = new Set<SpanListener>();
+
+/** Calls `fn` on every span write (open, close, or recorded whole), in write order; returns the unsubscribe. */
+export function onSpanWrite(fn: SpanListener): () => void {
+  spanListeners.add(fn);
+  return () => spanListeners.delete(fn);
+}
+
+function notifySpan(span: Span): void {
+  for (const fn of spanListeners) fn(span);
+}
+
 /** Opens a running span; `endSpan` closes it. Prefer `withSpan` unless the end is somewhere else. */
 export function startSpan(projectId: string, meta: SpanMeta, parentId?: string): Span {
   const s = store();
@@ -164,6 +177,7 @@ export function startSpan(projectId: string, meta: SpanMeta, parentId?: string):
     seq: ++s.seq
   };
   push(s.spans, projectId, span, MAX_SPANS);
+  notifySpan(span);
   return span;
 }
 
@@ -176,6 +190,7 @@ export function endSpan(span: Span, outcome: { status: "ok"; output?: unknown } 
   span.ended_at = ended.toISOString();
   span.duration_ms = Math.max(0, ended.getTime() - Date.parse(span.started_at));
   span.seq = ++s.seq;
+  notifySpan(span);
   return span;
 }
 
@@ -254,6 +269,7 @@ export function recordSpan(projectId: string, row: SpanMeta & { output?: unknown
     seq: ++s.seq
   };
   push(s.spans, projectId, span, MAX_SPANS);
+  notifySpan(span);
   return span;
 }
 

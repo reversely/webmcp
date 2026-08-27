@@ -131,7 +131,14 @@ test("Scene 1: Zach creates the project from the landing page and the values per
   expect(spec.board).not.toBeNull();
 });
 
-test("Scene 2: Ben joins with the code; each sees the other's board objects", async ({ request }) => {
+/** Board sync (#18): the 800 ms save plus one 2 s poll; an object reaches the other board inside this. */
+const SYNC_MS = 5_000;
+/** The heartbeat carries the cursor every 5 s; the other board draws it within three beats. */
+const CURSOR_MS = 15_000;
+
+const shapeCount = (page: Page) => page.evaluate(() => (window as Window & { __tldraw_editor?: { getCurrentPageShapeIds(): Set<string> } }).__tldraw_editor?.getCurrentPageShapeIds().size ?? -1);
+
+test("Scene 2: Ben joins with the code; each sees the other's board objects and cursor without reload", async () => {
   const joined = await joinThroughLanding(ben, roomCode, "Ben", "Ben");
   expect(joined).toBe(projectId);
   await waitForTools(ben);
@@ -140,25 +147,25 @@ test("Scene 2: Ben joins with the code; each sees the other's board objects", as
   await addBoardNote(zach, ZACH_ITEMS[0], { x: 360, y: 110 });
   await addBoardNote(zach, ZACH_ITEMS[1], { x: 580, y: 110 });
   await addBoardSwatch(zach, "orange", { x: 720, y: 240 });
-  await zach.waitForTimeout(1500);
-  await waitForSnapshot(request, projectId, (s) => JSON.stringify(s).length > 0, 2_000);
+  for (const item of ZACH_ITEMS) await expect(boardText(ben, item)).toBeVisible({ timeout: SYNC_MS });
+  // Ben's store holds exactly what both typed: Zach's four Scene 1 notes, two items, one swatch.
+  await expect.poll(() => shapeCount(ben), { timeout: SYNC_MS }).toBe(ZACH_NOTES.length + ZACH_ITEMS.length + 1);
 
-  // Realtime sync (#18) is pending: Ben re-reads the board to see Zach's notes, then adds his own.
-  const live = await appears(boardText(ben, ZACH_ITEMS[0]), POLL_MS);
-  if (!live) {
-    note("pending", "Board realtime sync (#18) absent: Ben reloads to see Zach's notes");
-    await ben.reload();
-  }
-  for (const item of ZACH_ITEMS) await expect(boardText(ben, item)).toBeVisible();
-
-  await addBoardNote(ben, BEN_ITEMS[0], { x: 360, y: 110 });
-  await addBoardNote(ben, "would love a wool one if the budget allows", { x: 580, y: 110 });
+  await addBoardNote(ben, BEN_ITEMS[0], { x: 360, y: 460 });
+  await addBoardNote(ben, "would love a wool one if the budget allows", { x: 580, y: 460 });
   await addBoardSwatch(ben, "blue", { x: 720, y: 350 });
-  await ben.waitForTimeout(1500);
-  const liveBack = await appears(boardText(zach, BEN_ITEMS[0]), POLL_MS);
-  if (!liveBack) await zach.reload();
-  for (const item of BEN_ITEMS) await expect(boardText(zach, item)).toBeVisible();
-  await expect(boardText(zach, "would love a wool one if the budget allows")).toBeVisible();
+  for (const item of BEN_ITEMS) await expect(boardText(zach, item)).toBeVisible({ timeout: SYNC_MS });
+  await expect(boardText(zach, "would love a wool one if the budget allows")).toBeVisible({ timeout: SYNC_MS });
+  const total = ZACH_NOTES.length + ZACH_ITEMS.length + 1 + BEN_ITEMS.length + 2;
+  await expect.poll(() => shapeCount(zach), { timeout: SYNC_MS }).toBe(total);
+  await expect.poll(() => shapeCount(ben), { timeout: SYNC_MS }).toBe(total);
+
+  // Zach's pointer rides the heartbeat and shows on Ben's board as a labelled dot.
+  const box = (await zach.getByTestId("board-canvas").boundingBox())!;
+  await zach.mouse.move(box.x + 300, box.y + 300);
+  const cursor = ben.getByTestId("remote-cursor");
+  await expect(cursor).toHaveCount(1, { timeout: CURSOR_MS });
+  await expect(cursor).toContainText("Zach");
 });
 
 test("Scene 2b: each person sees the other in the top bar within 10 s", async () => {
@@ -212,13 +219,24 @@ test("Scene 3: create plan from board; both approve; the structured plan appears
   await expect(zach.getByTestId("plan-view")).toBeVisible();
 });
 
-test("Scene 4: Zach asks for a set; sourcing starts", async () => {
+test("Scene 4: Zach asks for a set; tool events stream before the sourcing artifact appears", async () => {
   await openStage(zach, projectId, "place");
   await waitForTools(zach);
+  await zach.evaluate(() => {
+    (window as Window & { __chat_events?: unknown[] }).__chat_events = [];
+  });
   await sendChat(zach, "Find a set that works for us and make sure everything can arrive by September 15.");
   agentSourced = await appears(zach.getByTestId("artifact-sourcing"), AGENT_WAIT_MS);
   test.fixme(!agentSourced, "PlanningAgent sourcing (#20) has not landed: no artifact-sourcing in the chat");
   await expect(zach.getByTestId("artifact-sourcing")).toBeVisible();
+  // Streaming (#19): the run's first tool event reached the page before the artifact, and rendered as a line under the message.
+  const types = await zach.evaluate(() => ((window as Window & { __chat_events?: { type: string }[] }).__chat_events ?? []).map((e) => e.type));
+  const firstTool = types.indexOf("tool");
+  const firstArtifact = types.indexOf("artifact");
+  expect(firstTool).toBeGreaterThanOrEqual(0);
+  expect(firstArtifact).toBeGreaterThan(firstTool);
+  await expect(zach.getByTestId("chat-tool-event").first()).toBeVisible();
+  note("stream", `${types.length} events so far: ${types.slice(0, 8).join(", ")}`);
 });
 
 test("Scene 5: the agent asks for a delivery address; 10003 resolves to a city and state", async ({ request }) => {

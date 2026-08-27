@@ -166,3 +166,12 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .band { margin: -16px -16px 12px; flex-wrap: wrap; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+
+/* A streamed run (#19): the message and, under it, one quiet line per tool call. */
+.msg-group { display: grid; gap: 4px; }
+.msg-group .msg.user { justify-self: end; }
+.msg-tools { display: grid; gap: 2px; padding: 0 12px; }
+.msg-tool { display: flex; gap: 8px; align-items: baseline; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
+.msg-tool-name { font-family: var(--mono, ui-monospace, monospace); }
+.msg-tool[data-status="running"] .msg-tool-status::after { content: "…"; }
+.msg-tool[data-status="error"] { color: var(--tag-red-text, #8a2f2f); }
