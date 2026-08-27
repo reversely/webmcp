@@ -47,3 +47,6 @@ next-env.d.ts
 
 # Vitest
 coverage/
+
+# Commercial font binaries (Aeonik, CoType Foundry); install locally from ~/Library/Fonts
+public/fonts/

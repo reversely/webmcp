@@ -1,0 +1,66 @@
+/* Stage-local layout classes for the room, items, and catalog stages. Tokens and the shared app
+   classes (.surface, .btn, .tag, .input, .band) come from globals.css. */
+
+.split { display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.splitPlan { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 1100px) { .split, .splitPlan { grid-template-columns: minmax(0, 1fr); } }
+
+.stack { display: grid; gap: 16px; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.spread { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
+.dims { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.ftin { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ftin input { width: 100%; }
+.unit { font-size: 12px; color: var(--ink-3); }
+.mm { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
+
+.presets { display: flex; gap: 8px; flex-wrap: wrap; }
+.preset { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 12px; font-weight: 500; cursor: pointer; }
+.preset[aria-pressed="true"] { background: var(--signature-soft); color: var(--signature); border-color: var(--signature-soft); }
+.preset:disabled { opacity: 0.55; cursor: default; }
+
+.openings { display: grid; gap: 8px; }
+.opening { display: grid; grid-template-columns: 74px 110px 1fr 1fr; gap: 8px; align-items: end; }
+.opening .select, .opening .input { height: 32px; }
+
+.canvas { background: var(--paper); border-radius: 8px; padding: 16px; display: grid; place-items: center; min-height: 320px; position: relative; }
+.canvas svg { display: block; max-width: 100%; touch-action: none; }
+.plan3d { width: 100%; height: 560px; border-radius: 8px; overflow: hidden; background: var(--paper); }
+
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.segmented button { height: 32px; padding: 0 14px; border: 0; background: var(--card); color: var(--ink-2); font-size: 13px; font-weight: 500; cursor: pointer; }
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button[aria-pressed="true"] { background: var(--signature-soft); color: var(--signature); }
+.segmented button:focus-visible { outline: 2px solid var(--signature); outline-offset: -2px; }
+
+.status { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.status span { display: inline-flex; gap: 6px; align-items: center; }
+
+.tray { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.trayItem { display: grid; grid-template-columns: 48px 1fr; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 8px; min-width: 240px; background: var(--card); font-size: 13px; }
+.trayItem img { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; background: var(--paper); }
+.trayItem .sub { color: var(--ink-3); font-size: 12px; }
+.trayItem button { margin-top: 4px; height: 28px; padding: 0 10px; font-size: 12px; }
+
+.results { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); max-height: 640px; overflow: auto; padding: 2px; }
+.results .card { padding: 10px; }
+.results .card img { aspect-ratio: 1; }
+.results .card button { height: 30px; padding: 0 10px; font-size: 12px; }
+
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 12px; font-weight: 500; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--signature-soft); color: var(--signature); border-color: var(--signature-soft); }
+
+.tableWrap { overflow-x: auto; margin: 0 -24px -24px; padding: 0 24px 24px; }
+.thumb { width: 32px; height: 32px; border-radius: 6px; object-fit: cover; background: var(--paper); display: block; }
+.thumbEmpty { width: 32px; height: 32px; border-radius: 6px; background: var(--paper); }
+.clip { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.table td, .table th { padding-right: 16px; }
+.table td { font-size: 14px; white-space: nowrap; }
+.table th { white-space: nowrap; }
+
+.note { font-size: 13px; color: var(--ink-3); }
+.error { font-size: 13px; color: var(--tag-red-text); }
+.link { color: var(--signature); }
+.hint { font-size: 12px; color: var(--ink-3); margin: 8px 0 0; }
