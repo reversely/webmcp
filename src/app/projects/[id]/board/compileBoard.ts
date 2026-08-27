@@ -55,7 +55,17 @@ export function parseDimensions(text: string): { width_ft: number; length_ft: nu
   return { width_ft, length_ft };
 }
 
-const ROOM_NAME = /\b(living room|lounge|family room|bedroom|dining room|study|office|den|kitchen)\b/i;
+/**
+ * The room's name is whatever the dimension note calls it: the words left in that note once the
+ * dimension pair and its unit are removed ("12 x 18 living room" → "living room"). No list of
+ * room types exists in the app.
+ */
+export function roomNameFrom(text: string): string | null {
+  const m = DIM.exec(text);
+  if (!m) return null;
+  const rest = text.replace(m[0], " ").replace(/\b(?:ft|feet|foot|m|metres?|meters?|by|x|room size|size)\b/gi, " ").replace(/[^\p{L}\p{N} '-]/gu, " ").replace(/\s+/g, " ").trim();
+  return rest ? rest.toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : null;
+}
 
 const BUDGET_PATTERNS = [
   /\$\s*(\d[\d,]*(?:\.\d+)?)\s*(k)?\b/i,
@@ -278,10 +288,7 @@ export function compileBoard(items: BoardItem[], options: { today?: string } = {
     }
     const text = item.text;
     if (!spec.room) spec.room = parseDimensions(text);
-    if (!spec.room_name) {
-      const name = ROOM_NAME.exec(text);
-      if (name) spec.room_name = name[1].toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
-    }
+    if (!spec.room_name) spec.room_name = roomNameFrom(text);
     if (!spec.budget) {
       const maximum = parseBudget(text);
       if (maximum != null) spec.budget = { maximum, currency: "USD" };

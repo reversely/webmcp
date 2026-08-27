@@ -5,8 +5,9 @@ import { appState, createProject, projectCode, snapshot } from "../../../server/
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { name?: string; budget_cents?: number; required_by?: string | null };
   const budget = Number(body.budget_cents);
+  if (!body.name?.trim()) return NextResponse.json({ error: "name is required" }, { status: 400 });
   const { id, code } = createProject({
-    name: body.name?.trim() || "Untitled project",
+    name: body.name.trim(),
     budget_cents: Number.isFinite(budget) && budget > 0 ? Math.round(budget) : 250000,
     required_by: body.required_by || null
   });

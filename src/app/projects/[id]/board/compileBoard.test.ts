@@ -167,3 +167,11 @@ describe("rule sentences and item resolution", () => {
     expect(parseLayoutRule("big rug under the desk and the chair", spec.required_items)).toEqual({ relation: "under", subject: "big rug", objects: ["standing desk", "reading chair"] });
   });
 });
+
+describe("roomNameFrom", () => {
+  it("takes the room name from the dimension note without a list of room types", () => {
+    expect(compileBoard([{ kind: "text", text: "12 x 18 living room" }] as never, { today: "2026-08-28" }).room_name).toBe("Living room");
+    expect(compileBoard([{ kind: "text", text: "4 by 6 metres attic studio" }] as never, { today: "2026-08-28" }).room_name).toBe("Attic studio");
+    expect(compileBoard([{ kind: "text", text: "12 x 18" }] as never, { today: "2026-08-28" }).room_name).toBeNull();
+  });
+});

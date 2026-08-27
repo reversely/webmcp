@@ -66,7 +66,7 @@ const ROOM_INSTRUCTIONS =
   "\"12 by 18\" is 12 ft by 18 ft. width_mm is the first number, length_mm the second. Walls: bottom and " +
   "top run along the width, left and right along the length. A door or window is an opening on a wall " +
   "with offset_mm from the wall's origin end; a door is 914 mm wide and a window 1219 mm unless stated. " +
-  "Centre an opening on its wall when no position is given. Default name is \"Living room\".";
+  "Centre an opening on its wall when no position is given. Leave room_name null when the board does not name the room.";
 
 export async function estimateRoom(text: string): Promise<RoomEstimate | null> {
   return structuredCall(RoomEstimate, "room_estimate", ROOM_INSTRUCTIONS, [{ type: "input_text", text }]);

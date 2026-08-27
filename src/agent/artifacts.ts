@@ -2,6 +2,7 @@
  * Data shapes of the board artifacts the agent writes into chat messages (PRD 9.2 and 13.1).
  * The UI reads them from `ChatMessage.artifact` and re-renders on every poll.
  */
+import { appState } from "../server/state";
 import type { Category, DeliveryStatus } from "../domain/types";
 import { upsertArtifact } from "../server/state";
 import type { z } from "zod";
@@ -57,6 +58,8 @@ export type RankingArtifact = {
   ceiling_cents: number;
   rows: RankingRow[];
   selected_product_id?: string;
+  /** Plain sentences on what the ranking could not do and what it proposes instead (#64). */
+  notes?: string[];
 };
 
 export type QuestionArtifact = { run_id: string; field: "delivery_address"; question: string };
@@ -65,7 +68,7 @@ export function emptyProgress(): CategoryProgress {
   return { found: 0, available: 0, dimensioned: 0, compatible: 0, delivery_checked: 0, status: "searching" };
 }
 
-export function writeSourcingArtifact(projectId: string, id: string, data: SourcingArtifact, title = "Finding your living room"): void {
+export function writeSourcingArtifact(projectId: string, id: string, data: SourcingArtifact, title = sourcingTitle(projectId)): void {
   upsertArtifact(projectId, { kind: "sourcing", id, data }, title);
 }
 
@@ -75,4 +78,11 @@ export function writeRankingArtifact(projectId: string, id: string, data: Rankin
 
 export function writeQuestionArtifact(projectId: string, id: string, data: QuestionArtifact): void {
   upsertArtifact(projectId, { kind: "question", id, data }, data.question);
+}
+
+/** "Finding your <room name>" from the project's space, else "Finding your items"; no room type is assumed. */
+export function sourcingTitle(projectId: string): string {
+  const space = [...appState().spaces.values()].find((sp) => sp.project_id === projectId);
+  const name = space?.name?.trim();
+  return name ? `Finding your ${name.toLowerCase()}` : "Finding your items";
 }

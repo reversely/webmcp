@@ -31,7 +31,7 @@ export async function PUT(request: Request, { params }: Params) {
     const space: Space = {
       id: existing?.id ?? s.store.newId("space"),
       project_id: id,
-      name: body.space.name ?? existing?.name ?? "Living room",
+      name: body.space.name ?? existing?.name ?? "Room",
       width_mm: Math.round(body.space.width_mm),
       length_mm: Math.round(body.space.length_mm),
       height_mm: body.space.height_mm == null ? null : Math.round(body.space.height_mm)
