@@ -9,8 +9,11 @@ import {
   footprint,
   frontEdge,
   insideRoom,
+  evaluateRelation,
   overlaps,
-  rugCoverage
+  ruleSentence,
+  wallDistance,
+  type LayoutItem
 } from "./index";
 
 const room = { width_mm: 3658, length_mm: 5486 };
@@ -100,46 +103,72 @@ describe("overlaps and clearance", () => {
   });
 });
 
-describe("rugCoverage", () => {
+describe("evaluateRelation", () => {
   const rugFp = footprint(rug, { x_mm: 1829, y_mm: 2000, rotation_deg: 0 });
   const tableOnRug = footprint(table, { x_mm: 1829, y_mm: 2000, rotation_deg: 0 });
   const sofaFacingRug = footprint(sofa, { x_mm: 1829, y_mm: 1000, rotation_deg: 0 });
+  const byName = new Map([
+    ["big rug", rugFp],
+    ["coffee table", tableOnRug],
+    ["sofa", sofaFacingRug]
+  ]);
 
-  it("passes when the table is on the rug and the sofa front reaches it", () => {
-    expect(rugCoverage(rugFp, tableOnRug, sofaFacingRug)).toEqual({
-      tableInside: true,
-      sofaFrontOverlaps: true,
-      pass: true
-    });
-  });
-
-  it("fails on the table when a corner hangs off the rug", () => {
+  it("passes under when every object is inside the subject and fails with the overhang otherwise", () => {
+    const rule = { relation: "under" as const, subject: "Big Rug", objects: ["coffee table"] };
+    expect(evaluateRelation(rule, byName, room)).toMatchObject({ pass: true });
     const hanging = footprint(table, { x_mm: 1829, y_mm: 2600, rotation_deg: 0 });
-    expect(rugCoverage(rugFp, hanging, sofaFacingRug)).toEqual({
-      tableInside: false,
-      sofaFrontOverlaps: true,
-      pass: false
-    });
+    const result = evaluateRelation(rule, new Map([...byName, ["coffee table", hanging]]), room);
+    expect(result.pass).toBe(false);
+    expect(result.detail).toContain("138 mm past the edge");
   });
 
-  it("fails on the sofa when its front edge stops short of the rug", () => {
-    const short = footprint(sofa, { x_mm: 1829, y_mm: 700, rotation_deg: 0 });
-    expect(rugCoverage(rugFp, tableOnRug, short)).toEqual({
-      tableInside: true,
-      sofaFrontOverlaps: false,
-      pass: false
-    });
+  it("fails under for a sofa whose back half is off the rug, and reports an unplaced object as null", () => {
+    expect(evaluateRelation({ relation: "under", subject: "big rug", objects: ["sofa"] }, byName, room).pass).toBe(false);
+    const result = evaluateRelation({ relation: "under", subject: "big rug", objects: ["lamp"] }, byName, room);
+    expect(result.pass).toBeNull();
+    expect(result.detail).toBe("lamp is not placed yet.");
   });
 
-  it("fails on the sofa when its back edge, not its front, is on the rug", () => {
-    const turnedAway = footprint(sofa, { x_mm: 1829, y_mm: 1000, rotation_deg: 180 });
-    expect(rugCoverage(rugFp, tableOnRug, turnedAway).sofaFrontOverlaps).toBe(false);
+  it("evaluates on_top_of as the subject inside its object", () => {
+    const vase = footprint({ width_mm: 200, depth_mm: 200, height_mm: 300 }, { x_mm: 1829, y_mm: 2000, rotation_deg: 0 });
+    const withVase = new Map([...byName, ["vase", vase]]);
+    expect(evaluateRelation({ relation: "on_top_of", subject: "vase", objects: ["coffee table"] }, withVase, room).pass).toBe(true);
+    expect(evaluateRelation({ relation: "on_top_of", subject: "coffee table", objects: ["vase"] }, withVase, room).pass).toBe(false);
   });
 
-  it("counts a front edge lying exactly on the rug boundary as reaching it", () => {
-    const flush = footprint(sofa, { x_mm: 1829, y_mm: 781, rotation_deg: 0 });
-    expect(frontEdge(flush)[0].y).toBe(axisAlignedBounds(rugFp).min_y);
-    expect(rugCoverage(rugFp, tableOnRug, flush).sofaFrontOverlaps).toBe(true);
+  it("evaluates beside by edge clearance against the stated or default distance", () => {
+    // Sofa front at y 1457, rug back at y 1238: they overlap, clearance 0.
+    expect(evaluateRelation({ relation: "beside", subject: "sofa", objects: ["big rug"] }, byName, room).pass).toBe(true);
+    const far = footprint(table, { x_mm: 1829, y_mm: 4500, rotation_deg: 0 });
+    const spread = new Map([...byName, ["coffee table", far]]);
+    expect(evaluateRelation({ relation: "beside", subject: "sofa", objects: ["coffee table"] }, spread, room)).toMatchObject({ pass: false });
+    expect(evaluateRelation({ relation: "beside", subject: "sofa", objects: ["coffee table"], distance_mm: 3000 }, spread, room).pass).toBe(true);
+  });
+
+  it("evaluates facing by the front normal within 45 degrees", () => {
+    expect(evaluateRelation({ relation: "facing", subject: "sofa", objects: ["coffee table"] }, byName, room).pass).toBe(true);
+    const turned = new Map([...byName, ["sofa", footprint(sofa, { x_mm: 1829, y_mm: 1000, rotation_deg: 180 })]]);
+    expect(evaluateRelation({ relation: "facing", subject: "sofa", objects: ["coffee table"] }, turned, room).pass).toBe(false);
+  });
+
+  it("evaluates against_wall within 50 mm of a room edge", () => {
+    const flush = footprint(sofa, { x_mm: 1829, y_mm: 457, rotation_deg: 0 });
+    expect(wallDistance(flush, room)).toBe(0);
+    expect(evaluateRelation({ relation: "against_wall", subject: "sofa", objects: [] }, new Map([["sofa", flush]]), room).pass).toBe(true);
+    expect(evaluateRelation({ relation: "against_wall", subject: "sofa", objects: [] }, byName, room)).toMatchObject({ pass: false });
+  });
+
+  it("evaluates clear_around as a clearance ring over every other placed item", () => {
+    const lone = new Map([["sofa", sofaFacingRug], ["coffee table", footprint(table, { x_mm: 1829, y_mm: 3000, rotation_deg: 0 })]]);
+    expect(evaluateRelation({ relation: "clear_around", subject: "sofa", objects: [], distance_mm: 1000 }, lone, room).pass).toBe(true);
+    expect(evaluateRelation({ relation: "clear_around", subject: "sofa", objects: [] }, byName, room).pass).toBe(false);
+  });
+
+  it("leaves a text rule unevaluated and renders every relation as a sentence", () => {
+    expect(evaluateRelation({ relation: "text", text: "keep the walkway open" }, byName, room).pass).toBeNull();
+    expect(ruleSentence({ relation: "under", subject: "big rug", objects: ["sofa", "coffee table"] })).toBe("big rug under sofa and coffee table");
+    expect(ruleSentence({ relation: "clear_around", subject: "desk", objects: [], distance_mm: 900 })).toBe("900 mm clear around desk");
+    expect(ruleSentence({ relation: "text", text: "as written" })).toBe("as written");
   });
 });
 
@@ -161,41 +190,30 @@ describe("candidateFits", () => {
 });
 
 describe("checkLayout", () => {
-  const items = [
-    { id: "sofa", box: sofa, placement: { x_mm: 1829, y_mm: 457, rotation_deg: 0 } },
-    { id: "rug", box: rug, placement: { x_mm: 1829, y_mm: 2000, rotation_deg: 0 } },
-    { id: "table", box: table, placement: { x_mm: 1829, y_mm: 2000, rotation_deg: 0 } }
+  const items: LayoutItem[] = [
+    { id: "sofa", name: "sofa", kind: "seating", box: sofa, placement: { x_mm: 1829, y_mm: 457, rotation_deg: 0 } },
+    { id: "rug", name: "big rug", kind: "soft_floor", box: rug, placement: { x_mm: 1829, y_mm: 2000, rotation_deg: 0 } },
+    { id: "table", name: "coffee table", kind: "table", box: table, placement: { x_mm: 1829, y_mm: 2000, rotation_deg: 0 } }
   ];
 
-  it("reports containment, collisions, pairwise clearances, and rug coverage", () => {
-    const result = checkLayout(room, items, "rug", "table", "sofa");
+  it("reports containment, collisions, pairwise clearances, and one result per rule", () => {
+    const result = checkLayout(room, items, [{ relation: "under", subject: "big rug", objects: ["sofa", "coffee table"] }]);
     expect(result.inside).toEqual({ sofa: true, rug: true, table: true });
     expect(result.collisions).toEqual([]);
     expect(result.clearances).toEqual({ "sofa|rug": 324, "sofa|table": 786, "rug|table": 0 });
-    expect(result.rugCoverage).toEqual({ tableInside: true, sofaFrontOverlaps: false, pass: false });
+    expect(result.rules).toHaveLength(1);
+    expect(result.rules[0].pass).toBe(false);
+    expect(result.rules[0].detail).toMatch(/^sofa \(\d+ mm past the edge\) extends beyond big rug/);
   });
 
-  it("omits rug coverage when no rug, table, and sofa ids are given", () => {
-    expect(checkLayout(room, items).rugCoverage).toBeUndefined();
+  it("returns no rule results without rules", () => {
+    expect(checkLayout(room, items).rules).toEqual([]);
   });
 
-  it("rejects an unknown id", () => {
-    expect(() => checkLayout(room, items, "rug", "table", "lamp")).toThrow('no item with id "lamp"');
-  });
-});
-
-describe("checkLayout rug handling", () => {
-  it("does not report furniture standing on the rug as a collision", () => {
-    const space = { width_mm: 3658, length_mm: 5486 };
-    const items = [
-      { id: "rug", box: { width_mm: 2438, depth_mm: 3048, height_mm: 10 }, placement: { x_mm: 1829, y_mm: 1900, rotation_deg: 0 } },
-      { id: "table", box: { width_mm: 1220, depth_mm: 610, height_mm: 450 }, placement: { x_mm: 1829, y_mm: 1900, rotation_deg: 0 } },
-      { id: "sofa", box: { width_mm: 2134, depth_mm: 914, height_mm: 838 }, placement: { x_mm: 1829, y_mm: 700, rotation_deg: 0 } }
-    ];
-    const result = checkLayout(space, items, "rug", "table", "sofa");
-    expect(result.collisions).toEqual([]);
-    expect(result.rugCoverage?.pass).toBe(true);
-    // Without a rug id the same overlap is a plain collision.
-    expect(checkLayout(space, items).collisions).toContainEqual(["rug", "table"]);
+  it("does not count furniture standing on a soft floor, or a pair a rule stacks, as a collision", () => {
+    const hard = items.map((i) => ({ ...i, kind: "other" as const }));
+    expect(checkLayout(room, hard).collisions).toContainEqual(["rug", "table"]);
+    expect(checkLayout(room, hard, [{ relation: "under", subject: "big rug", objects: ["coffee table"] }]).collisions).toEqual([]);
+    expect(checkLayout(room, items).collisions).toEqual([]);
   });
 });

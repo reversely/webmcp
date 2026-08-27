@@ -6,7 +6,7 @@
  * the product's footprint, and `rotation_deg` rotates the footprint counter-clockwise about that
  * centre. A product's front faces +y in its local frame.
  */
-import type { Box, Placement, Space } from "../types";
+import { itemKey, type Box, type Kind, type LayoutRule, type Placement, type Space } from "../types";
 
 export type Point = { x: number; y: number };
 export type FloorPlacement = Pick<Placement, "x_mm" | "y_mm" | "rotation_deg">;
@@ -20,15 +20,27 @@ export type FloorSpace = Pick<Space, "width_mm" | "length_mm">;
 export type Footprint = { corners: [Point, Point, Point, Point]; centre: Point };
 export type Bounds = { min_x: number; min_y: number; max_x: number; max_y: number };
 
-export type RugCoverage = { tableInside: boolean; sofaFrontOverlaps: boolean; pass: boolean };
+/** A placed item: `name` is the project's phrase for it (the BOM item's category) and `kind` its rendering kind. */
+export type LayoutItem = { id: string; name: string; kind: Kind; box: Box; placement: FloorPlacement };
 
-export type LayoutItem = { id: string; box: Box; placement: FloorPlacement };
+/** One evaluated rule. `pass` is null when the rule could not be evaluated (a text rule, or a name with no placed item). */
+export type RuleResult = { rule: LayoutRule; pass: boolean | null; detail: string };
+
 export type LayoutCheck = {
   inside: Record<string, boolean>;
   collisions: [string, string][];
   clearances: Record<string, number>;
-  rugCoverage?: RugCoverage;
+  rules: RuleResult[];
 };
+
+/** `against_wall`: the nearest room edge is at most this far from the item (PRD 14). */
+export const WALL_TOLERANCE_MM = 50;
+/** `beside` without a stated distance: the items are at most this far apart. */
+export const DEFAULT_BESIDE_MM = 600;
+/** `clear_around` without a stated distance: every other item keeps at least this much clearance. */
+export const DEFAULT_CLEAR_MM = 900;
+/** `facing`: the object's centre lies within this angle of the subject's front normal. */
+const FACING_HALF_ANGLE_DEG = 45;
 
 /** Rotated corners round to whole millimetres so every later comparison is exact integer arithmetic. */
 export function footprint(box: Box, placement: FloorPlacement): Footprint {
@@ -84,16 +96,6 @@ export function distance(a: Footprint, b: Footprint): number {
 }
 
 /**
- * Demo rug policy: the table sits entirely on the rug and the sofa's front edge reaches the rug.
- * A front edge lying exactly on the rug's boundary counts as reaching it.
- */
-export function rugCoverage(rug: Footprint, table: Footprint, sofa: Footprint): RugCoverage {
-  const tableInside = table.corners.every((c) => containsPoint(rug.corners, c));
-  const sofaFrontOverlaps = !separated(rug.corners, frontEdge(sofa), false);
-  return { tableInside, sofaFrontOverlaps, pass: tableInside && sofaFrontOverlaps };
-}
-
-/**
  * Ranking geometry filter: without a placement the box fits the room in either orientation; with
  * one, the box at that placement is inside the room and overlaps none of `others`.
  */
@@ -112,59 +114,183 @@ export function candidateFits(
   return insideRoom(fp, space) && others.every((other) => !overlaps(fp, other));
 }
 
+/** The unit vector the front edge faces after rotation: +y in the local frame. */
+export function frontNormal(fp: Footprint): Point {
+  const [right, left] = frontEdge(fp);
+  const edgeMid = { x: (right.x + left.x) / 2, y: (right.y + left.y) / 2 };
+  const length = Math.hypot(edgeMid.x - fp.centre.x, edgeMid.y - fp.centre.y) || 1;
+  return { x: (edgeMid.x - fp.centre.x) / length, y: (edgeMid.y - fp.centre.y) / length };
+}
+
+/** Whole millimetres from the footprint to the nearest room edge; negative once a corner is outside. */
+export function wallDistance(fp: Footprint, space: FloorSpace): number {
+  const b = axisAlignedBounds(fp);
+  return Math.round(Math.min(b.min_x, b.min_y, space.width_mm - b.max_x, space.length_mm - b.max_y));
+}
+
+/** Every corner of `inner` lies inside `outer` (a shared boundary counts as inside). */
+export function contains(outer: Footprint, inner: Footprint): boolean {
+  return inner.corners.every((c) => containsPoint(outer.corners, c));
+}
+
+/** How far `inner` reaches past `outer` along any edge normal, 0 when contained. */
+function overhang(outer: Footprint, inner: Footprint): number {
+  let worst = 0;
+  for (const axis of edgeNormals(outer.corners)) {
+    const length = Math.hypot(axis.x, axis.y);
+    if (length === 0) continue;
+    const unit = { x: axis.x / length, y: axis.y / length };
+    const po = project(outer.corners, unit);
+    const pi = project(inner.corners, unit);
+    worst = Math.max(worst, pi.max - po.max, po.min - pi.min);
+  }
+  return Math.round(worst);
+}
+
+/** The English sentence for a rule, for the status row and the agent's report. */
+export function ruleSentence(rule: LayoutRule): string {
+  if (rule.relation === "text") return rule.text;
+  const objects = rule.objects.length ? joinNames(rule.objects) : "";
+  const at = rule.distance_mm !== undefined ? ` within ${rule.distance_mm} mm` : "";
+  switch (rule.relation) {
+    case "under":
+      return `${rule.subject} under ${objects || "the other items"}`;
+    case "on_top_of":
+      return `${rule.subject} on top of ${objects || "an item"}`;
+    case "beside":
+      return `${rule.subject} beside ${objects || "an item"}${at}`;
+    case "facing":
+      return `${rule.subject} facing ${objects || "an item"}`;
+    case "against_wall":
+      return `${rule.subject} against a wall`;
+    case "clear_around":
+      return `${rule.distance_mm !== undefined ? `${rule.distance_mm} mm` : "space"} clear around ${rule.subject}`;
+  }
+}
+
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names[0] ?? "";
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Evaluates one layout rule generically (PRD 14): `under` as containment of every object by the
+ * subject, `on_top_of` as containment of the subject by its object, `beside` as edge clearance at
+ * or below the distance, `against_wall` as edge distance to a room edge at or below 50 mm,
+ * `facing` as the subject's front normal pointing at the object, `clear_around` as a clearance
+ * ring. Names resolve through `itemKey`; a name with no footprint leaves the rule unevaluated.
+ */
+export function evaluateRelation(rule: LayoutRule, footprintsByName: Map<string, Footprint>, space: FloorSpace): RuleResult {
+  if (rule.relation === "text") return { rule, pass: null, detail: "Kept as written; not a relation the geometry engine evaluates." };
+  const find = (name: string) => footprintsByName.get(itemKey(name));
+  const subject = find(rule.subject);
+  if (!subject) return { rule, pass: null, detail: `${rule.subject} is not placed yet.` };
+  const objects = rule.objects.map((name) => ({ name, fp: find(name) }));
+  const missing = objects.filter((o) => !o.fp).map((o) => o.name);
+  const placed = objects.filter((o): o is { name: string; fp: Footprint } => o.fp !== undefined);
+  const needsObjects = rule.relation !== "against_wall" && rule.relation !== "clear_around";
+  if (needsObjects && placed.length === 0) {
+    return { rule, pass: null, detail: missing.length ? `${joinNames(missing)} ${missing.length === 1 ? "is" : "are"} not placed yet.` : "The rule names no item to relate to." };
+  }
+  const unplaced = missing.length ? ` ${joinNames(missing)} ${missing.length === 1 ? "is" : "are"} not placed and not counted.` : "";
+
+  switch (rule.relation) {
+    case "under": {
+      const out = placed.filter((o) => !contains(subject, o.fp));
+      if (out.length === 0) return { rule, pass: true, detail: `${rule.subject} covers ${joinNames(placed.map((o) => o.name))} completely.${unplaced}` };
+      return { rule, pass: false, detail: `${joinNames(out.map((o) => `${o.name} (${overhang(subject, o.fp)} mm past the edge)`))} ${out.length === 1 ? "extends" : "extend"} beyond ${rule.subject}.${unplaced}` };
+    }
+    case "on_top_of": {
+      const off = placed.filter((o) => !contains(o.fp, subject));
+      if (off.length === 0) return { rule, pass: true, detail: `${rule.subject} sits within ${joinNames(placed.map((o) => o.name))}.${unplaced}` };
+      return { rule, pass: false, detail: `${rule.subject} reaches ${joinNames(off.map((o) => `${overhang(o.fp, subject)} mm past ${o.name}`))}.${unplaced}` };
+    }
+    case "beside": {
+      const limit = rule.distance_mm ?? DEFAULT_BESIDE_MM;
+      const gaps = placed.map((o) => ({ name: o.name, gap: clearance(subject, o.fp) }));
+      const far = gaps.filter((g) => g.gap > limit);
+      if (far.length === 0) return { rule, pass: true, detail: `${joinNames(gaps.map((g) => `${g.gap} mm from ${g.name}`))} (limit ${limit} mm).${unplaced}` };
+      return { rule, pass: false, detail: `${joinNames(far.map((g) => `${g.gap} mm from ${g.name}`))}, more than ${limit} mm.${unplaced}` };
+    }
+    case "facing": {
+      const normal = frontNormal(subject);
+      const away = placed.filter((o) => {
+        const dx = o.fp.centre.x - subject.centre.x;
+        const dy = o.fp.centre.y - subject.centre.y;
+        const length = Math.hypot(dx, dy);
+        if (length === 0) return false;
+        const cos = (dx * normal.x + dy * normal.y) / length;
+        return cos < Math.cos((FACING_HALF_ANGLE_DEG * Math.PI) / 180);
+      });
+      if (away.length === 0) return { rule, pass: true, detail: `${rule.subject} faces ${joinNames(placed.map((o) => o.name))}.${unplaced}` };
+      return { rule, pass: false, detail: `${rule.subject} faces away from ${joinNames(away.map((o) => o.name))}.${unplaced}` };
+    }
+    case "against_wall": {
+      const gap = wallDistance(subject, space);
+      if (gap <= WALL_TOLERANCE_MM) return { rule, pass: true, detail: `${rule.subject} is ${Math.max(gap, 0)} mm from the nearest wall.` };
+      return { rule, pass: false, detail: `${rule.subject} is ${gap} mm from the nearest wall, more than ${WALL_TOLERANCE_MM} mm.` };
+    }
+    case "clear_around": {
+      const limit = rule.distance_mm ?? DEFAULT_CLEAR_MM;
+      const close: string[] = [];
+      for (const [key, fp] of footprintsByName) {
+        if (key === itemKey(rule.subject)) continue;
+        const gap = clearance(subject, fp);
+        if (gap < limit) close.push(`${key} at ${gap} mm`);
+      }
+      if (close.length === 0) return { rule, pass: true, detail: `Nothing placed within ${limit} mm of ${rule.subject}.` };
+      return { rule, pass: false, detail: `${joinNames(close)} ${close.length === 1 ? "is" : "are"} closer than ${limit} mm to ${rule.subject}.` };
+    }
+  }
+}
+
+/** Pairs an `under` or `on_top_of` rule declares stand on each other, so their overlap is intended. */
+function stackedPairs(rules: LayoutRule[]): Set<string> {
+  const pairs = new Set<string>();
+  for (const rule of rules) {
+    if (rule.relation !== "under" && rule.relation !== "on_top_of") continue;
+    for (const object of rule.objects) {
+      pairs.add(`${itemKey(rule.subject)}|${itemKey(object)}`);
+      pairs.add(`${itemKey(object)}|${itemKey(rule.subject)}`);
+    }
+  }
+  return pairs;
+}
+
 /**
  * Full layout check for the `check_geometry` tool. Clearances are keyed `"idA|idB"` in item order.
- * Pairs that include `rugId` never count as collisions; `rugCoverage` reports the rug relationship.
- *
- * Raises:
- *   Error: when a rug, table, or sofa id names no item.
+ * A soft-floor item (a rug) never collides: furniture standing on it is coverage. A pair that a
+ * rule stacks (`under`, `on_top_of`) is not a collision either. Every rule is evaluated in order.
  */
-export function checkLayout(
-  space: FloorSpace,
-  items: LayoutItem[],
-  rugId?: string,
-  tableId?: string,
-  sofaId?: string
-): LayoutCheck {
+export function checkLayout(space: FloorSpace, items: LayoutItem[], rules: LayoutRule[] = []): LayoutCheck {
   const footprints = new Map(items.map((item) => [item.id, footprint(item.box, item.placement)]));
   const inside: Record<string, boolean> = {};
   for (const [id, fp] of footprints) inside[id] = insideRoom(fp, space);
 
+  const stacked = stackedPairs(rules);
   const collisions: [string, string][] = [];
   const clearances: Record<string, number> = {};
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
-      const a = items[i].id;
-      const b = items[j].id;
-      const fa = footprints.get(a)!;
-      const fb = footprints.get(b)!;
-      // A rug is floor covering: furniture standing on it is coverage, not a collision.
-      const involvesRug = a === rugId || b === rugId;
-      if (!involvesRug && overlaps(fa, fb)) collisions.push([a, b]);
-      clearances[`${a}|${b}`] = clearance(fa, fb);
+      const a = items[i];
+      const b = items[j];
+      const fa = footprints.get(a.id)!;
+      const fb = footprints.get(b.id)!;
+      const intended = a.kind === "soft_floor" || b.kind === "soft_floor" || stacked.has(`${itemKey(a.name)}|${itemKey(b.name)}`);
+      if (!intended && overlaps(fa, fb)) collisions.push([a.id, b.id]);
+      clearances[`${a.id}|${b.id}`] = clearance(fa, fb);
     }
   }
 
-  const result: LayoutCheck = { inside, collisions, clearances };
-  if (rugId !== undefined && tableId !== undefined && sofaId !== undefined) {
-    result.rugCoverage = rugCoverage(
-      requireFootprint(footprints, rugId),
-      requireFootprint(footprints, tableId),
-      requireFootprint(footprints, sofaId)
-    );
-  }
-  return result;
+  // The first placed item of a name stands for it in the rules.
+  const byName = new Map<string, Footprint>();
+  for (const item of items) if (!byName.has(itemKey(item.name))) byName.set(itemKey(item.name), footprints.get(item.id)!);
+  return { inside, collisions, clearances, rules: rules.map((rule) => evaluateRelation(rule, byName, space)) };
 }
 
 /** Math.round yields -0 for tiny negatives such as cos(90 degrees); `+ 0` folds it back to 0. */
 function roundMm(value: number): number {
   return Math.round(value) + 0;
-}
-
-function requireFootprint(footprints: Map<string, Footprint>, id: string): Footprint {
-  const fp = footprints.get(id);
-  if (fp === undefined) throw new Error(`checkLayout: no item with id "${id}"`);
-  return fp;
 }
 
 /**
