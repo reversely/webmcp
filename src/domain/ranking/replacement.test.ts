@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { replacementCeiling, requiredSavings } from "./budget";
+import { canAbsorb, replacementCeiling, requiredSavings, savingsPlan } from "./budget";
 import { hardFilter } from "./filter";
 import { candidate, deliveryRank, visual } from "./fixtures";
 import { rankSurvivors } from "./rank";
@@ -35,5 +35,41 @@ describe("replacement flow (Scenes 11 to 13)", () => {
       [2, "walnut"],
       [3, "oak"]
     ]);
+  });
+});
+
+describe("savingsPlan (#64)", () => {
+  const lines = [
+    { id: "couch", price_cents: 149900, floor_cents: 89900 },
+    { id: "table", price_cents: 15999, floor_cents: 9900 },
+    { id: "ottoman", price_cents: 24900, floor_cents: 14900 },
+    { id: "rug", price_cents: 39900, floor_cents: 19900 }
+  ];
+
+  it("needs nothing when the budget is not over", () => {
+    expect(savingsPlan(lines, 0)).toEqual([]);
+  });
+
+  it("says when a line cannot absorb the overage", () => {
+    expect(canAbsorb(lines[1], 18000)).toBe(false);
+    expect(canAbsorb(lines[1], 5000)).toBe(true);
+    expect(canAbsorb({ id: "unknown-floor", price_cents: 10000, floor_cents: 0 }, 10000)).toBe(false);
+  });
+
+  it("picks the single line with the largest price that can absorb the overage", () => {
+    expect(savingsPlan(lines, 18000)).toEqual([{ id: "couch", share_cents: 18000 }]);
+    expect(savingsPlan(lines, 8000)).toEqual([{ id: "couch", share_cents: 8000 }]);
+  });
+
+  it("splits across the pair with the largest combined price when no single line can", () => {
+    // Capacities: couch 600, table 60.99, ottoman 100, rug 200; 700 needs a pair.
+    expect(savingsPlan(lines, 70000)).toEqual([
+      { id: "couch", share_cents: 52500 },
+      { id: "rug", share_cents: 17500 }
+    ]);
+  });
+
+  it("returns null when no pair reaches the overage", () => {
+    expect(savingsPlan(lines, 90000)).toBeNull();
   });
 });

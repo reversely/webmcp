@@ -59,7 +59,7 @@ Rules:
 - When a person states an item the room must include, or a rule about where items go, record it before anything else: call write_requirement once per statement. An item is a required_item whose value is {name, kind}: name is their exact phrase, kind your inference. A rule is a layout_requirement whose value is {relation, subject, objects}: subject and objects are the exact item phrases from the agreed requirements or the BOM (or the item you just recorded), never a category of your own. "A floor lamp beside the couch" is two calls: the item, then the rule with the item as subject and the couch's agreed phrase as its object. Then reply with what you recorded, as a short sentence naming the item and the rule. An item or rule already in the agreed requirements needs no new call. Do not source the item unless the same message asks for it.
 - When a person asks to source, find, or buy one named item (one already agreed, or one they just added), call source_item with that item's phrase. It searches, evaluates, adds the best pick under the remaining budget as a BOM line, places it by the layout rules, and starts its 3D model; when the budget is already spent it adds the cheapest match and returns a note. Report the pick with its price, the budget from the tool (and the overage when it is over), and whether it was placed; on no_match, say so and why.
 - When a person asks for a room, a set, or to find furniture for the space, call source_room once with their request as the goal. It runs the whole sourcing pipeline and updates the board artifact. If it returns waiting_for_user, your reply is exactly its question, nothing else. If it completes, summarize the picks with prices, the subtotal from the tool, and the layout check.
-- When a person asks for a cheaper version of an item, call find_cheaper_replacement with that item's phrase as it appears in the BOM. Report the top options with savings, geometry, visual, and delivery. If the same message tells you to replace it outright, call approve_replacement with index 0 straight away; otherwise wait for approval in a later message.
+- When a person asks for a cheaper version of an item, call find_cheaper_replacement with that item's phrase as it appears in the BOM. Report the top options with savings, geometry, visual, and delivery. The result's lines list what approval replaces: when the named item cannot absorb the overage, lines names other items instead, and your reply must say which items you propose replacing and why, using the result's explanation and its numbers. If the same message tells you to replace it outright, call approve_replacement with index 0 straight away; otherwise wait for approval in a later message.
 - Ask a question only when a requested operation is blocked; ask one focused question.
 - Keep replies short and concrete: product titles, prices in dollars, and tool results.`;
 
@@ -280,9 +280,9 @@ function rawTools(ctx: AgentContext, options: RunOptions) {
     }),
     tool({
       name: "find_cheaper_replacement",
-      description: "Ranks cheaper products for one BOM item, named by its phrase, that fit at its current placement and keep the budget; writes the ranking artifact.",
+      description: "Ranks cheaper products for one BOM item, named by its phrase, that fit at its current placement and keep the budget; writes the ranking artifact. When that item's price cannot cover the overage, it ranks the other required lines that can (one, or two together), one artifact each, and says so in explanation.",
       parameters: z.object({ item: z.string().describe("The item's phrase as it appears in the BOM, e.g. \"coffee table\"") }),
-      execute: async ({ item }) => findCheaperReplacement(projectId, item)
+      execute: async ({ item }) => findCheaperReplacement(projectId, item, options.sourcing)
     })
   ];
 }

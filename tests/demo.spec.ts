@@ -180,8 +180,8 @@ test("Scene 3: create plan from board; both approve; the structured plan appears
   const form = zach.getByTestId("spec-form");
   // "Create plan from board" waits on the model-backed compile route, which can run past 10 s.
   await expect(form).toBeVisible({ timeout: AGENT_WAIT_MS });
-  await expect(form.locator("#width")).toHaveValue("12");
-  await expect(form.locator("#length")).toHaveValue("18");
+  // Room dimensions are entered once, on the Room stage; the plan form carries the board's reading there.
+  await expect(form.locator("#width")).toHaveCount(0);
   await expect(form.locator("#budget")).toHaveValue("2500");
   await expect(form.locator("#required_by")).toHaveValue("2026-09-15");
   // Items, colours, and rules come from the board in its own words: nothing on the form is preset.
@@ -196,12 +196,16 @@ test("Scene 3: create plan from board; both approve; the structured plan appears
 
   await ben.getByTestId("create-plan").click();
   await expect(ben.getByTestId("spec-form")).toBeVisible({ timeout: AGENT_WAIT_MS });
+  // Ben's note "would love a wool one" is a wish about the rug: his plan carries the same four items.
+  await expect(ben.getByTestId("spec-form").getByTestId("item-row")).toHaveCount(BOARD_ITEMS.length);
   await ben.getByTestId("approve-plan").click();
   await ben.waitForURL(/\/room/);
 
-  const snap = await waitForSnapshot(request, projectId, (s) => s.requirements.some((r) => r.status === "agreed") && s.space !== null, 5_000);
-  expect(snap.space!.width_mm).toBe(Math.round(12 * 304.8));
-  expect(snap.space!.length_mm).toBe(Math.round(18 * 304.8));
+  const snap = await waitForSnapshot(request, projectId, (s) => s.requirements.some((r) => r.status === "agreed") && s.room_estimate !== null, 5_000);
+  // Approve carries the board's "12 x 18" as an estimate; nothing is the Space until the Room stage confirms it.
+  expect(snap.space).toBeNull();
+  expect(snap.room_estimate!.width_mm).toBe(Math.round(12 * 304.8));
+  expect(snap.room_estimate!.length_mm).toBe(Math.round(18 * 304.8));
   const agreed = snap.requirements.filter((r) => r.status === "agreed");
   for (const item of BOARD_ITEMS) expect(requiredItems(snap)).toContain(item);
   const colours = agreed.find((r) => r.type === "visual_direction")!.value_json as { base: string[]; accent: string[] };
@@ -211,12 +215,16 @@ test("Scene 3: create plan from board; both approve; the structured plan appears
   expect(rule).toMatchObject({ relation: "under", subject: "big rug" });
   expect(rule.objects).toEqual(expect.arrayContaining(BOARD_ITEMS.filter((i) => i !== "big rug")));
 
-  // Stage 2: Zach confirms the room estimate, which unlocks the items stage.
+  // Stage 2: the estimate prefills the fields; Zach confirms it, which writes the Space and unlocks the items stage.
   await openStage(zach, projectId, "room");
-  await expect(zach.getByTestId("room-describe")).not.toHaveValue("");
+  await expect(zach.getByLabel("Width, feet")).toHaveValue("12");
+  await expect(zach.getByLabel("Length, feet")).toHaveValue("18");
   await zach.getByTestId("confirm-room").click();
   await zach.waitForURL(/\/place/);
   await expect(zach.getByTestId("plan-view")).toBeVisible();
+  const confirmed = await waitForSnapshot(request, projectId, (s) => s.space !== null, 5_000);
+  expect(confirmed.space!.width_mm).toBe(Math.round(12 * 304.8));
+  expect(confirmed.space!.length_mm).toBe(Math.round(18 * 304.8));
 });
 
 test("Scene 4: Zach asks for a set; tool events stream before the sourcing artifact appears", async () => {
@@ -557,48 +565,95 @@ test("Scene 10b: Ben adds a floor lamp beside the sofa and watches its model gen
   await ben.waitForTimeout(4000);
 });
 
+/** A ranking artifact as Scene 12 and 13 read it off the snapshot (src/agent/artifacts.ts RankingArtifact). */
+type RankingData = {
+  category: string;
+  required_savings_cents: number;
+  ceiling_cents: number;
+  rows: { product_id: string; savings_cents: number; status: string }[];
+  selected_product_id?: string;
+  notes?: string[];
+};
+
+/**
+ * The ranking artifacts the Scene 11 request produced, in write order: the named item's first,
+ * then one per line the plan replaces instead when the named item cannot absorb the overage (#64).
+ */
+function rankingsSinceLastRequest(snap: Snapshot): RankingData[] {
+  const lastUser = snap.messages.map((m) => m.role).lastIndexOf("user");
+  return snap.messages.slice(lastUser + 1).flatMap((m) => (m.artifact?.kind === "ranking" ? [m.artifact.data as RankingData] : []));
+}
+
+/** Whether the agent has replied after the Scene 11 request, which happens only once every line's ranking is done. */
+function repliedSinceLastRequest(snap: Snapshot): boolean {
+  const lastUser = snap.messages.map((m) => m.role).lastIndexOf("user");
+  return snap.messages.slice(lastUser + 1).some((m) => m.role === "agent" && !m.artifact && m.text.trim() !== "");
+}
+
 test("Scene 11: Zach asks for a cheaper coffee table; the replacement artifact appears under the board's phrase", async () => {
   await sendChat(zach, `Find a cheaper ${REPLACED_ITEM.toLowerCase()} that still matches everything we agreed on.`);
   const ranking = zach.getByTestId("artifact-ranking");
   test.fixme(!(await appears(ranking, AGENT_WAIT_MS)), "PlanningAgent replacement (#20) has not landed: no artifact-ranking in the chat");
-  await expect(ranking).toContainText(new RegExp(REPLACED_ITEM, "i"));
+  // The named item's artifact is written first; the plan's other lines, when any, follow it.
+  await expect(ranking.first()).toContainText(new RegExp(REPLACED_ITEM, "i"));
 });
 
-test("Scene 12: at least two real candidates evaluate and the selected one meets required_savings", async ({ request }) => {
+test("Scene 12: every proposed line evaluates at least two candidates and selects one whose savings meet its share; the shares cover required_savings", async ({ request }) => {
   const ranking = zach.getByTestId("artifact-ranking");
   test.fixme(!(await appears(ranking, 1_000)), "PlanningAgent replacement artifact has not landed");
-  const rows = ranking.locator("tbody tr[data-product-id]");
-  await expect.poll(async () => rows.count(), { timeout: 120_000 }).toBeGreaterThanOrEqual(2);
-  await expect(ranking.locator('tbody tr[data-status="selected"]')).toHaveCount(1, { timeout: 120_000 });
-  const snap = await getSnapshot(request, projectId);
-  const artifact = [...snap.messages].reverse().find((m) => m.artifact?.kind === "ranking")!.artifact!.data as {
-    required_savings_cents: number;
-    rows: { product_id: string; savings_cents: number; status: string }[];
-    selected_product_id?: string;
-  };
-  const evaluated = artifact.rows.filter((r) => r.status !== "pending");
-  expect(evaluated.length).toBeGreaterThanOrEqual(2);
-  const selected = artifact.rows.find((r) => r.status === "selected" || r.product_id === artifact.selected_product_id)!;
-  expect(selected.savings_cents).toBeGreaterThanOrEqual(artifact.required_savings_cents);
+  // The reply lands after the last line's ranking, so the artifacts are final once it is there.
+  const snap = await waitForSnapshot(request, projectId, repliedSinceLastRequest, 2 * AGENT_WAIT_MS);
+  const artifacts = rankingsSinceLastRequest(snap);
+  expect(artifacts.length).toBeGreaterThanOrEqual(1);
+  const named = artifacts[0];
+  expect(named.category.toLowerCase()).toBe(REPLACED_ITEM.toLowerCase());
+  const proposals = artifacts.filter((a) => a.rows.length > 0);
+  note("replacement plan", `${named.notes?.join(" ") ?? "the named item can absorb the overage"}; lines: ${proposals.map((a) => a.category).join(", ") || "none"}`);
+  // #64: the proposal must reach the budget whatever the sourced subtotal was.
+  expect(proposals.length).toBeGreaterThanOrEqual(1);
+  let savings = 0;
+  for (const proposal of proposals) {
+    const evaluated = proposal.rows.filter((r) => r.status !== "pending" && r.status !== "evaluating");
+    expect(evaluated.length).toBeGreaterThanOrEqual(2);
+    const selected = proposal.rows.filter((r) => r.status === "selected");
+    expect(selected).toHaveLength(1);
+    expect(selected[0].product_id).toBe(proposal.selected_product_id);
+    expect(selected[0].savings_cents).toBeGreaterThanOrEqual(proposal.required_savings_cents);
+    savings += selected[0].savings_cents;
+  }
+  expect(savings).toBeGreaterThanOrEqual(named.required_savings_cents);
+  await expect(zach.locator('[data-testid="artifact-ranking"] tbody tr[data-status="selected"]')).toHaveCount(proposals.length);
 });
 
-test("Scene 13: approving the replacement updates the BOM, the scene, and the budget; Ben's session follows", async ({ request }) => {
-  const approve = zach.getByTestId("approve-replacement");
-  test.fixme(!(await appears(approve, 1_000)), "Replacement approval has not landed");
+test("Scene 13: approving the replacement updates the BOM, the scene, and the budget for every replaced line; Ben's session follows", async ({ request }) => {
+  // The named item's artifact has no selection when another line is proposed, so its button stays
+  // disabled; every button also stays disabled until the chat stream that ranked the lines closes.
+  const approve = zach.locator('button[data-testid="approve-replacement"]:not([disabled])');
+  test.fixme(!(await appears(approve, 30_000)), "Replacement approval has not landed");
   const before = await getSnapshot(request, projectId);
-  const oldTable = bomLineFor(before, REPLACED_ITEM)!;
-  await approve.click();
-  const snap = await waitForSnapshot(request, projectId, (s) => bomLineFor(s, REPLACED_ITEM)?.id !== oldTable.id, 30_000);
-  const newTable = bomLineFor(snap, REPLACED_ITEM)!;
-  expect(newTable.kind).toBe(oldTable.kind);
-  // required_savings may be zero when the budget is not over; the replacement still never costs more.
-  expect(newTable.product!.price_cents).toBeLessThanOrEqual(oldTable.product!.price_cents);
+  const proposals = rankingsSinceLastRequest(before).filter((a) => a.selected_product_id !== undefined);
+  const oldLines = proposals.map((a) => bomLineFor(before, a.category)!);
+  expect(oldLines.every(Boolean)).toBe(true);
+  await approve.last().click();
+  const snap = await waitForSnapshot(request, projectId, (s) => oldLines.every((old) => bomLineFor(s, old.category)?.id !== old.id), 30_000);
+  const newLines = oldLines.map((old) => bomLineFor(snap, old.category)!);
+  for (const [i, newLine] of newLines.entries()) {
+    const old = oldLines[i];
+    expect(newLine.kind).toBe(old.kind);
+    // required_savings may be zero when the budget is not over; a replacement still never costs more.
+    expect(newLine.product!.price_cents).toBeLessThanOrEqual(old.product!.price_cents);
+    expect(snap.placements.some((p) => p.bom_item_id === newLine.id)).toBe(true);
+    expect(snap.placements.some((p) => p.bom_item_id === old.id)).toBe(false);
+  }
+  expect(snap.budget.committed_cents).toBeLessThanOrEqual(snap.project.budget_cents);
   expect(snap.budget.committed_cents).toBeLessThanOrEqual(BUDGET_CENTS);
   expect(snap.budget.state).not.toBe("over");
-  expect(snap.placements.some((p) => p.bom_item_id === newTable.id)).toBe(true);
-  await expect(zach.getByTestId("bom-rail")).toContainText(newTable.product!.title);
+  note("replaced lines", newLines.map((l) => `${l.category}: ${l.product!.title} (${l.product!.price_cents} cents)`).join("; "));
+  for (const newLine of newLines) {
+    await expect(zach.getByTestId("bom-rail")).toContainText(newLine.product!.title);
+    await expect(ben.getByTestId("bom-rail")).toContainText(newLine.product!.title, { timeout: POLL_MS });
+  }
   await expect(zach.getByTestId("budget-stat")).not.toHaveAttribute("data-state", "over");
-  await expect(ben.getByTestId("bom-rail")).toContainText(newTable.product!.title, { timeout: POLL_MS });
   await expect(ben.getByTestId("budget-stat")).not.toHaveAttribute("data-state", "over", { timeout: POLL_MS });
 });
 
