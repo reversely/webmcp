@@ -20,6 +20,7 @@ yarn-error.log*
 # Browser automation / test output
 playwright-report/
 test-results/
+tests/videos/
 
 # Python / uv (in case a helper script lands here)
 __pycache__/
@@ -50,3 +51,6 @@ coverage/
 
 # Commercial font binaries (Aeonik, CoType Foundry); install locally from ~/Library/Fonts
 public/fonts/
+
+# Generated product meshes (src/server/three-d.ts); regenerated from the Modal endpoint
+public/models/
