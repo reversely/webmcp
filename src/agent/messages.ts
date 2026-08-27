@@ -93,7 +93,17 @@ async function routeMessage(projectId: string, author: string, text: string, dep
     return snapshot(projectId).messages;
   }
   const history = snapshot(projectId).messages.slice(0, -1);
-  const reply = await runAgent({ projectId, author }, history, text);
+  let reply: string;
+  try {
+    reply = await runAgent({ projectId, author }, history, text);
+  } catch (e) {
+    // A model timeout or 5xx inside the SDK run must not turn into a 500: the message list comes
+    // back with a reply that says what failed, and the person sends the message again (PRD 17).
+    const message = e instanceof Error ? e.message : String(e);
+    recordIssue(projectId, { source: "agent_run PlanningAgent", severity: "error", message: `The PlanningAgent turn for "${text.slice(0, 80)}" failed (${message}); nothing was recorded for it, so send the message again to retry.` });
+    pushMessage(projectId, { role: "agent", author: "PlanningAgent", text: `The planning step failed (${message}). Send the message again to retry; the plan and the search panel keep working meanwhile.` });
+    return snapshot(projectId).messages;
+  }
   const activeId = s.activeRuns.get(projectId);
   const nowWaiting = activeId !== undefined && s.runs.get(activeId)?.status === "waiting_for_user";
   // A paused run already posted its question as an artifact message; a second copy would repeat it.

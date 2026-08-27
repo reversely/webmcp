@@ -133,6 +133,7 @@ export function fakeDeps(overrides: Partial<SourcingDeps> = {}): SourcingDeps & 
       s.store.candidates.set(candidateId, { ...c, visual_evaluation_json: visual });
       return visual;
     },
+    startModelGeneration: async () => null,
     evaluatePerCategory: 6,
     ...overrides
   };

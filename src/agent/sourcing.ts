@@ -23,7 +23,7 @@ import {
 } from "../domain/ranking";
 import { itemKey, readRequiredItem, type AgentRun, type Candidate, type Category, type Kind, type Placement, type Product, type Requirement } from "../domain/types";
 import { upsertRequirement } from "../server/requirements";
-import { appState, geometryFor, layoutRulesFor, snapshot, spaceFor, updateCandidate } from "../server/state";
+import { appState, geometryFor, layoutRulesFor, snapshot, spaceFor, updateCandidate, type ModelJob } from "../server/state";
 import { recordIssue, withSpan, withSpanSync } from "../server/trace";
 import { emptyProgress, writeQuestionArtifact, writeSourcingArtifact, type CategoryProgress, type SourcingArtifact } from "./artifacts";
 import { boxOf, isAvailable, mapLimit, searchProducts, shipsToFor, upsertCandidate, type SearchOptions } from "./catalog";
@@ -50,6 +50,8 @@ export type SourcingDeps = {
   inferKind: (name: string) => Promise<KindGuess>;
   evaluateDelivery: (projectId: string, candidateId: string) => Promise<unknown>;
   evaluateVisualFit: (projectId: string, candidateId: string) => Promise<VisualEvaluation | null>;
+  /** Step 13, detached (PRD 15.1); tests inject a no-op so no job outlives the test state. */
+  startModelGeneration: (product: Product) => Promise<ModelJob | null>;
   evaluatePerCategory: number;
 };
 
@@ -107,6 +109,7 @@ export function defaultSourcingDeps(projectId: string): SourcingDeps {
     inferKind,
     evaluateDelivery,
     evaluateVisualFit,
+    startModelGeneration,
     evaluatePerCategory: EVALUATE_PER_CATEGORY
   };
 }
@@ -194,11 +197,23 @@ async function searchAndEvaluate(projectId: string, cp: SourcingCheckpoint, item
   progress.status = "searching";
   writeProgress(projectId, cp);
 
-  const raws = await withSpan(projectId, { kind: "step", name: `search ${category}`, prd_ref: "PRD 9 step 3", input: { category, kind: item.kind, query: item.query, ...options } }, async (span) => {
-    const found = await deps.search(item, options);
-    span.setOutput({ found: found.length });
-    return found;
-  });
+  let raws: unknown[];
+  try {
+    raws = await withSpan(projectId, { kind: "step", name: `search ${category}`, prd_ref: "PRD 9 step 3", input: { category, kind: item.kind, query: item.query, ...options } }, async (span) => {
+      const found = await deps.search(item, options);
+      span.setOutput({ found: found.length });
+      return found;
+    });
+  } catch (e) {
+    // The catalog client has already retried a 429 (catalog.ts). Anything that still fails ends
+    // this item as `no match` and the run goes on with the others (PRD 17): the item gets no
+    // candidates, and the search panel is the way to find one by hand.
+    const message = e instanceof Error ? e.message : String(e);
+    recordIssue(projectId, { source: "step search", severity: "error", message: `The catalog search for "${category}" failed (${message}); the item ends with no match in this run, so search for it in the search panel or ask again later.` });
+    progress.status = "no match";
+    writeProgress(projectId, cp);
+    return;
+  }
   progress.found += raws.length;
   progress.status = "retrieving details";
   writeProgress(projectId, cp);
@@ -429,7 +444,8 @@ async function finish(projectId: string, run: AgentRun, cp: SourcingCheckpoint, 
   let selection = selectCombination(ranked, cp.categories, selectionRange(cp));
   const gapName = "no_combination" in selection ? selection.gapCategory : null;
   const gapItem = gapName === null ? undefined : cp.items.find((i) => i.name === gapName);
-  if (gapItem && "no_combination" in selection) {
+  // An item whose search already failed is not searched again: the second search would fail the same way.
+  if (gapItem && "no_combination" in selection && progressOf(cp, gapItem.name).status !== "no match") {
     // PRD 8.4: one more search for the pivot item with the price range that closes the gap.
     const range = selection.suggestedPriceRange;
     await searchAndEvaluate(projectId, cp, gapItem, deps, { minCents: range.min_cents, maxCents: range.max_cents });
@@ -459,7 +475,7 @@ async function finish(projectId: string, run: AgentRun, cp: SourcingCheckpoint, 
     const productId = s.store.candidates.get(pick.id)!.product_id;
     selected[category] = productId;
     // Step 13: 3D generation for each selected product, detached (PRD 15.1 never blocks the BOM).
-    withSpanSync(projectId, { kind: "step", name: `start 3D ${category}`, prd_ref: "PRD 9 step 13", input: { product_id: productId } }, () => startModelGeneration(s.store.getProduct(productId)));
+    withSpanSync(projectId, { kind: "step", name: `start 3D ${category}`, prd_ref: "PRD 9 step 13", input: { product_id: productId } }, () => deps.startModelGeneration(s.store.getProduct(productId)));
   }
   return { status: "complete", subtotal_cents: recorded.subtotal_cents, selected, artifact_id: cp.artifact_id, layout_checked: layoutChecked };
 }
@@ -617,7 +633,7 @@ export async function sourceItem(projectId: string, name: string, deps: Sourcing
         span.setOutput({ placed: done, geometry: done ? geometryFor(projectId) : null });
         return done;
       });
-      withSpanSync(projectId, { kind: "step", name: `start 3D ${item.name}`, prd_ref: "PRD 9 step 13", input: { product_id: product.id } }, () => startModelGeneration(product));
+      withSpanSync(projectId, { kind: "step", name: `start 3D ${item.name}`, prd_ref: "PRD 9 step 13", input: { product_id: product.id } }, () => deps.startModelGeneration(product));
       end();
       return { status: "complete", item: item.name, product_id: product.id, bom_item_id: bomItemId, price_cents: product.price_cents, budget, placed, artifact_id: cp.artifact_id, ...(overBudget ? { note: OVER_BUDGET_NOTE } : {}) };
     });
