@@ -114,6 +114,7 @@ export function candidateFits(
 
 /**
  * Full layout check for the `check_geometry` tool. Clearances are keyed `"idA|idB"` in item order.
+ * Pairs that include `rugId` never count as collisions; `rugCoverage` reports the rug relationship.
  *
  * Raises:
  *   Error: when a rug, table, or sofa id names no item.
@@ -137,7 +138,9 @@ export function checkLayout(
       const b = items[j].id;
       const fa = footprints.get(a)!;
       const fb = footprints.get(b)!;
-      if (overlaps(fa, fb)) collisions.push([a, b]);
+      // A rug is floor covering: furniture standing on it is coverage, not a collision.
+      const involvesRug = a === rugId || b === rugId;
+      if (!involvesRug && overlaps(fa, fb)) collisions.push([a, b]);
       clearances[`${a}|${b}`] = clearance(fa, fb);
     }
   }

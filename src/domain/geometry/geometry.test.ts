@@ -170,7 +170,7 @@ describe("checkLayout", () => {
   it("reports containment, collisions, pairwise clearances, and rug coverage", () => {
     const result = checkLayout(room, items, "rug", "table", "sofa");
     expect(result.inside).toEqual({ sofa: true, rug: true, table: true });
-    expect(result.collisions).toEqual([["rug", "table"]]);
+    expect(result.collisions).toEqual([]);
     expect(result.clearances).toEqual({ "sofa|rug": 324, "sofa|table": 786, "rug|table": 0 });
     expect(result.rugCoverage).toEqual({ tableInside: true, sofaFrontOverlaps: false, pass: false });
   });
@@ -181,5 +181,21 @@ describe("checkLayout", () => {
 
   it("rejects an unknown id", () => {
     expect(() => checkLayout(room, items, "rug", "table", "lamp")).toThrow('no item with id "lamp"');
+  });
+});
+
+describe("checkLayout rug handling", () => {
+  it("does not report furniture standing on the rug as a collision", () => {
+    const space = { width_mm: 3658, length_mm: 5486 };
+    const items = [
+      { id: "rug", box: { width_mm: 2438, depth_mm: 3048, height_mm: 10 }, placement: { x_mm: 1829, y_mm: 1900, rotation_deg: 0 } },
+      { id: "table", box: { width_mm: 1220, depth_mm: 610, height_mm: 450 }, placement: { x_mm: 1829, y_mm: 1900, rotation_deg: 0 } },
+      { id: "sofa", box: { width_mm: 2134, depth_mm: 914, height_mm: 838 }, placement: { x_mm: 1829, y_mm: 700, rotation_deg: 0 } }
+    ];
+    const result = checkLayout(space, items, "rug", "table", "sofa");
+    expect(result.collisions).toEqual([]);
+    expect(result.rugCoverage?.pass).toBe(true);
+    // Without a rug id the same overlap is a plain collision.
+    expect(checkLayout(space, items).collisions).toContainEqual(["rug", "table"]);
   });
 });
