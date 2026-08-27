@@ -7,6 +7,7 @@ import { offerReply } from "../domain/agent-run";
 import { inferAddress } from "../domain/delivery";
 import type { DeliveryAddress } from "../domain/types";
 import { appState, pushMessage, setDeliveryAddress, snapshot, type ChatMessage } from "../server/state";
+import { recordIssue, withProject, withSpan } from "../server/trace";
 import { hasModelKey } from "./model";
 import { runPlanningAgent } from "./planning-agent";
 import { approvalIndex, approveReplacement } from "./replacement";
@@ -23,11 +24,18 @@ function formatAddress(address: DeliveryAddress): string {
 }
 
 /** A full address line is preferred; the classifier's bare ZIP is the fallback. */
-function addressFrom(text: string, zip: unknown): DeliveryAddress {
+function addressFrom(projectId: string, text: string, zip: unknown): DeliveryAddress {
   try {
     return inferAddress(text);
-  } catch {
-    return inferAddress(String(zip));
+  } catch (e) {
+    try {
+      const address = inferAddress(String(zip));
+      recordIssue(projectId, { source: "domain infer_address", message: `The reply "${text.slice(0, 80)}" did not parse as a street address (${(e as Error).message}); only the ZIP ${address.postal_code} is stored, so checkouts use a placeholder street and the evidence is marked address_partial.` });
+      return address;
+    } catch (inner) {
+      recordIssue(projectId, { source: "domain infer_address", severity: "error", message: `No delivery address could be read from "${text.slice(0, 80)}" (${(inner as Error).message}); reply with a ZIP code or a full US address to continue the sourcing run.` });
+      throw inner;
+    }
   }
 }
 
@@ -43,7 +51,11 @@ function summarizeOutcome(outcome: SourcingOutcome): string {
 }
 
 /** Handles one message end to end and returns the project's message list. */
-export async function handleMessage(projectId: string, author: string, text: string, deps: MessageDeps = {}): Promise<ChatMessage[]> {
+export function handleMessage(projectId: string, author: string, text: string, deps: MessageDeps = {}): Promise<ChatMessage[]> {
+  return withProject(projectId, () => routeMessage(projectId, author, text, deps));
+}
+
+async function routeMessage(projectId: string, author: string, text: string, deps: MessageDeps): Promise<ChatMessage[]> {
   const s = appState();
   pushMessage(projectId, { role: "user", author, text });
 
@@ -52,7 +64,7 @@ export async function handleMessage(projectId: string, author: string, text: str
   if (run && run.status === "waiting_for_user") {
     const outcome = offerReply(s.runs, run.id, { memberId: author, text });
     if (outcome.answered) {
-      const address = addressFrom(text, outcome.value);
+      const address = addressFrom(projectId, text, outcome.value);
       setDeliveryAddress(projectId, address);
       pushMessage(projectId, { role: "agent", author: "PlanningAgent", text: `Checking delivery to ${formatAddress(address)}.` });
       const result = await resumeSourcing(projectId, run.id, deps.sourcing);
@@ -63,7 +75,7 @@ export async function handleMessage(projectId: string, author: string, text: str
 
   const approval = approvalIndex(text);
   if (approval !== null && s.pendingReplacements.has(projectId)) {
-    const result = approveReplacement(projectId, approval, author);
+    const result = await withSpan(projectId, { kind: "domain", name: "approve_replacement", prd_ref: "PRD 8.5", input: { index: approval, author } }, () => approveReplacement(projectId, approval, author));
     const reply =
       result.status === "replaced"
         ? `Replaced with ${s.store.products.get(result.product_id)?.title ?? result.product_id}. Committed $${(result.result.budget.committed_cents / 100).toFixed(2)} (${result.result.budget.state}).`

@@ -6,7 +6,7 @@ export {
   parseToolResult,
   storefrontEndpoint
 } from "./client";
-export type { CatalogClient, CatalogClientOptions } from "./client";
+export type { CatalogCall, CatalogCallHook, CatalogClient, CatalogClientOptions } from "./client";
 export { CatalogError, CatalogProduct, CatalogVariant, GetProductResult, LookupCatalogResult, SearchCatalogResult } from "./types";
 export type {
   BuyerContext,

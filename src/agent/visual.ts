@@ -5,8 +5,9 @@
  */
 import { z } from "zod";
 import type { VisualEvaluation } from "../domain/ranking";
-import type { Requirement } from "../domain/types";
+import type { Product, Requirement } from "../domain/types";
 import { appState, snapshot, updateCandidate } from "../server/state";
+import { recordIssue, withSpan } from "../server/trace";
 import { structuredCall, type ContentPart } from "./model";
 
 export type VisualDirection = { base_colors: string[]; accent_colors: string[] };
@@ -14,8 +15,9 @@ export type VisualDirection = { base_colors: string[]; accent_colors: string[] }
 export function visualDirectionOf(requirements: Requirement[]): VisualDirection | null {
   const row = requirements.find((r) => r.type === "visual_direction" && r.status === "agreed");
   if (!row) return null;
-  const value = row.value_json as Partial<VisualDirection>;
-  return { base_colors: value.base_colors ?? [], accent_colors: value.accent_colors ?? [] };
+  // The board form writes { base, accent } as hex strings; the agent tool still writes colour names.
+  const value = row.value_json as Partial<VisualDirection> & { base?: string[]; accent?: string[] };
+  return { base_colors: value.base ?? value.base_colors ?? [], accent_colors: value.accent ?? value.accent_colors ?? [] };
 }
 
 /** The editable checklist of PRD 11, derived from the palette in code so it stays consistent. */
@@ -54,6 +56,17 @@ export async function evaluateVisualFit(projectId: string, candidateId: string, 
   const candidate = s.store.candidates.get(candidateId);
   if (!candidate) throw new Error(`Candidate ${candidateId} not found`);
   const product = s.store.getProduct(candidate.product_id);
+  return withSpan(projectId, { kind: "domain", name: "evaluate_visual_fit", prd_ref: "PRD 11", input: { candidate_id: candidateId, product_id: product.id, title: product.title } }, async (span) => {
+    const result = await judgeVisualFit(projectId, candidateId, product, maxAttempts);
+    span.setOutput(result ?? { result: null });
+    if (!result) {
+      recordIssue(projectId, { source: "domain evaluate_visual_fit", message: `Visual evaluation for "${product.title}" returned no verdict after ${maxAttempts} attempts; the candidate ranks without a visual score.` });
+    }
+    return result;
+  });
+}
+
+async function judgeVisualFit(projectId: string, candidateId: string, product: Product, maxAttempts: number): Promise<VisualEvaluation | null> {
   const snap = snapshot(projectId);
   const checklist = visualChecklist(visualDirectionOf(snap.requirements));
   const selectedImages = snap.bom

@@ -22,10 +22,16 @@ export function storefrontEndpoint(shopHost: string): string {
   return `https://${shopHost}/api/ucp/mcp`;
 }
 
+/** One `tools/call` about to be sent; `run` performs it. The hook may observe, time, or wrap it. */
+export type CatalogCall = { endpoint: string; tool: string; args: Record<string, unknown> };
+export type CatalogCallHook = <T>(call: CatalogCall, run: () => Promise<T>) => Promise<T>;
+
 export interface CatalogClientOptions {
   endpoint?: string;
   profileUrl?: string;
   fetchImpl?: typeof fetch;
+  /** Wraps every call, including those of clients derived with `withEndpoint`; used for tracing. */
+  onCall?: CatalogCallHook;
 }
 
 export interface CatalogClient {
@@ -42,9 +48,15 @@ export function catalogClient(options: CatalogClientOptions = {}): CatalogClient
   const endpoint = options.endpoint ?? GLOBAL_CATALOG_ENDPOINT;
   const profileUrl = options.profileUrl ?? DEFAULT_AGENT_PROFILE_URL;
   const fetchImpl = options.fetchImpl ?? fetch;
+  const onCall = options.onCall;
   let nextId = 1;
 
-  async function call<T extends z.ZodType>(tool: string, catalog: Record<string, unknown>, schema: T): Promise<z.infer<T>> {
+  function call<T extends z.ZodType>(tool: string, catalog: Record<string, unknown>, schema: T): Promise<z.infer<T>> {
+    const run = () => send(tool, catalog, schema);
+    return onCall ? onCall({ endpoint, tool, args: catalog }, run) : run();
+  }
+
+  async function send<T extends z.ZodType>(tool: string, catalog: Record<string, unknown>, schema: T): Promise<z.infer<T>> {
     const body = {
       jsonrpc: "2.0",
       id: nextId++,
@@ -82,7 +94,7 @@ export function catalogClient(options: CatalogClientOptions = {}): CatalogClient
       return call("get_product", { id, ...productOptions }, GetProductResult);
     },
     withEndpoint(other) {
-      return catalogClient({ endpoint: other, profileUrl, fetchImpl });
+      return catalogClient({ endpoint: other, profileUrl, fetchImpl, onCall });
     }
   };
 }

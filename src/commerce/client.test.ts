@@ -103,6 +103,43 @@ describe("catalogClient request shape", () => {
   });
 });
 
+describe("catalogClient onCall", () => {
+  it("wraps every call with the endpoint, tool, and arguments, including calls from a derived client", async () => {
+    const { fetchImpl } = fakeFetch(floydGetProduct);
+    const calls: { endpoint: string; tool: string; args: Record<string, unknown> }[] = [];
+    const client = catalogClient({
+      fetchImpl,
+      onCall: async (call, run) => {
+        calls.push(call);
+        return run();
+      }
+    });
+    await client.getProduct("gid://shopify/Product/1");
+    await client.withEndpoint(storefrontEndpoint("floydhome.com")).getProduct("gid://shopify/Product/2", { include_variants: true } as never);
+    expect(calls).toEqual([
+      { endpoint: GLOBAL_CATALOG_ENDPOINT, tool: "get_product", args: { id: "gid://shopify/Product/1" } },
+      { endpoint: "https://floydhome.com/api/ucp/mcp", tool: "get_product", args: { id: "gid://shopify/Product/2", include_variants: true } }
+    ]);
+  });
+
+  it("lets the hook see a failure and still rejects the caller", async () => {
+    const outcomes: string[] = [];
+    const client = catalogClient({
+      fetchImpl: fakeFetch({}, 503).fetchImpl,
+      onCall: async (call, run) => {
+        try {
+          return await run();
+        } catch (e) {
+          outcomes.push(`${call.tool} ${(e as Error).message}`);
+          throw e;
+        }
+      }
+    });
+    await expect(client.searchCatalog({ query: "sofa" })).rejects.toMatchObject({ kind: "http", code: 503 });
+    expect(outcomes).toEqual([`search_catalog search_catalog: HTTP 503 from ${GLOBAL_CATALOG_ENDPOINT}`]);
+  });
+});
+
 describe("catalogClient result parsing", () => {
   it("reads Global search results from structuredContent when content is absent", async () => {
     const client = catalogClient({ fetchImpl: fakeFetch(globalSearch).fetchImpl });

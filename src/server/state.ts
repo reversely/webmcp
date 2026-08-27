@@ -3,13 +3,14 @@
  * BOM store does not own (spaces, requirements, board documents, chat messages). Kept on
  * `globalThis` so Next.js dev-server module reloads do not wipe it. Postgres replaces this (#15).
  */
-import { catalogClient, type CatalogClient } from "../commerce";
+import { catalogClient, GLOBAL_CATALOG_ENDPOINT, type CatalogCallHook, type CatalogClient } from "../commerce";
 import { createInMemoryStore, type AgentRunStore } from "../domain/agent-run";
 import { calculateBudget, regenerateBom, ProjectStore, type Budget, type DomainEvent } from "../domain/bom";
 import { startModelGeneration } from "../domain/ingestion/hooks";
 import { normalizeCatalogProduct } from "../domain/products/normalize";
 import { checkLayout, type LayoutCheck } from "../domain/geometry";
-import type { Candidate, Category, DeliveryAddress, Placement, Product, Requirement, Space } from "../domain/types";
+import { recordIssue, withSpan } from "./trace";
+import type { Candidate, Category, DeliveryAddress, Member, Placement, Product, Project, Requirement, Space } from "../domain/types";
 
 export type ArtifactKind = "sourcing" | "ranking" | "question" | "spec" | "room_estimate";
 
@@ -46,8 +47,15 @@ export type ModelJob = {
   updated_at: string;
 };
 
+/** A project member with the self-assigned role and the last heartbeat the client sent. */
+export type MemberRow = Member & { role: string; stage: string | null; last_seen: string };
+
 export type AppState = {
   store: ProjectStore;
+  /** Join code (six uppercase letters or digits) per project id, and the reverse lookup. */
+  codes: Map<string, string>;
+  codeIndex: Map<string, string>;
+  members: Map<string, MemberRow>;
   spaces: Map<string, Space>;
   requirements: Map<string, Requirement>;
   boards: Map<string, unknown>;
@@ -66,25 +74,124 @@ declare global {
   var __plannerState: AppState | undefined;
 }
 
+/** What a catalog call sends, without the merchant-sized bits: the query, price and ship-to filters, page size, ids. */
+function summarizeCatalogArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const { query, filters, pagination, ids, id } = args as { query?: unknown; filters?: { ships_to?: unknown; price?: unknown; available?: unknown }; pagination?: unknown; ids?: unknown; id?: unknown };
+  return {
+    ...(query !== undefined ? { query } : {}),
+    ...(filters ? { ships_to: filters.ships_to, price: filters.price, available: filters.available } : {}),
+    ...(pagination !== undefined ? { pagination } : {}),
+    ...(ids !== undefined ? { ids } : {}),
+    ...(id !== undefined ? { id } : {})
+  };
+}
+
+/** Records every catalog and storefront MCP call as a span (PRD 24) and a failed one as an issue (PRD 17). */
+const traceCatalogCall: CatalogCallHook = (call, run) => {
+  const kind = call.endpoint === GLOBAL_CATALOG_ENDPOINT ? "catalog" : "storefront";
+  const host = new URL(call.endpoint).host;
+  return withSpan(null, { kind, name: call.tool, input: { endpoint: host, ...summarizeCatalogArgs(call.args) } }, async (span) => {
+    try {
+      const result = (await run()) as { products?: unknown[]; product?: unknown; pagination?: unknown; messages?: unknown[] };
+      span.setOutput({
+        ...(result?.products ? { count: result.products.length } : {}),
+        ...(result?.product !== undefined ? { found: result.product !== null } : {}),
+        ...(result?.pagination !== undefined ? { pagination: result.pagination } : {}),
+        ...(result?.messages?.length ? { messages: result.messages } : {})
+      });
+      return result as never;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      recordIssue(null, {
+        source: `${kind} ${call.tool}`,
+        severity: "error",
+        message: `The ${call.tool} call to ${host} failed (${message}); this search returned nothing, so the category has fewer candidates until it is retried.`,
+        detail: JSON.stringify(summarizeCatalogArgs(call.args))
+      });
+      throw e;
+    }
+  });
+};
+
 export function appState(): AppState {
   if (!globalThis.__plannerState) {
     const events: DomainEvent[] = [];
     const store = new ProjectStore({ emit: (e) => events.push(e) });
     globalThis.__plannerState = {
       store,
+      codes: new Map(),
+      codeIndex: new Map(),
+      members: new Map(),
       spaces: new Map(),
       requirements: new Map(),
       boards: new Map(),
       messages: new Map(),
       jobs: new Map(),
       events,
-      client: catalogClient(),
+      client: catalogClient({ onCall: traceCatalogCall }),
       runs: createInMemoryStore(),
       activeRuns: new Map(),
       pendingReplacements: new Map()
     };
   }
   return globalThis.__plannerState;
+}
+
+/** Digits and letters that survive being read aloud: no 0/O or 1/I pairs. */
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // pragma: allowlist secret
+
+function newCode(taken: Map<string, string>): string {
+  for (;;) {
+    let code = "";
+    for (let i = 0; i < 6; i++) code += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
+    if (!taken.has(code)) return code;
+  }
+}
+
+/** Inserts a project and mints its join code. */
+export function createProject(input: Pick<Project, "name" | "budget_cents" | "required_by">): { id: string; code: string } {
+  const s = appState();
+  const id = s.store.newId("proj");
+  s.store.insertProject({ id, ...input, currency: "USD", delivery_address_json: null, created_at: new Date().toISOString() });
+  const code = newCode(s.codeIndex);
+  s.codes.set(id, code);
+  s.codeIndex.set(code, id);
+  return { id, code };
+}
+
+export function projectCode(projectId: string): string | null {
+  return appState().codes.get(projectId) ?? null;
+}
+
+/** Resolves a join code to a project and adds a member with the role the person chose. */
+export function joinProject(code: string, displayName: string, role: string): MemberRow | null {
+  const s = appState();
+  const projectId = s.codeIndex.get(code.trim().toUpperCase());
+  if (!projectId) return null;
+  const member: MemberRow = {
+    id: s.store.newId("mem"),
+    project_id: projectId,
+    user_id: s.store.newId("user"),
+    display_name: displayName,
+    role,
+    stage: null,
+    last_seen: new Date().toISOString()
+  };
+  s.members.set(member.id, member);
+  return member;
+}
+
+export function membersFor(projectId: string): MemberRow[] {
+  return [...appState().members.values()].filter((m) => m.project_id === projectId);
+}
+
+/** Records a heartbeat; false when the member is unknown (a server restart drops every member). */
+export function touchMember(projectId: string, memberId: string, stage: string | null): boolean {
+  const s = appState();
+  const member = s.members.get(memberId);
+  if (!member || member.project_id !== projectId) return false;
+  s.members.set(memberId, { ...member, stage, last_seen: new Date().toISOString() });
+  return true;
 }
 
 export type ProjectSnapshot = {

@@ -3,6 +3,7 @@
  * created on first use so importing this module never needs the API key (tests mock the calls).
  */
 import { z } from "zod";
+import { recordIssue, withSpan } from "../server/trace";
 
 export const MODEL = "gpt-5.6-terra";
 
@@ -37,18 +38,32 @@ export async function structuredCall<T extends z.ZodType>(
   instructions: string,
   content: ContentPart[]
 ): Promise<z.infer<T> | null> {
-  if (!hasModelKey()) return null;
-  try {
-    const api = await openai();
-    const response = await api.responses.create({
-      model: MODEL,
-      instructions,
-      input: [{ role: "user", content }],
-      text: { format: { type: "json_schema", name, schema: z.toJSONSchema(schema) as Record<string, unknown>, strict: true } }
-    });
-    const parsed = schema.safeParse(JSON.parse(response.output_text));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
+  const parts = content.map((part) => (part.type === "input_text" ? { text: part.text } : { image: part.image_url }));
+  return withSpan(null, { kind: "model", name, input: { model: MODEL, instructions: instructions.slice(0, 160), parts } }, async (span) => {
+    if (!hasModelKey()) {
+      span.setOutput({ skipped: "no OPENAI_API_KEY" });
+      return null;
+    }
+    try {
+      const api = await openai();
+      const response = await api.responses.create({
+        model: MODEL,
+        instructions,
+        input: [{ role: "user", content }],
+        text: { format: { type: "json_schema", name, schema: z.toJSONSchema(schema) as Record<string, unknown>, strict: true } }
+      });
+      const usage = response.usage ? { input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens } : null;
+      const parsed = schema.safeParse(JSON.parse(response.output_text));
+      span.setOutput({ usage, response_id: response.id, valid: parsed.success, result: parsed.success ? parsed.data : response.output_text });
+      if (!parsed.success) {
+        recordIssue(null, { source: `model ${name}`, message: `The ${name} model answer did not match its schema (${parsed.error.issues[0]?.message ?? "invalid"}); the caller uses its fallback for this call.` });
+      }
+      return parsed.success ? parsed.data : null;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      span.setOutput({ failed: message });
+      recordIssue(null, { source: `model ${name}`, severity: "error", message: `The ${name} model call failed (${message}); the caller uses its fallback, so this result is missing until the call is retried.` });
+      return null;
+    }
+  });
 }

@@ -3,7 +3,7 @@
  * budget and geometry numbers come from deterministic code, and merchant text reaches the model
  * only inside `untrusted_merchant_text` fields.
  */
-import { Agent, run, tool, type AgentInputItem } from "@openai/agents";
+import { Agent, run, tool, type AgentInputItem, type FunctionTool } from "@openai/agents";
 import { z } from "zod";
 import { addToBom, calculateBudget, NotFoundError } from "../domain/bom";
 import { candidateFits } from "../domain/geometry";
@@ -11,6 +11,7 @@ import { ingestProductUrl } from "../domain/ingestion";
 import { Category, type Requirement } from "../domain/types";
 import { appState, geometryFor, snapshot, spaceFor, type ChatMessage } from "../server/state";
 import { requestModel } from "../server/three-d";
+import { recordIssue, recordSpan, withSpan } from "../server/trace";
 import { boxOf, isAvailable, searchCategory, sellerOf, shipsToFor, upsertCandidate } from "./catalog";
 import { evaluateDelivery } from "./delivery";
 import { MODEL } from "./model";
@@ -63,7 +64,34 @@ const Search = z.object({
   limit: z.number().int().min(1).max(50).nullable()
 });
 
+function parseArgs(input: string): unknown {
+  try {
+    return JSON.parse(input);
+  } catch {
+    return input;
+  }
+}
+
+/** Records every invocation of a tool as a `tool` span under the agent run (PRD 24). */
+function traced<T extends FunctionTool<AgentContext, never, unknown>>(projectId: string, t: T): T {
+  const invoke = t.invoke;
+  return {
+    ...t,
+    invoke: (runContext, input, details) =>
+      withSpan(projectId, { kind: "tool", name: t.name, prd_ref: "PRD 5.1", input: parseArgs(input) }, async (span) => {
+        const output = await invoke.call(t, runContext, input, details);
+        span.setOutput(output);
+        return output;
+      })
+  };
+}
+
 function makeTools(ctx: AgentContext) {
+  const { projectId } = ctx;
+  return rawTools(ctx).map((t) => traced(projectId, t as never));
+}
+
+function rawTools(ctx: AgentContext) {
   const s = appState();
   const { projectId } = ctx;
   return [
@@ -96,7 +124,7 @@ function makeTools(ctx: AgentContext) {
     }),
     tool({
       name: "search_shopify_catalog",
-      description: "Live Global Catalog search for one category, shipping to the project address (or New York 10003). Returns raw catalog objects to pass to add_candidate.",
+      description: "Live Global Catalog search for one category, shipping to the project address (country only until an address is set). Returns raw catalog objects to pass to add_candidate.",
       parameters: Search,
       execute: async ({ category, query, max_cents, min_cents, limit }) => {
         const raws = await searchCategory(s.client, category, shipsToFor(s.store.getProject(projectId)), {
@@ -260,6 +288,29 @@ function historyItems(messages: ChatMessage[], count: number): AgentInputItem[] 
 export async function runPlanningAgent(ctx: AgentContext, history: ChatMessage[], text: string): Promise<string> {
   const agent = planningAgent(ctx);
   const input: AgentInputItem[] = [...historyItems(history, 20), { role: "user", content: `${ctx.author}: ${text}` }];
-  const result = await run(agent, input, { context: ctx, maxTurns: 12 });
-  return typeof result.finalOutput === "string" ? result.finalOutput : JSON.stringify(result.finalOutput ?? "");
+  return withSpan(ctx.projectId, { kind: "agent_run", name: "PlanningAgent", prd_ref: "PRD 5", input: { author: ctx.author, text, history_items: input.length - 1, model: MODEL } }, async (span) => {
+    try {
+      const result = await run(agent, input, { context: ctx, maxTurns: 12 });
+      const usage = { requests: 0, input_tokens: 0, output_tokens: 0 };
+      for (const response of result.rawResponses) {
+        usage.requests += 1;
+        usage.input_tokens += response.usage.inputTokens;
+        usage.output_tokens += response.usage.outputTokens;
+        recordSpan(ctx.projectId, {
+          kind: "model",
+          name: MODEL,
+          input: { response_id: response.responseId ?? null },
+          output: { input_tokens: response.usage.inputTokens, output_tokens: response.usage.outputTokens, output_items: response.output.length },
+          status: "ok"
+        });
+      }
+      const reply = typeof result.finalOutput === "string" ? result.finalOutput : JSON.stringify(result.finalOutput ?? "");
+      span.setOutput({ reply, usage, new_items: result.newItems.length });
+      return reply;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      recordIssue(ctx.projectId, { source: "agent_run PlanningAgent", severity: "error", message: `The PlanningAgent run failed (${message}); the message got no reply, so send it again once the cause is fixed.` });
+      throw e;
+    }
+  });
 }

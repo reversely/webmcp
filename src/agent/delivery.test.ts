@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkoutOptions, deliveryFromSources, shippingPolicyUrl, type CheckoutPayload } from "./delivery";
+import { checkoutOptions, checkoutPlaceholders, deliveryFromSources, shippingPolicyUrl, type CheckoutPayload } from "./delivery";
 import fixtures from "./fixtures/checkout-responses.json";
 
 const CHECKOUTS = fixtures as Record<string, CheckoutPayload>;
@@ -12,6 +12,15 @@ describe("deliveryFromSources", () => {
     expect(result.evidence).toMatchObject({ source: "checkout_page", arrival_min: "2026-09-01", arrival_max: "2026-09-02", address_partial: true });
     expect(result.options).toEqual(["Standard (Tuesday, September 1–Wednesday, September 2 via Standard)"]);
     expect(result.checkout_status).toBe("requires_escalation");
+    expect(result.placeholders_used).toEqual(["buyer_email", "buyer_name", "phone", "street"]);
+  });
+
+  it("records which checkout placeholders a probe used", () => {
+    expect(checkoutPlaceholders(false)).toEqual(["buyer_email", "buyer_name", "phone"]);
+    const full = deliveryFromSources({ checkout: CHECKOUTS.nathan_home, policyText: null, description: "", addressPartial: false }, CTX);
+    expect(full.placeholders_used).toEqual(["buyer_email", "buyer_name", "phone"]);
+    const unprobed = deliveryFromSources({ checkout: null, policyText: null, description: "Delivered in 5 to 7 days.", addressPartial: true }, CTX);
+    expect(unprobed.placeholders_used).toEqual([]);
   });
 
   it("reads a calendar-day duration as likely and a business-day duration too", () => {

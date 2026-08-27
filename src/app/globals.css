@@ -24,7 +24,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .frame { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: minmax(0, 1fr); height: calc(100vh - 56px); }
 .frame.wide { grid-template-columns: minmax(0, 1fr); }
 .centre { min-width: 0; overflow: auto; padding: 24px; }
-.side { border-left: 1px solid var(--line); background: var(--paper); display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.side { border-left: 1px solid var(--line); background: var(--paper); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; }
 
 .page-title { font-size: var(--text-page-title); font-weight: 500; color: var(--ink); line-height: 1.2; margin: 0 0 8px; }
 .page-summary { color: var(--ink-2); line-height: 1.55; max-width: 62ch; margin: 0 0 24px; }
@@ -80,6 +80,44 @@ button, input, select, textarea { font: inherit; color: inherit; }
 @media (prefers-reduced-motion: reduce) { .tag.appear { animation: none; } }
 .chat-input .input { flex: 1; }
 
+/* Trace section (PRD 24): a third band under the chat, collapsed to its header until opened. */
+.trace { border-top: 1px solid var(--line); background: var(--card); display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+.trace.open { height: 52vh; }
+.trace-head { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 20px; border: 0; background: var(--card); cursor: pointer; text-align: left; width: 100%; }
+.trace-head:focus-visible { outline: 2px solid var(--signature); outline-offset: -2px; }
+.trace-caret { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--signature); }
+.trace-body { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-height: 0; border-top: 1px solid var(--line); }
+.issues { max-height: 96px; overflow: auto; padding: 8px 20px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; align-content: start; }
+.issues-empty { font-size: 12px; color: var(--ink-3); padding: 2px 0; }
+.issue { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; font-size: 12px; line-height: 1.45; }
+.issue .tag { margin-top: 1px; }
+.issue-msg { color: var(--ink); }
+.issue-meta { color: var(--ink-3); font-size: 11px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--line); }
+.chip { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 12px; font-weight: 500; cursor: pointer; }
+.chip.on { background: var(--signature-soft); color: var(--signature); border-color: var(--signature-soft); }
+.chip:focus-visible { outline: 2px solid var(--signature); outline-offset: 1px; }
+.trace-table-wrap { overflow: auto; min-height: 0; }
+.trace-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 12px; }
+.trace-table th { position: sticky; top: 0; background: var(--card); text-align: left; font-weight: 500; color: var(--ink-3); height: 32px; padding: 0 4px; border-bottom: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; }
+.trace-table th:first-child, .trace-table td:first-child { padding-left: 12px; }
+.trace-table th:last-child, .trace-table td:last-child { padding-right: 12px; }
+.trace-table td { height: 36px; padding: 0 4px; border-bottom: 1px solid var(--line); color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trace-table .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; display: inline-block; line-height: 22px; }
+.trace-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.trace-table .mono-cell { font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-2); }
+.trace-table .name-cell { font-weight: 500; }
+.trace-table .ref-cell { color: var(--ink-3); font-size: 11px; }
+.trace-row { cursor: pointer; scroll-margin-top: 32px; }
+.trace-row:hover { background: var(--paper); }
+.trace-row:focus-visible { outline: 2px solid var(--signature); outline-offset: -2px; }
+.trace-row.on { background: var(--signature-soft); box-shadow: inset 2px 0 0 var(--signature); }
+.trace-empty { color: var(--ink-3); white-space: normal !important; padding: 12px 8px !important; height: auto !important; }
+.trace-detail td { white-space: normal; height: auto; padding: 8px 12px 12px; background: var(--paper); overflow: visible; }
+.trace-error { font-size: 12px; color: var(--tag-red-text); margin-bottom: 6px; }
+.trace-json { display: grid; gap: 8px; }
+.trace-json pre { margin: 4px 0 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.45; color: var(--ink-2); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .card { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-card); padding: 12px; display: grid; gap: 8px; transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
 .card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
@@ -89,3 +127,16 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .empty { color: var(--ink-3); font-size: 14px; padding: 24px; text-align: center; }
 .mono { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
 @media (prefers-reduced-motion: reduce) { .card, .card:hover { transition: none; transform: none; } }
+
+/* Top bar: the room code and the presence chips sit between the stages and the tool tag. */
+.presence-bar { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.code-chip { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
+.code-chip .mono-code { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.12em; color: var(--signature); font-weight: 500; }
+.code-chip .code-hint { font-size: 11px; color: var(--ink-3); }
+.presence { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.member-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px; background: var(--signature-soft); color: var(--signature); font-size: 13px; font-weight: 500; text-decoration: none; transition: opacity var(--dur-slow) var(--ease-out); }
+.member-chip .member-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tag-green-text); }
+.member-chip.away { opacity: 0.45; }
+.member-chip.away .member-dot { background: var(--ink-3); }
+.member-chip .member-role { font-size: 11px; font-weight: 400; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.member-chip.join { background: var(--card); border: 1px dashed var(--line); color: var(--ink-2); }

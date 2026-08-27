@@ -7,12 +7,17 @@
 import { summarize } from "./summarize";
 import { TOOLS, type ToolArgs, type ToolDefinition, resolveRoute } from "./tools";
 
+/** One finished tool execution, for tracing; `result` is what the agent received. */
+export type ToolCallEvent = { name: string; args: ToolArgs; result: ToolResult; ok: boolean; duration_ms: number };
+
 export interface RegisterOptions {
   projectId: string;
   /** Defaults to the global `fetch`. */
   fetchImpl?: typeof fetch;
   /** Aborting it unregisters every tool. */
   signal: AbortSignal;
+  /** Called after every tool execution with its name, arguments, and result. */
+  onToolCall?: (event: ToolCallEvent) => void;
 }
 
 export type RegisterResult = { supported: false } | { supported: true; toolNames: string[] };
@@ -90,10 +95,16 @@ async function executeThroughApi(
  * Registers the seven planner tools, or reports `supported: false` when the page has no
  * `document.modelContext` (no native support and no polyfill loaded).
  */
-export async function registerPlannerTools({ projectId, fetchImpl, signal }: RegisterOptions): Promise<RegisterResult> {
+export async function registerPlannerTools({ projectId, fetchImpl, signal, onToolCall }: RegisterOptions): Promise<RegisterResult> {
   const modelContext = document.modelContext;
   if (!modelContext) return { supported: false };
   const doFetch = fetchImpl ?? globalThis.fetch.bind(globalThis);
+  const execute = async (tool: ToolDefinition, args: ToolArgs, abort: AbortSignal | undefined): Promise<ToolResult> => {
+    const started = Date.now();
+    const result = await executeThroughApi(tool, projectId, doFetch, args, abort);
+    onToolCall?.({ name: tool.name, args: args ?? {}, result, ok: !result.isError, duration_ms: Date.now() - started });
+    return result;
+  };
 
   for (const tool of TOOLS) {
     await modelContext.registerTool(
@@ -103,7 +114,7 @@ export async function registerPlannerTools({ projectId, fetchImpl, signal }: Reg
         inputSchema: tool.inputSchema,
         annotations: tool.annotations,
         // The polyfill calls execute with a single argument, so the options default matters.
-        execute: (args, options) => executeThroughApi(tool, projectId, doFetch, args, options?.signal)
+        execute: (args, options) => execute(tool, args, options?.signal)
       },
       { signal }
     );
