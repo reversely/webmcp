@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import { appState, geometryFor, snapshot } from "../../../../../server/state";
 import type { Placement } from "../../../../../domain/types";
+import { placementWarnings } from "../../../../../domain/geometry";
 
 type Params = { params: Promise<{ id: string }> };
 
 /**
  * Replaces the project's placements. Body: { placements: [{ bom_item_id, x_mm, y_mm, rotation_deg }] }.
- * Returns the snapshot plus the geometry check for the new layout.
+ * Returns the snapshot, the geometry check for the new layout, and `warnings`: the collisions and
+ * wall crossings the check found for the items in the body. An overlapping placement is saved and
+ * reported, not rejected.
  */
 export async function PUT(request: Request, { params }: Params) {
   const { id } = await params;
@@ -22,7 +25,9 @@ export async function PUT(request: Request, { params }: Params) {
     const row: Placement = { id: existing?.id ?? s.store.newId("pl"), space_id: space.id, bom_item_id: p.bom_item_id, x_mm: Math.round(p.x_mm), y_mm: Math.round(p.y_mm), z_mm: 0, rotation_deg: p.rotation_deg };
     s.store.placements.set(row.id, row);
   }
-  return NextResponse.json({ ...snapshot(id), geometry: geometryFor(id) });
+  const geometry = geometryFor(id);
+  const warnings = geometry ? body.placements.flatMap((p) => placementWarnings(geometry, p.bom_item_id)) : [];
+  return NextResponse.json({ ...snapshot(id), geometry, warnings });
 }
 
 export async function GET(_: Request, { params }: Params) {

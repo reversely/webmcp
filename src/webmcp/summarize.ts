@@ -17,6 +17,7 @@
  * The snapshot shape is the loose superset below; every field is optional so a summary degrades to
  * fewer fields rather than throwing when the server omits one.
  */
+import type { PlacementWarning } from "@/domain/geometry";
 import type { BomItem, Placement, Product, Project, Requirement, Space } from "@/domain/types";
 import type { ToolName } from "./tools";
 
@@ -47,6 +48,8 @@ export interface ProjectSnapshot {
     unresolved_issues?: string[];
   };
   unresolved_questions?: string[];
+  /** PUT /placements: what the geometry check found for the items just placed. */
+  warnings?: PlacementWarning[];
 }
 
 interface BomLineSummary {
@@ -154,6 +157,7 @@ const SUMMARIZERS: Record<ToolName, (snapshot: ProjectSnapshot) => unknown> = {
   replace_bom_item: writeSummary,
   place_product: (snapshot) => ({
     placements: placementsSummary(snapshot),
+    warnings: snapshot.warnings ?? [],
     geometry_conflicts: snapshot.evaluation?.geometry_conflicts ?? []
   }),
   evaluate_project: (snapshot) => ({

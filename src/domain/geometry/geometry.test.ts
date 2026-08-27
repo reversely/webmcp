@@ -11,6 +11,7 @@ import {
   insideRoom,
   evaluateRelation,
   overlaps,
+  placementWarnings,
   ruleSentence,
   wallDistance,
   type LayoutItem
@@ -215,5 +216,35 @@ describe("checkLayout", () => {
     expect(checkLayout(room, hard).collisions).toContainEqual(["rug", "table"]);
     expect(checkLayout(room, hard, [{ relation: "under", subject: "big rug", objects: ["coffee table"] }]).collisions).toEqual([]);
     expect(checkLayout(room, items).collisions).toEqual([]);
+  });
+});
+
+describe("placementWarnings", () => {
+  const items: LayoutItem[] = [
+    { id: "b1", name: "sofa", kind: "seating", box: sofa, placement: { x_mm: 1829, y_mm: 457, rotation_deg: 0 } },
+    { id: "b2", name: "coffee table", kind: "table", box: table, placement: { x_mm: 1829, y_mm: 700, rotation_deg: 0 } },
+    { id: "b3", name: "rug", kind: "soft_floor", box: rug, placement: { x_mm: 1829, y_mm: 1200, rotation_deg: 0 } },
+    { id: "b4", name: "cube", kind: "other", box: cube, placement: { x_mm: 3400, y_mm: 3000, rotation_deg: 0 } }
+  ];
+  const layout = checkLayout(room, items);
+
+  it("lists the collision from the placed item's side", () => {
+    expect(placementWarnings(layout, "b2")).toEqual([
+      { bom_item_id: "b2", kind: "collision", with: "b1", detail: "b2 overlaps b1." }
+    ]);
+    expect(placementWarnings(layout, "b1")).toEqual([
+      { bom_item_id: "b1", kind: "collision", with: "b2", detail: "b1 overlaps b2." }
+    ]);
+  });
+
+  it("reports a wall crossing", () => {
+    expect(placementWarnings(layout, "b4")).toEqual([
+      { bom_item_id: "b4", kind: "outside_room", detail: "b4 crosses a room wall." }
+    ]);
+  });
+
+  it("is empty for a rug under furniture and for an unplaced id", () => {
+    expect(placementWarnings(layout, "b3")).toEqual([]);
+    expect(placementWarnings(layout, "b9")).toEqual([]);
   });
 });

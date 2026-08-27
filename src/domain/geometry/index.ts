@@ -33,6 +33,15 @@ export type LayoutCheck = {
   rules: RuleResult[];
 };
 
+/** What a layout check reports about one placed item, for the placements route's response. */
+export type PlacementWarning = {
+  bom_item_id: string;
+  kind: "collision" | "outside_room";
+  /** The other item of a collision. */
+  with?: string;
+  detail: string;
+};
+
 /** `against_wall`: the nearest room edge is at most this far from the item (PRD 14). */
 export const WALL_TOLERANCE_MM = 50;
 /** `beside` without a stated distance: the items are at most this far apart. */
@@ -286,6 +295,20 @@ export function checkLayout(space: FloorSpace, items: LayoutItem[], rules: Layou
   const byName = new Map<string, Footprint>();
   for (const item of items) if (!byName.has(itemKey(item.name))) byName.set(itemKey(item.name), footprints.get(item.id)!);
   return { inside, collisions, clearances, rules: rules.map((rule) => evaluateRelation(rule, byName, space)) };
+}
+
+/** The collisions and wall crossings `checkLayout` found for one item; empty when the item sits clear. */
+export function placementWarnings(layout: LayoutCheck, bomItemId: string): PlacementWarning[] {
+  const warnings: PlacementWarning[] = [];
+  if (layout.inside[bomItemId] === false) {
+    warnings.push({ bom_item_id: bomItemId, kind: "outside_room", detail: `${bomItemId} crosses a room wall.` });
+  }
+  for (const [a, b] of layout.collisions) {
+    if (a !== bomItemId && b !== bomItemId) continue;
+    const other = a === bomItemId ? b : a;
+    warnings.push({ bom_item_id: bomItemId, kind: "collision", with: other, detail: `${bomItemId} overlaps ${other}.` });
+  }
+  return warnings;
 }
 
 /** Math.round yields -0 for tiny negatives such as cos(90 degrees); `+ 0` folds it back to 0. */
