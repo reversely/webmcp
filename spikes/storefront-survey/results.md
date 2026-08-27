@@ -124,3 +124,24 @@ Global Catalog has no storefront-type filter. Its `search_catalog` filters are `
 as in step 8, fetch each seller's homepage once and keep those with the loader marker, then pass
 their shop GIDs (`variants[].seller.id`) in `filters.shops` on later searches. Headless sellers
 (rugsusa.com, burrow.com, castlery.com) and stores still on a password page lack the marker.
+
+## Step 10 (2026-08-28): discovery at five pages per category
+
+`PAGES=5 npx tsx spikes/storefront-survey/discover.ts` (about 20 minutes: one homepage fetch, one
+`tools/list`, and one `create_checkout` per seller).
+
+| Measure | One page (step 8) | Five pages |
+| --- | --- | --- |
+| Products returned | 250 | 1,247 |
+| Distinct sellers | 73 | 293 |
+| Sellers with the Liquid WebMCP loader | 60 | 280 |
+| Sellers answering UCP with 13 tools | 73 | 293 |
+| Products with parseable dimensions | 103 | 551 (147 sellers have at least one) |
+| Sellers covering 3+ demo categories | 5 | 26 (westwing, arhaus, poly-bark, modway, daalshome, burrow cover 4) |
+| Sellers returning shipping options from `create_checkout` | 31 | 156 |
+| Sellers whose option text carries a delivery window or duration | 11 | 55 |
+| Sellers that are Liquid, have dimensions, and return delivery text | | 29 |
+
+The catalog's own `total_count` is roughly 370 to 400 per category query, so five pages cover about
+two thirds of each; the cursor runs to 1,000. Seller count grows almost linearly with pages because
+most sellers appear once.
