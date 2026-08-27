@@ -124,16 +124,18 @@ describe("address gate", () => {
     expect(snapshot(projectId).bom).toHaveLength(4);
   });
 
-  it("treats a non-answer as a new request while the run keeps waiting", async () => {
+  it("stores an unreadable reply as the address line and resumes without a destination", async () => {
     const projectId = seedProject({ address: false });
     const deps = fakeDeps();
     await sourceRoom(projectId, "Find a set", deps);
     const calls: string[] = [];
-    await handleMessage(projectId, "ben", "What is the budget?", { sourcing: deps, runAgent: async (_ctx, _history, text) => (calls.push(text), "The budget is $2,500.") });
-    expect(calls).toEqual(["What is the budget?"]);
     const s = appState();
-    expect(s.runs.get(s.activeRuns.get(projectId)!)?.status).toBe("waiting_for_user");
-    expect(deps.deliveryCalls).toHaveLength(0);
+    const runId = s.activeRuns.get(projectId)!;
+    await handleMessage(projectId, "ben", "What is the budget?", { sourcing: deps, runAgent: async (_ctx, _history, text) => (calls.push(text), "The budget is $2,500.") });
+    expect(calls).toEqual([]);
+    expect(snapshot(projectId).project.delivery_address_json).toMatchObject({ line1: "What is the budget?", postal_code: "", country: null, source: "given" });
+    expect(s.runs.get(runId)?.status).toBe("complete");
+    expect(deps.deliveryCalls.length).toBeGreaterThan(0);
   });
 });
 

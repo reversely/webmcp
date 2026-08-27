@@ -110,7 +110,8 @@ export function checkoutPlaceholders(addressPartial: boolean): CheckoutPlacehold
   return ["buyer_email", "buyer_name", "phone", ...(addressPartial ? (["street"] as const) : [])];
 }
 
-function destinationFor(address: DeliveryAddress) {
+/** The checkout destination as the project stores it: country and region as given, the postal code with any internal space. */
+function destinationFor(address: DeliveryAddress & { country: string }) {
   return {
     first_name: CHECKOUT_PLACEHOLDER_BUYER.first_name,
     last_name: CHECKOUT_PLACEHOLDER_BUYER.last_name,
@@ -163,10 +164,12 @@ export async function probeCheckout(product: Product, address: DeliveryAddress, 
 async function sendCheckoutProbe(product: Product, address: DeliveryAddress, fetchImpl: typeof fetch): Promise<Probe> {
   const variantId = variantIdOf(product);
   if (!variantId) return { payload: null, error: "product has no variant id" };
+  const { country } = address;
+  if (country === null) return { payload: null, error: "the address names no country, so no shipping destination was sent" };
   const checkout = {
     line_items: [{ item: { id: variantId }, quantity: 1 }],
     buyer: CHECKOUT_PLACEHOLDER_BUYER,
-    fulfillment: { methods: [{ type: "shipping", destinations: [destinationFor(address)] }] }
+    fulfillment: { methods: [{ type: "shipping", destinations: [destinationFor({ ...address, country })] }] }
   };
   const body = {
     jsonrpc: "2.0",

@@ -72,15 +72,42 @@ export function itemKey(name: string): string {
   return name.trim().toLowerCase();
 }
 
+export const ADDRESS_FIELDS = ["line1", "city", "region", "postal_code", "country"] as const;
+export type AddressField = (typeof ADDRESS_FIELDS)[number];
+
+/**
+ * The project's delivery address. `country` is null and `postal_code` empty when the reply could
+ * not be read as an address and was kept as `line1` verbatim; a search then carries no
+ * destination. `source` is `given` when the person stated the address (a street line or a city),
+ * `inferred` when a postal code alone supplied it; `inferred_fields` lists the fields filled in
+ * around what the text said.
+ */
 export const DeliveryAddress = z.object({
   line1: z.string().nullable(),
   city: z.string().nullable(),
   region: z.string().nullable(),
   postal_code: z.string(),
-  country: z.string(),
-  source: z.enum(["given", "inferred"])
+  country: z.string().nullable(),
+  /** ISO 4217 code for the country, when known; the catalog's buyer context carries it. */
+  currency: z.string().nullable().optional(),
+  source: z.enum(["given", "inferred"]),
+  inferred_fields: z.array(z.enum(ADDRESS_FIELDS)).optional()
 });
 export type DeliveryAddress = z.infer<typeof DeliveryAddress>;
+
+/** What the model reads out of a free-text reply; a non-address comes back with `is_address` false. */
+export const ExtractedAddress = z.object({
+  is_address: z.boolean().describe("True when the text is, or contains, a delivery address or postal code; false for any other message."),
+  line1: z.string().nullable().describe("The street line as written, or null when the text has none."),
+  city: z.string().nullable().describe("The city or locality, stated or implied by the postal code."),
+  region: z.string().nullable().describe("The state, province, or region in the country's usual short form (NY, ON, England), stated or implied by the postal code."),
+  postal_code: z.string().nullable().describe("The postal code in the country's canonical form, keeping any internal space (M6A 0G9, SW1A 1AA, 10003)."),
+  country: z.string().nullable().describe("ISO 3166-1 alpha-2 code of the country the address is in, read from the postal code format and place names."),
+  currency: z.string().nullable().describe("ISO 4217 code of that country's currency."),
+  stated_fields: z.array(z.enum(ADDRESS_FIELDS)).describe("The fields the text itself states; every other non-null field was filled in."),
+  confidence: z.number().describe("From 0 to 1: how sure the reading of country and postal code is.")
+});
+export type ExtractedAddress = z.infer<typeof ExtractedAddress>;
 
 export const Project = z.object({
   id: z.string(),

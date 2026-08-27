@@ -3,23 +3,37 @@
  * Global Catalog, and the upsert that turns a raw catalog object into a Product row plus a project
  * Candidate without selecting it (selection is the ranking's job).
  */
-import { CatalogError, type CatalogClient, type ShipsTo } from "../commerce";
+import { CatalogError, type BuyerContext, type CatalogClient, type ShipsTo } from "../commerce";
 import { normalizeCatalogProduct } from "../domain/products/normalize";
 import type { Box, Candidate, Category, Kind, Product, Project } from "../domain/types";
 import { appState } from "../server/state";
 
 export const SEARCH_LIMIT = 24;
-/** The catalog serves US sellers; a project without an address searches by country alone. */
-export const DEFAULT_COUNTRY = "US";
+
+/** Where a search ships to: the catalog's `ships_to` filter plus the currency its buyer context carries. */
+export type SearchDestination = ShipsTo & { currency?: string };
 
 /**
- * The `ships_to` filter for a project: its delivery address when set, otherwise the country
- * alone, so no region or postal code is invented (the sourcing artifact says so).
+ * The destination for a project's searches: its delivery address's country, region, postal code,
+ * and currency. Undefined without an address, or with one that names no country (an unread
+ * reply), so the search carries no `ships_to` and no country context; nothing is assumed.
  */
-export function shipsToFor(project: Pick<Project, "delivery_address_json">): ShipsTo {
+export function shipsToFor(project: Pick<Project, "delivery_address_json">): SearchDestination | undefined {
   const address = project.delivery_address_json;
-  if (!address) return { country: DEFAULT_COUNTRY };
-  return { country: address.country, ...(address.region ? { region: address.region } : {}), postal_code: address.postal_code };
+  if (!address || address.country === null) return undefined;
+  return {
+    country: address.country,
+    ...(address.region ? { region: address.region } : {}),
+    ...(address.postal_code ? { postal_code: address.postal_code } : {}),
+    ...(address.currency ? { currency: address.currency } : {})
+  };
+}
+
+/** Splits a destination into the catalog's filter and buyer context; both absent without one. */
+export function catalogDestination(destination: SearchDestination | undefined): { ships_to?: ShipsTo; context?: BuyerContext } {
+  if (!destination) return {};
+  const { currency, ...ships_to } = destination;
+  return { ships_to, context: { address_country: ships_to.country, address_region: ships_to.region, postal_code: ships_to.postal_code, currency } };
 }
 
 export type SearchOptions = { minCents?: number; maxCents?: number; limit?: number };
@@ -34,14 +48,15 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * project address. An HTTP 429 from the catalog is retried after a pause, twice, before it
  * propagates.
  */
-export async function searchProducts(client: CatalogClient, query: string, shipsTo: ShipsTo, options: SearchOptions = {}): Promise<unknown[]> {
+export async function searchProducts(client: CatalogClient, query: string, destination: SearchDestination | undefined, options: SearchOptions = {}): Promise<unknown[]> {
   const price = options.minCents !== undefined || options.maxCents !== undefined ? { min: options.minCents, max: options.maxCents } : undefined;
+  const { ships_to, context } = catalogDestination(destination);
   for (let attempt = 0; ; attempt++) {
     try {
       const result = await client.searchCatalog({
         query,
-        filters: { ships_to: shipsTo, available: true, ...(price ? { price } : {}) },
-        context: { address_country: shipsTo.country, address_region: shipsTo.region, postal_code: shipsTo.postal_code, currency: "USD" },
+        filters: { ...(ships_to ? { ships_to } : {}), available: true, ...(price ? { price } : {}) },
+        ...(context ? { context } : {}),
         pagination: { limit: options.limit ?? SEARCH_LIMIT }
       });
       return result.products ?? [];

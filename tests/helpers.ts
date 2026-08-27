@@ -16,6 +16,8 @@ export type Snapshot = {
   code?: string;
   project: { id: string; name: string; budget_cents: number; required_by: string | null; delivery_address_json: { postal_code?: string; city?: string; region?: string } | null; version: number };
   space: { width_mm: number; length_mm: number } | null;
+  /** The board's room estimate awaiting the Room stage's confirm (#33: dimensions have one entry point). */
+  room_estimate: { name: string; width_mm: number; length_mm: number; height_mm: number | null } | null;
   requirements: { type: string; status: string; value_json: unknown }[];
   products: { id: string; title: string; price_cents: number; spatial_status: string; model_status: string; primary_image_url: string | null; width_mm: number | null; depth_mm: number | null; height_mm: number | null; glb_url: string | null }[];
   bom: { id: string; product_id: string; category: string; kind: string; status: string; product: { title: string; price_cents: number; spatial_status: string } | null }[];
@@ -84,9 +86,7 @@ export function projectIdFrom(page: Page): string {
 /** Fills the name and role fields of a landing card (`create` after creating, `join` on the join card). */
 async function fillWhoAmI(page: Page, prefix: "create" | "join", name: string, role: string) {
   await page.getByTestId(`${prefix}-name`).fill(name);
-  const chip = page.getByTestId(`${prefix}-role-${role}`);
-  if ((await chip.count()) > 0) await chip.click();
-  else await page.getByTestId(`${prefix}-role`).fill(role);
+  await page.getByTestId(`${prefix}-role`).fill(role);
   await expect(page.getByTestId(`${prefix}-role`)).toHaveValue(role);
 }
 

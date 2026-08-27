@@ -7,12 +7,14 @@ export interface ReplyClassification {
 
 export type ReplyClassifier = (text: string, field: string) => ReplyClassification;
 
-const ZIP_PATTERN = /\b\d{5}\b/;
-
-/** A reply answers `delivery_address` when it is, or contains, a five-digit ZIP. */
+/**
+ * The reply to `delivery_address` is always the answer: the run asks its address question once,
+ * and the next message from any member is stored as the address (what the model reads out of it,
+ * or the text verbatim when it reads nothing; see `inferAddress`). The value is the text itself,
+ * for the caller to resolve into an address.
+ */
 export function classifyAddressReply(text: string): ReplyClassification {
-  const match = ZIP_PATTERN.exec(text);
-  return match ? { answers: true, value: match[0] } : { answers: false };
+  return { answers: true, value: text.trim() };
 }
 
 const CLASSIFIERS_BY_FIELD: Record<string, (text: string) => ReplyClassification> = {

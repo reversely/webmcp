@@ -3,7 +3,7 @@ import { appState } from "../../../../server/state";
 import { withProject } from "../../../../server/trace";
 import { normalizeCatalogProduct } from "../../../../domain/products/normalize";
 import { CatalogError } from "../../../../commerce";
-import { DEFAULT_COUNTRY, shipsToFor } from "../../../../agent/catalog";
+import { catalogDestination, shipsToFor } from "../../../../agent/catalog";
 import { inferKind } from "../../../../agent/kinds";
 
 /**
@@ -11,7 +11,7 @@ import { inferKind } from "../../../../agent/kinds";
  * { item?, query?, project_id?, limit?, max_cents?, cursor? }. `item` is a project item's phrase;
  * its inferred search query is used when `query` is empty, and the keywords are appended to it
  * otherwise. `ships_to` and the buyer context come from the project's delivery address; without
- * one (or without a project) the search carries the country alone. Each result carries the raw
+ * one (or without a project) the search carries neither, and `ships_to` echoes as null. Each result carries the raw
  * catalog object (for adding to a project) and the normalized product (for display); `ships_to`
  * echoes what the search used so the panel can say so.
  */
@@ -24,12 +24,12 @@ export async function POST(request: Request) {
   const query = [base, keywords].filter(Boolean).join(" ").trim();
   if (!query) return NextResponse.json({ error: "An item or a query is required" }, { status: 400 });
   const project = body.project_id ? s.store.projects.get(body.project_id) : undefined;
-  const ships_to = project ? shipsToFor(project) : { country: DEFAULT_COUNTRY };
+  const { ships_to, context } = catalogDestination(project ? shipsToFor(project) : undefined);
   try {
     const result = await withProject(project?.id ?? "_none", () => s.client.searchCatalog({
       query,
-      filters: { ships_to, available: true, ...(body.max_cents ? { price: { max: body.max_cents } } : {}) },
-      context: { address_country: ships_to.country, address_region: ships_to.region, postal_code: ships_to.postal_code, currency: "USD" },
+      filters: { ...(ships_to ? { ships_to } : {}), available: true, ...(body.max_cents ? { price: { max: body.max_cents } } : {}) },
+      ...(context ? { context } : {}),
       pagination: { limit: Math.min(body.limit ?? 24, 50), cursor: body.cursor }
     }));
     const products = (result.products ?? []).map((raw) => {
@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       }
       return { raw, normalized, seller: { domain: merchant, name: variant?.seller?.name ?? merchant } };
     });
-    return NextResponse.json({ products, pagination: result.pagination ?? null, ships_to });
+    return NextResponse.json({ products, pagination: result.pagination ?? null, ships_to: ships_to ?? null });
   } catch (e) {
     const status = e instanceof CatalogError ? 502 : 500;
     return NextResponse.json({ error: (e as Error).message }, { status });

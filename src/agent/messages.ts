@@ -4,14 +4,15 @@
  * the PlanningAgent. Kept out of the Next route so tests can drive it without HTTP.
  */
 import { offerReply } from "../domain/agent-run";
-import { inferAddress } from "../domain/delivery";
+import { hasDestination } from "../domain/delivery";
 import { formatMoney } from "../domain/money";
 import type { DeliveryAddress } from "../domain/types";
 import { appState, pushMessage, setDeliveryAddress, snapshot, type ChatMessage } from "../server/state";
 import { recordIssue, withProject, withSpan } from "../server/trace";
+import { resolveAddress } from "./address";
 import { hasModelKey } from "./model";
 import { runPlanningAgent } from "./planning-agent";
-import { approvalIndex, approveReplacement } from "./replacement";
+import { approvalIndex, approveReplacement, type ReplacedLine } from "./replacement";
 import { resumeSourcing, type SourcingDeps, type SourcingOutcome } from "./sourcing";
 
 export type MessageDeps = {
@@ -24,22 +25,6 @@ function formatAddress(address: DeliveryAddress): string {
   return [address.line1, address.city, address.region, address.postal_code].filter(Boolean).join(", ");
 }
 
-/** A full address line is preferred; the classifier's bare ZIP is the fallback. */
-function addressFrom(projectId: string, text: string, zip: unknown): DeliveryAddress {
-  try {
-    return inferAddress(text);
-  } catch (e) {
-    try {
-      const address = inferAddress(String(zip));
-      recordIssue(projectId, { source: "domain infer_address", message: `The reply "${text.slice(0, 80)}" did not parse as a street address (${(e as Error).message}); only the ZIP ${address.postal_code} is stored, so checkouts use a placeholder street and the evidence is marked address_partial.` });
-      return address;
-    } catch (inner) {
-      recordIssue(projectId, { source: "domain infer_address", severity: "error", message: `No delivery address could be read from "${text.slice(0, 80)}" (${(inner as Error).message}); reply with a ZIP code or a full US address to continue the sourcing run.` });
-      throw inner;
-    }
-  }
-}
-
 function summarizeOutcome(outcome: SourcingOutcome): string {
   const s = appState();
   if (outcome.status === "waiting_for_user") return outcome.question;
@@ -49,6 +34,13 @@ function summarizeOutcome(outcome: SourcingOutcome): string {
     return `${category}: ${product?.title ?? productId} (${formatMoney(product?.price_cents ?? 0, product?.currency)})`;
   });
   return `Selected ${picks.join("; ")}. Subtotal ${formatMoney(outcome.subtotal_cents)}.${outcome.layout_checked ? " Layout placed and checked." : ""}`;
+}
+
+/** "Replaced with X." for one line; each line named with its product when the approval replaced several (#64). */
+function replacedText(replaced: ReplacedLine[]): string {
+  const title = (line: ReplacedLine) => appState().store.products.get(line.product_id)?.title ?? line.product_id;
+  if (replaced.length === 1) return `Replaced with ${title(replaced[0])}.`;
+  return `Replaced ${replaced.map((line) => `the ${line.category} with ${title(line)}`).join(" and ")}.`;
 }
 
 /** Handles one message end to end and returns the project's message list. */
@@ -65,9 +57,12 @@ async function routeMessage(projectId: string, author: string, text: string, dep
   if (run && run.status === "waiting_for_user") {
     const outcome = offerReply(s.runs, run.id, { memberId: author, text });
     if (outcome.answered) {
-      const address = addressFrom(projectId, text, outcome.value);
+      const address = await resolveAddress(text);
       setDeliveryAddress(projectId, address);
-      pushMessage(projectId, { role: "agent", author: "PlanningAgent", text: `Checking delivery to ${formatAddress(address)}.` });
+      const line = hasDestination(address)
+        ? `Checking delivery to ${formatAddress(address)}.`
+        : "Stored the reply as the address line; checking delivery without a destination.";
+      pushMessage(projectId, { role: "agent", author: "PlanningAgent", text: line });
       const result = await resumeSourcing(projectId, run.id, deps.sourcing);
       pushMessage(projectId, { role: "agent", author: "PlanningAgent", text: summarizeOutcome(result) });
       return snapshot(projectId).messages;
@@ -79,7 +74,7 @@ async function routeMessage(projectId: string, author: string, text: string, dep
     const result = await withSpan(projectId, { kind: "domain", name: "approve_replacement", prd_ref: "PRD 8.5", input: { index: approval, author } }, () => approveReplacement(projectId, approval, author));
     const reply =
       result.status === "replaced"
-        ? `Replaced with ${s.store.products.get(result.product_id)?.title ?? result.product_id}. Committed ${formatMoney(result.result.budget.committed_cents)} (${result.result.budget.state}).`
+        ? `${replacedText(result.replaced)} Committed ${formatMoney(result.result.budget.committed_cents)} (${result.result.budget.state}).`
         : result.status === "stale_version"
           ? `The project changed while the ranking was open (${result.message}); nothing was replaced.`
           : "There is no ranked replacement to approve.";

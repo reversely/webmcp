@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { classifyAddressReply, offerReply, requestInput, startRun } from "../domain/agent-run";
 import { appState, snapshot } from "../server/state";
+import { issuesFor } from "../server/trace";
+import { ADDRESS_QUESTION } from "./sourcing";
 import type { RankingArtifact } from "./artifacts";
 import { handleMessage } from "./messages";
 import { approvalIndex, findCheaperReplacement } from "./replacement";
@@ -8,24 +10,44 @@ import { sourceRoom } from "./sourcing";
 import { EXTRA, fakeCatalogProduct, fakeDeps, resetState, seedProject } from "./test-helpers";
 
 describe("classifyAddressReply routing", () => {
-  it("answers on a bare or embedded ZIP and declines otherwise", () => {
+  it("answers with the reply text whatever it says", () => {
     expect(classifyAddressReply("10003")).toEqual({ answers: true, value: "10003" });
-    expect(classifyAddressReply("Ship it to 55 Irving Pl, New York, NY 10003")).toEqual({ answers: true, value: "10003" });
-    expect(classifyAddressReply("What is the budget?")).toEqual({ answers: false });
-    expect(classifyAddressReply("call 212 555 1234")).toEqual({ answers: false });
+    expect(classifyAddressReply("Ship it to 55 Irving Pl, New York, NY 10003")).toEqual({ answers: true, value: "Ship it to 55 Irving Pl, New York, NY 10003" });
+    expect(classifyAddressReply("What is the budget?")).toEqual({ answers: true, value: "What is the budget?" });
   });
 
-  it("resumes a waiting run on an answer and keeps it waiting on anything else", () => {
+  it("resumes a waiting run on the first reply from any member", () => {
     resetState();
     const s = appState();
     const run = startRun(s.runs, { projectId: "p", goal: "g" });
     requestInput(s.runs, run.id, { field: "delivery_address", question: "Where?" });
-    const miss = offerReply(s.runs, run.id, { memberId: "ben", text: "Is blue ok?" });
-    expect(miss.answered).toBe(false);
-    expect(s.runs.get(run.id)?.status).toBe("waiting_for_user");
-    const hit = offerReply(s.runs, run.id, { memberId: "zach", text: "10003" });
-    expect(hit).toMatchObject({ answered: true, field: "delivery_address", value: "10003" });
+    const hit = offerReply(s.runs, run.id, { memberId: "ben", text: "Is blue ok?" });
+    expect(hit).toMatchObject({ answered: true, field: "delivery_address", value: "Is blue ok?", memberId: "ben" });
     expect(s.runs.get(run.id)?.status).toBe("running");
+  });
+
+  it("asks the address question once: two unreadable replies leave one question, one stored line, and a resumed run", async () => {
+    resetState();
+    const projectId = seedProject({ address: false });
+    const deps = fakeDeps();
+    const agentCalls: string[] = [];
+    const runAgent = async (_ctx: unknown, _history: unknown, text: string) => (agentCalls.push(text), "Noted.");
+    await sourceRoom(projectId, "Find a set", deps);
+    const s = appState();
+    const runId = s.activeRuns.get(projectId)!;
+    expect(s.runs.get(runId)?.status).toBe("waiting_for_user");
+
+    await handleMessage(projectId, "ben", "also make the rug bigger", { sourcing: deps, runAgent });
+    expect(snapshot(projectId).project.delivery_address_json).toEqual({ line1: "also make the rug bigger", city: null, region: null, postal_code: "", country: null, currency: null, source: "given", inferred_fields: [] });
+    expect(issuesFor(projectId).map((i) => i.message)).toContain("The reply was stored as the address line but no country or postal code could be read; delivery checks run without a shipping destination");
+    expect(s.runs.get(runId)?.status).toBe("complete");
+    expect(deps.deliveryCalls.length).toBeGreaterThan(0);
+
+    await handleMessage(projectId, "zach", "and a taller lamp", { sourcing: deps, runAgent });
+    expect(agentCalls).toEqual(["and a taller lamp"]);
+    const questions = snapshot(projectId).messages.filter((m) => m.artifact?.kind === "question" || m.text === ADDRESS_QUESTION);
+    expect(questions).toHaveLength(1);
+    expect(snapshot(projectId).project.delivery_address_json?.line1).toBe("also make the rug bigger");
   });
 
   it("stores a full address line as given, not inferred", async () => {

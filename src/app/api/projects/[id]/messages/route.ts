@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { primeAddressReply } from "../../../../../agent/address";
 import { handleMessage } from "../../../../../agent/messages";
 import { streamRun } from "../../../../../server/run-events";
 import { appState } from "../../../../../server/state";
@@ -26,6 +27,9 @@ export async function POST(request: Request, { params }: Params) {
   if (!body.text?.trim()) return NextResponse.json({ error: "text is required" }, { status: 400 });
   const author = body.author?.trim() || "member";
   const text = body.text.trim();
+  // A run waiting for the address gets the model's reading of this reply cached before the
+  // synchronous reply path in handleMessage resolves it (src/agent/address.ts).
+  await primeAddressReply(id, text);
 
   if (!(request.headers.get("accept") ?? "").includes("text/event-stream")) {
     try {

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { checkoutOptions, checkoutPlaceholders, deliveryFromSources, shippingPolicyUrl, type CheckoutPayload } from "./delivery";
+import type { DeliveryAddress } from "../domain/types";
+import { upsertCandidate } from "./catalog";
+import { checkoutOptions, checkoutPlaceholders, deliveryFromSources, probeCheckout, shippingPolicyUrl, type CheckoutPayload } from "./delivery";
+import { fakeCatalogProduct, resetState, seedProject } from "./test-helpers";
 import fixtures from "./fixtures/checkout-responses.json";
 
 const CHECKOUTS = fixtures as Record<string, CheckoutPayload>;
@@ -62,5 +65,34 @@ describe("deliveryFromSources", () => {
   it("finds the shipping policy link and flattens option groups", () => {
     expect(shippingPolicyUrl(CHECKOUTS.modway)).toBe("https://modway-dev.myshopify.com/policies/shipping-policy");
     expect(checkoutOptions({ fulfillment: { methods: [{ groups: [{ options: [{ title: "A", description: "B" }, { title: "C", description: "C" }] }] }] } })).toEqual(["A B", "C"]);
+  });
+});
+
+describe("probeCheckout destination", () => {
+  it("sends the stored country and region as given and keeps the postal code's space", async () => {
+    resetState();
+    const projectId = seedProject();
+    const { product } = upsertCandidate(projectId, fakeCatalogProduct("deep couch", 1, 89900), "deep couch", "seating");
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify(CHECKOUTS.nathan_home) }] } }), { headers: { "Content-Type": "application/json" } });
+    };
+    const address: DeliveryAddress = { line1: "5 York Garden Way", city: "North York", region: "ON", postal_code: "M6A 0G9", country: "CA", currency: "CAD", source: "given" };
+    const probe = await probeCheckout(product, address, fetchImpl);
+    expect(probe.error).toBeUndefined();
+    const checkout = ((bodies[0].params as { arguments: { checkout: { fulfillment: { methods: { destinations: unknown[] }[] } } } }).arguments).checkout;
+    expect(checkout.fulfillment.methods[0].destinations[0]).toMatchObject({ street_address: "5 York Garden Way", address_locality: "North York", address_region: "ON", postal_code: "M6A 0G9", address_country: "CA" });
+  });
+
+  it("sends no probe for an address without a country", async () => {
+    resetState();
+    const projectId = seedProject();
+    const { product } = upsertCandidate(projectId, fakeCatalogProduct("deep couch", 1, 89900), "deep couch", "seating");
+    const calls: unknown[] = [];
+    const fetchImpl: typeof fetch = async (url) => (calls.push(url), new Response("{}"));
+    const probe = await probeCheckout(product, { line1: "also make the rug bigger", city: null, region: null, postal_code: "", country: null, source: "given" }, fetchImpl);
+    expect(calls).toEqual([]);
+    expect(probe).toEqual({ payload: null, error: "the address names no country, so no shipping destination was sent" });
   });
 });

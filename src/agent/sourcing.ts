@@ -34,7 +34,7 @@ import { evaluateVisualFit } from "./visual";
 
 export const ADDRESS_QUESTION = "What delivery address should I use to check arrival dates?";
 export const NO_WINDOW_NOTE = "No priced item outside the required list is known to the project yet, so the selection takes the best combination under the budget.";
-export const COUNTRY_ONLY_NOTE = "Searched with the country only; delivery estimates improve after an address is set.";
+export const COUNTRY_ONLY_NOTE = "No delivery address yet; the search carried no destination and delivery estimates start once one is set.";
 export const OVER_BUDGET_NOTE = "The budget is already spent, so the cheapest match is added and the overage is reported.";
 /** The price ceiling of a single-item search when the budget is already spent: none that a catalog price reaches. */
 const NO_CEILING_CENTS = 1_000_000_000;

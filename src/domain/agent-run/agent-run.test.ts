@@ -47,7 +47,7 @@ describe("PRD 5.2 sequence", () => {
       }
     ]);
 
-    const outcome = offerReply(store, runId, { memberId: "zach", text: "10003" });
+    const outcome = offerReply(store, runId, { memberId: "zach", text: " 10003 " });
     expect(outcome).toMatchObject({ answered: true, field: "delivery_address", value: "10003" });
     const resumed = store.get(runId);
     expect(resumed?.status).toBe("running");
@@ -55,21 +55,28 @@ describe("PRD 5.2 sequence", () => {
     expect(resumed?.pending_operation_json).toEqual(CART_STEP);
   });
 
-  it("keeps waiting on a message that does not answer", () => {
+  it("takes any next message as the address answer, so the question is asked once", () => {
     const { store, runId } = runWaitingForAddress();
     const outcome = offerReply(store, runId, { memberId: "zach", text: "also make the rug bigger" });
-    expect(outcome).toMatchObject({ answered: false, treatedAsNewRequest: true });
-    expect(store.get(runId)?.status).toBe("waiting_for_user");
-    expect(store.get(runId)?.missing_fields_json).toEqual(["delivery_address"]);
+    expect(outcome).toMatchObject({ answered: true, field: "delivery_address", value: "also make the rug bigger" });
+    expect(store.get(runId)?.status).toBe("running");
+    expect(store.get(runId)?.missing_fields_json).toEqual([]);
     expect(store.get(runId)?.pending_operation_json).toEqual(CART_STEP);
   });
 
   it("accepts the answer from a second project member", () => {
     const { store, runId } = runWaitingForAddress();
-    offerReply(store, runId, { memberId: "zach", text: "also make the rug bigger" });
     const outcome = offerReply(store, runId, { memberId: "sam", text: "ship it to 10003 please" });
-    expect(outcome).toMatchObject({ answered: true, memberId: "sam", value: "10003" });
+    expect(outcome).toMatchObject({ answered: true, memberId: "sam", value: "ship it to 10003 please" });
     expect(store.get(runId)?.status).toBe("running");
+  });
+
+  it("keeps waiting on a field no classifier knows", () => {
+    const store = createInMemoryStore({ clock: () => FIXED_NOW });
+    const run = startRun(store, { projectId: "proj-1", goal: "g" });
+    requestInput(store, run.id, { field: "budget", question: "How much?" });
+    expect(offerReply(store, run.id, { memberId: "zach", text: "2500" })).toMatchObject({ answered: false, treatedAsNewRequest: true });
+    expect(store.get(run.id)?.status).toBe("waiting_for_user");
   });
 
   it("passes the field to an injected classifier", () => {
@@ -147,11 +154,7 @@ describe("reattach and recovery", () => {
 });
 
 describe("classifyAddressReply", () => {
-  it.each(["10003", "ship to 10003 please", "10003-1234"])("answers on %j", (text) => {
-    expect(classifyAddressReply(text)).toEqual({ answers: true, value: "10003" });
-  });
-
-  it.each(["also make the rug bigger", "1000", "123456"])("does not answer on %j", (text) => {
-    expect(classifyAddressReply(text)).toEqual({ answers: false });
+  it.each(["10003", "5 york garden way north york on m6a 0g9", "also make the rug bigger"])("answers on %j with the text itself", (text) => {
+    expect(classifyAddressReply(` ${text} `)).toEqual({ answers: true, value: text });
   });
 });
