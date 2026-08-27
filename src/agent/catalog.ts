@@ -17,12 +17,17 @@ export const CATEGORY_QUERIES: Record<Category, string> = {
 };
 
 export const SEARCH_LIMIT = 24;
-const DEFAULT_SHIPS_TO: ShipsTo = { country: "US", region: "NY", postal_code: "10003" };
+/** The catalog serves US sellers; a project without an address searches by country alone. */
+export const DEFAULT_COUNTRY = "US";
 
+/**
+ * The `ships_to` filter for a project: its delivery address when set, otherwise the country
+ * alone, so no region or postal code is invented (the sourcing artifact says so).
+ */
 export function shipsToFor(project: Pick<Project, "delivery_address_json">): ShipsTo {
   const address = project.delivery_address_json;
-  if (!address) return DEFAULT_SHIPS_TO;
-  return { country: address.country, region: address.region ?? DEFAULT_SHIPS_TO.region, postal_code: address.postal_code };
+  if (!address) return { country: DEFAULT_COUNTRY };
+  return { country: address.country, ...(address.region ? { region: address.region } : {}), postal_code: address.postal_code };
 }
 
 export type SearchOptions = { minCents?: number; maxCents?: number; limit?: number; query?: string };

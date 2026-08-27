@@ -1,6 +1,7 @@
 /** Fixtures for the agent tests: a fresh in-memory project with a space, and fake catalog objects. */
 import type { Category } from "../domain/types";
 import { appState } from "../server/state";
+import { upsertCandidate } from "./catalog";
 import type { SourcingDeps } from "./sourcing";
 
 export const DEMO_SPACE = { width_mm: 3658, length_mm: 5486 };
@@ -9,7 +10,11 @@ export function resetState(): void {
   globalThis.__plannerState = undefined;
 }
 
-export function seedProject(options: { address?: boolean; requiredBy?: string } = {}): string {
+/**
+ * A fresh project with a space and the four required categories. `sideTable` adds a side_table
+ * candidate at that price so sourcing derives its PRD 8.4 window; without it there is no window.
+ */
+export function seedProject(options: { address?: boolean; requiredBy?: string; sideTable?: number } = {}): string {
   const s = appState();
   const id = s.store.newId("proj");
   s.store.insertProject({
@@ -34,6 +39,7 @@ export function seedProject(options: { address?: boolean; requiredBy?: string } 
   for (const [rid, type, value] of requirements) {
     s.requirements.set(rid, { id: rid, project_id: id, scope: "project", type: type as "required_item", value_json: value, status: "agreed", source: "board", created_by: "zach" });
   }
+  if (options.sideTable) upsertCandidate(id, fakeCatalogProduct("side_table", 1, options.sideTable), "side_table");
   return id;
 }
 
@@ -67,7 +73,7 @@ export function fakeCatalogProduct(category: Category, index: number, priceCents
   };
 }
 
-/** Three price points per category: the sum of the middle picks lands in the default window. */
+/** Three price points per category: the sum of the middle picks lands in the window a 29500 side table sets. */
 export const FAKE_PRICES: Record<Category, number[]> = {
   sofa: [89900, 119900, 149900],
   coffee_table: [29900, 49900, 69900],
@@ -99,7 +105,6 @@ export function fakeDeps(overrides: Partial<SourcingDeps> = {}): SourcingDeps & 
       s.store.candidates.set(candidateId, { ...c, visual_evaluation_json: visual });
       return visual;
     },
-    sideTablePriceCents: 29500,
     evaluatePerCategory: 6,
     ...overrides
   };

@@ -23,6 +23,7 @@ export type SourcingData = {
   categories: Partial<Record<Category, SourcingCategory>>;
   subtotal_cents?: number;
   window?: { min_cents?: number; max_cents?: number } | null;
+  notes?: string[];
 };
 
 export type RankingRow = {
@@ -56,7 +57,8 @@ export type SpecData = {
   budget?: { maximum: number; currency: string } | null;
   required_by?: string | null;
   required_items?: string[];
-  visual_direction?: { base_colors?: string[]; accent_colors?: string[] } | null;
+  /** The board form writes hex lists as { base, accent }; the agent compiler writes colour names as { base_colors, accent_colors }. */
+  visual_direction?: { base?: string[]; accent?: string[]; base_colors?: string[]; accent_colors?: string[] } | null;
   layout_requirements?: { type: string; items: string[] }[];
 };
 

@@ -52,7 +52,8 @@ describe("replacement flow", () => {
   beforeEach(resetState);
 
   it("ranks cheaper candidates that fit at the old placement and replaces on approval", async () => {
-    const projectId = seedProject({ address: true });
+    // The side table is known before sourcing, so selection lands in the PRD 8.4 window.
+    const projectId = seedProject({ address: true, sideTable: 29500 });
     const deps = fakeDeps();
     await sourceRoom(projectId, "Find a set", deps);
     const s = appState();

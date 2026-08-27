@@ -66,6 +66,11 @@ export function SourcingArtifact({ data, products, title = "Finding your living 
           )}
         </div>
       )}
+      {(data.notes ?? []).map((note) => (
+        <div className={css.sub} key={note}>
+          {note}
+        </div>
+      ))}
     </div>
   );
 }

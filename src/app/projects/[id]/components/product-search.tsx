@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import type { Budget } from "../../../../domain/bom/events";
 import type { Category, Product } from "../../../../domain/types";
 import type { ProjectSnapshot } from "../../../../server/state";
 import { ProductCard } from "./product-card";
@@ -14,15 +15,26 @@ export const CATEGORIES: { value: Category; label: string }[] = [
 ];
 
 type SearchResult = { raw: unknown; normalized: Product | null; seller: { domain: string; name: string } };
+type ShipsTo = { country: string; region?: string; postal_code?: string };
+
+/** The remaining budget in whole dollars as the input's default, or empty once the budget is spent. */
+function remainingDollars(budget: Budget | undefined): string {
+  if (!budget) return "";
+  const remaining = budget.budget_cents - budget.committed_cents;
+  return remaining > 0 ? String(Math.floor(remaining / 100)) : "";
+}
 
 /**
- * Live Global Catalog search. "Add to project" posts the raw catalog object with the chosen
- * category, then tells the frame (BOM rail) to refresh.
+ * Live Global Catalog search. The category select drives the query; keywords narrow it. The price
+ * cap defaults to the project's remaining budget until the person edits it. "Add to project"
+ * posts the raw catalog object with the chosen category, then tells the frame (BOM rail) to refresh.
  */
-export function ProductSearch({ projectId, onAdded }: { projectId: string; onAdded?: (snapshot: ProjectSnapshot) => void }) {
+export function ProductSearch({ projectId, budget, onAdded }: { projectId: string; budget?: Budget; onAdded?: (snapshot: ProjectSnapshot) => void }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<Category>("sofa");
-  const [maxPrice, setMaxPrice] = useState("");
+  const [maxPriceEdit, setMaxPriceEdit] = useState<string | null>(null);
+  const maxPrice = maxPriceEdit ?? remainingDollars(budget);
+  const [shipsTo, setShipsTo] = useState<ShipsTo | null>(null);
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,19 +42,18 @@ export function ProductSearch({ projectId, onAdded }: { projectId: string; onAdd
   const [added, setAdded] = useState<Set<string>>(new Set());
 
   async function search() {
-    const label = CATEGORIES.find((c) => c.value === category)!.label.toLowerCase();
-    const q = query.trim() ? query.trim() : label;
     setSearching(true);
     setError(null);
     try {
       const res = await fetch("/api/shopify/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, limit: 24, ...(maxPrice ? { max_cents: Math.round(Number(maxPrice) * 100) } : {}) })
+        body: JSON.stringify({ category, query: query.trim(), project_id: projectId, limit: 24, ...(maxPrice ? { max_cents: Math.round(Number(maxPrice) * 100) } : {}) })
       });
-      const body = (await res.json()) as { products?: SearchResult[]; error?: string };
+      const body = (await res.json()) as { products?: SearchResult[]; ships_to?: ShipsTo; error?: string };
       if (!res.ok) throw new Error(body.error ?? `Search failed (${res.status})`);
       setResults(body.products ?? []);
+      setShipsTo(body.ships_to ?? null);
     } catch (e) {
       setError((e as Error).message);
       setResults(null);
@@ -84,10 +95,6 @@ export function ProductSearch({ projectId, onAdded }: { projectId: string; onAdd
           search();
         }}
       >
-        <div className="field">
-          <label htmlFor="search-q">Search</label>
-          <input id="search-q" className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. walnut coffee table" />
-        </div>
         <div className={css.row}>
           <div className="field" style={{ flex: 1 }}>
             <label htmlFor="search-cat">Category</label>
@@ -101,8 +108,12 @@ export function ProductSearch({ projectId, onAdded }: { projectId: string; onAdd
           </div>
           <div className="field" style={{ width: 120 }}>
             <label htmlFor="search-max">Max price (USD)</label>
-            <input id="search-max" className="input" type="number" min={0} inputMode="numeric" value={maxPrice} onChange={(e) => setMaxPrice(e.target.value)} placeholder="any" />
+            <input id="search-max" className="input" type="number" min={0} inputMode="numeric" value={maxPrice} onChange={(e) => setMaxPriceEdit(e.target.value)} />
           </div>
+        </div>
+        <div className="field">
+          <label htmlFor="search-q">Keywords (optional)</label>
+          <input id="search-q" className="input" value={query} onChange={(e) => setQuery(e.target.value)} />
         </div>
         <div>
           <button className="btn" type="submit" disabled={searching}>
@@ -115,6 +126,7 @@ export function ProductSearch({ projectId, onAdded }: { projectId: string; onAdd
           {error}
         </p>
       )}
+      {shipsTo && !shipsTo.postal_code && <p className={css.hint}>Searched with the country only. Delivery estimates improve after an address is set.</p>}
       {results && results.length === 0 && <div className="empty">No products matched. Try a broader search or raise the price limit.</div>}
       {results && results.length > 0 && (
         <div className={css.results} style={{ marginTop: 16 }}>

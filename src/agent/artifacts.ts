@@ -28,7 +28,10 @@ export type CategoryProgress = {
 export type SourcingArtifact = {
   categories: Partial<Record<Category, CategoryProgress>>;
   subtotal_cents?: number;
+  /** Present only when the project names a side table (PRD 8.4). */
   window?: { min_cents: number; max_cents: number };
+  /** Plain sentences about what the run could not use: no window, no address. */
+  notes?: string[];
 };
 
 export type RankingRow = {

@@ -21,6 +21,7 @@ import {
 } from "../domain/ranking";
 import { Category, type AgentRun, type Candidate, type Placement, type Product } from "../domain/types";
 import { appState, geometryFor, snapshot, spaceFor, updateCandidate } from "../server/state";
+import { recordIssue, withSpan, withSpanSync } from "../server/trace";
 import { emptyProgress, writeQuestionArtifact, writeSourcingArtifact, type CategoryProgress, type SourcingArtifact } from "./artifacts";
 import { boxOf, isAvailable, mapLimit, searchCategory, shipsToFor, upsertCandidate, type SearchOptions } from "./catalog";
 import { evaluateDelivery } from "./delivery";
@@ -28,7 +29,8 @@ import { proposeLayout, rugLargeEnough, type Boxes } from "./layout";
 import { evaluateVisualFit } from "./visual";
 
 export const ADDRESS_QUESTION = "What delivery address should I use to check arrival dates?";
-export const DEFAULT_SIDE_TABLE_PRICE_CENTS = 29500;
+export const NO_WINDOW_NOTE = "No side table is known to the project yet, so the selection takes the best combination under the budget.";
+export const COUNTRY_ONLY_NOTE = "Searched with the country only; delivery estimates improve after an address is set.";
 const DEFAULT_REQUIRED: Category[] = ["sofa", "coffee_table", "ottoman", "rug"];
 /** Candidates per category that get the (slow) visual and delivery checks. */
 const EVALUATE_PER_CATEGORY = 6;
@@ -38,14 +40,41 @@ export type SourcingDeps = {
   search: (category: Category, options?: SearchOptions) => Promise<unknown[]>;
   evaluateDelivery: (projectId: string, candidateId: string) => Promise<unknown>;
   evaluateVisualFit: (projectId: string, candidateId: string) => Promise<VisualEvaluation | null>;
-  sideTablePriceCents: number;
   evaluatePerCategory: number;
 };
 
-/** The pasted side table's price (PRD 8.4) comes from the environment so the demo can pin it. */
-export function sideTablePriceCents(): number {
-  const raw = Number(process.env.SIDE_TABLE_PRICE_CENTS);
-  return Number.isFinite(raw) && raw > 0 ? Math.round(raw) : DEFAULT_SIDE_TABLE_PRICE_CENTS;
+/**
+ * `P_side` of PRD 8.4: the price of the side table the project already knows about, read from a
+ * `side_table` candidate that is not eliminated or from an agreed `required_item` requirement
+ * shaped `{ category: "side_table", price_cents }`. Null when the project names no side table,
+ * in which case selection runs without a window.
+ */
+export function sideTablePriceFor(projectId: string): number | null {
+  const s = appState();
+  for (const candidate of s.store.candidates.values()) {
+    if (candidate.project_id !== projectId || candidate.category !== "side_table" || candidate.ranking_state === "eliminated") continue;
+    const price = s.store.products.get(candidate.product_id)?.price_cents;
+    if (typeof price === "number" && price > 0) return price;
+  }
+  for (const r of snapshot(projectId).requirements) {
+    if (r.type !== "required_item" || r.status !== "agreed") continue;
+    const value = r.value_json as { category?: unknown; price_cents?: unknown } | null;
+    if (value && typeof value === "object" && value.category === "side_table" && typeof value.price_cents === "number" && value.price_cents > 0) {
+      return Math.round(value.price_cents);
+    }
+  }
+  return null;
+}
+
+/** The selection window when a side table is known (PRD 8.4), otherwise null. */
+export function selectionWindowFor(projectId: string): BudgetWindow | null {
+  const sideTable = sideTablePriceFor(projectId);
+  return sideTable === null ? null : budgetWindow(appState().store.getProject(projectId).budget_cents, sideTable);
+}
+
+/** The price range selection searches: the demo window when one exists, else everything under the budget. */
+function selectionRange(cp: SourcingCheckpoint): BudgetWindow {
+  return cp.window ?? { min_cents: 0, max_cents: cp.budget_cents };
 }
 
 export function defaultSourcingDeps(projectId: string): SourcingDeps {
@@ -54,7 +83,6 @@ export function defaultSourcingDeps(projectId: string): SourcingDeps {
     search: (category, options) => searchCategory(s.client, category, shipsToFor(s.store.getProject(projectId)), options),
     evaluateDelivery,
     evaluateVisualFit,
-    sideTablePriceCents: sideTablePriceCents(),
     evaluatePerCategory: EVALUATE_PER_CATEGORY
   };
 }
@@ -64,7 +92,9 @@ export type SourcingCheckpoint = {
   step: "delivery";
   artifact_id: string;
   categories: Category[];
-  window: BudgetWindow;
+  budget_cents: number;
+  /** PRD 8.4 window; null when the project names no side table, so selection takes the best combination under the budget. */
+  window: BudgetWindow | null;
   progress: SourcingArtifact;
   /** Candidate ids per category that passed the hard filter and await delivery evidence. */
   evaluation: Partial<Record<Category, string[]>>;
@@ -75,9 +105,26 @@ export type SourcingOutcome =
   | { status: "waiting_for_user"; question: string; field: "delivery_address"; run_id: string }
   | { status: "no_match"; categories: Category[]; artifact_id: string };
 
+/** The words a board note may use for each category the pipeline can source. */
+const CATEGORY_WORDS: [Category, RegExp][] = [
+  ["coffee_table", /\bcoffee\s*tables?\b/i],
+  ["side_table", /\b(?:side|end|accent|bedside)\s*tables?\b/i],
+  ["sofa", /\b(?:sofa|couch|sectional|settee|loveseat)s?\b/i],
+  ["ottoman", /\b(?:ottoman|footstool|pouf|pouffe)s?\b/i],
+  ["rug", /\b(?:rug|carpet)s?\b/i]
+];
+
+/** Maps a required_item value, a category id or the board's own phrase ("big rug"), to a category the pipeline can source. */
+export function categoryFor(value: unknown): Category | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, "_");
+  if (Category.safeParse(normalized).success) return normalized as Category;
+  return CATEGORY_WORDS.find(([, re]) => re.test(value))?.[0] ?? null;
+}
+
 function requiredCategories(projectId: string): Category[] {
   const rows = snapshot(projectId).requirements.filter((r) => r.type === "required_item" && r.status === "agreed");
-  const categories = rows.map((r) => r.value_json).filter((v): v is Category => Category.safeParse(v).success);
+  const categories = [...new Set(rows.map((r) => categoryFor(r.value_json)).filter((c): c is Category => c !== null))];
   return categories.length > 0 ? categories : DEFAULT_REQUIRED;
 }
 
@@ -125,28 +172,55 @@ async function searchAndEvaluate(projectId: string, cp: SourcingCheckpoint, cate
   progress.status = "searching";
   writeProgress(projectId, cp);
 
-  const raws = await deps.search(category, options);
+  const raws = await withSpan(projectId, { kind: "step", name: `search ${category}`, prd_ref: "PRD 9 step 3", input: { category, ...options } }, async (span) => {
+    const found = await deps.search(category, options);
+    span.setOutput({ found: found.length });
+    return found;
+  });
   progress.found += raws.length;
   progress.status = "retrieving details";
   writeProgress(projectId, cp);
 
-  const available = raws.filter(isAvailable);
+  const available = withSpanSync(projectId, { kind: "step", name: `filter availability ${category}`, prd_ref: "PRD 9 step 4", input: { found: raws.length } }, (span) => {
+    const kept = raws.filter(isAvailable);
+    span.setOutput({ available: kept.length, dropped: raws.length - kept.length });
+    return kept;
+  });
   progress.available += available.length;
   progress.status = "checking dimensions";
   writeProgress(projectId, cp);
 
-  const rows = available.flatMap((raw) => {
-    try {
-      return [upsertCandidate(projectId, raw, category)];
-    } catch {
-      return [];
+  const rows = withSpanSync(projectId, { kind: "step", name: `retrieve details ${category}`, prd_ref: "PRD 9 step 5", input: { available: available.length } }, (span) => {
+    const upserted = available.flatMap((raw) => {
+      try {
+        return [upsertCandidate(projectId, raw, category)];
+      } catch (e) {
+        const title = (raw as { title?: string }).title ?? (raw as { id?: string }).id ?? "a product";
+        recordIssue(projectId, { source: "step retrieve details", message: `"${title}" could not be normalized into a product card (${(e as Error).message}) and was dropped from the ${category.replace("_", " ")} search.` });
+        return [];
+      }
+    });
+    span.setOutput({ candidates: upserted.length, product_ids: upserted.map((r) => r.product.id) });
+    return upserted;
+  });
+  withSpanSync(projectId, { kind: "step", name: `extract dimensions ${category}`, prd_ref: "PRD 9 step 6", input: { candidates: rows.length } }, (span) => {
+    const grounded = rows.filter((r) => r.product.spatial_status === "grounded");
+    const missing = rows.filter((r) => r.product.spatial_status !== "grounded");
+    span.setOutput({ dimensioned: grounded.length, without_dimensions: missing.map((r) => ({ id: r.product.id, title: r.product.title })) });
+    if (missing.length > 0) {
+      const titles = missing.slice(0, 3).map((r) => `"${r.product.title}"`).join(", ");
+      recordIssue(projectId, { source: "step extract dimensions", message: `${missing.length} of ${rows.length} available ${category.replace("_", " ")} products have no parsable dimensions (${titles}${missing.length > 3 ? ", …" : ""}); they are excluded from the geometry check and cannot be selected.` });
     }
   });
   progress.dimensioned += rows.filter((r) => r.product.spatial_status === "grounded").length;
 
   const productByCandidate = new Map(rows.map((r) => [r.candidate.id, r.product]));
-  const ctx = { mode: "initial" as const, budgetWindow: cp.window, category, fits: (c: RankableCandidate) => fitsRoom(projectId, productByCandidate.get(c.id)!, category) };
-  const { survivors, eliminated } = hardFilter(rows.map((r) => rankable(r.candidate, r.product)), ctx);
+  const ctx = { mode: "initial" as const, budgetWindow: selectionRange(cp), category, fits: (c: RankableCandidate) => fitsRoom(projectId, productByCandidate.get(c.id)!, category) };
+  const { survivors, eliminated } = withSpanSync(projectId, { kind: "step", name: `hard constraints ${category}`, prd_ref: "PRD 9 step 7", input: { candidates: rows.length, window: ctx.budgetWindow } }, (span) => {
+    const outcome = hardFilter(rows.map((r) => rankable(r.candidate, r.product)), ctx);
+    span.setOutput({ survivors: outcome.survivors.length, eliminated: outcome.eliminated.map((e) => ({ id: e.candidate.id, reason: e.reason })) });
+    return outcome;
+  });
   for (const { candidate, reason } of eliminated) {
     updateCandidate(candidate.id, { ranking_state: "eliminated", hard_constraint_results_json: { passed: false, reason } });
   }
@@ -156,7 +230,10 @@ async function searchAndEvaluate(projectId: string, cp: SourcingCheckpoint, cate
   writeProgress(projectId, cp);
 
   const evaluation = spread(survivors, deps.evaluatePerCategory);
-  await mapLimit(evaluation, CONCURRENCY, (c) => deps.evaluateVisualFit(projectId, c.id));
+  await withSpan(projectId, { kind: "step", name: `visual fit ${category}`, prd_ref: "PRD 9 step 8", input: { candidate_ids: evaluation.map((c) => c.id) } }, async (span) => {
+    const results = await mapLimit(evaluation, CONCURRENCY, (c) => deps.evaluateVisualFit(projectId, c.id));
+    span.setOutput({ pass: results.filter((r) => r?.overall === "pass").length, fail: results.filter((r) => r?.overall === "fail").length, none: results.filter((r) => !r).length });
+  });
   cp.evaluation[category] = [...(cp.evaluation[category] ?? []), ...evaluation.map((c) => c.id)];
   progress.status = "checking delivery";
   writeProgress(projectId, cp);
@@ -170,10 +247,18 @@ async function checkDelivery(projectId: string, cp: SourcingCheckpoint, deps: So
     const progress = progressOf(cp, category);
     progress.status = "checking delivery";
     writeProgress(projectId, cp);
-    await mapLimit(ids, CONCURRENCY, async (id) => {
-      await deps.evaluateDelivery(projectId, id);
-      progress.delivery_checked += 1;
-      writeProgress(projectId, cp);
+    await withSpan(projectId, { kind: "step", name: `delivery ${category}`, prd_ref: "PRD 9 step 9", input: { candidate_ids: ids } }, async (span) => {
+      await mapLimit(ids, CONCURRENCY, async (id) => {
+        await deps.evaluateDelivery(projectId, id);
+        progress.delivery_checked += 1;
+        writeProgress(projectId, cp);
+      });
+      const statuses: Record<string, number> = {};
+      for (const id of ids) {
+        const status = s.store.candidates.get(id)?.delivery_status ?? "unknown";
+        statuses[status] = (statuses[status] ?? 0) + 1;
+      }
+      span.setOutput(statuses);
     });
   }
 }
@@ -184,13 +269,22 @@ function rankCategories(projectId: string, cp: SourcingCheckpoint): Partial<Reco
   const ranked: Partial<Record<Category, RankedCandidate[]>> = {};
   for (const category of cp.categories) {
     const rows = (cp.evaluation[category] ?? []).map((id) => s.store.candidates.get(id)!).map((c) => rankable(c, s.store.getProduct(c.product_id)));
-    const { survivors, eliminated } = hardFilter(rows, { mode: "initial", budgetWindow: cp.window, category, fits: () => true });
+    const { survivors, eliminated } = hardFilter(rows, { mode: "initial", budgetWindow: selectionRange(cp), category, fits: () => true });
     for (const { candidate, reason } of eliminated) updateCandidate(candidate.id, { ranking_state: "eliminated", hard_constraint_results_json: { passed: false, reason } });
     const list = rankSurvivors(survivors, { deliveryRank: rankDeliveryConfidence });
     for (const c of list) updateCandidate(c.id, { ranking_state: "ranked", rank: c.rank });
     ranked[category] = list;
   }
   return ranked;
+}
+
+/** `rankCategories` as one `step` span: the ranked candidate cards per category (PRD 9 step 10). */
+function rankCategoriesSpanned(projectId: string, cp: SourcingCheckpoint): Partial<Record<Category, RankedCandidate[]>> {
+  return withSpanSync(projectId, { kind: "step", name: "rank candidates", prd_ref: "PRD 9 step 10", input: { categories: cp.categories } }, (span) => {
+    const ranked = rankCategories(projectId, cp);
+    span.setOutput(Object.fromEntries(Object.entries(ranked).map(([c, rows]) => [c, rows.map((r) => ({ id: r.id, rank: r.rank, price_cents: r.price_cents }))])));
+    return ranked;
+  });
 }
 
 /** Step 14: place the BOM products and store the placements; returns whether the layout was checked. */
@@ -222,11 +316,12 @@ export function writeLayout(projectId: string): boolean {
  * PRD 8.4 guarantees the side table pushes the project over budget; PRD 8.5 then replaces the
  * coffee table to get back under. That only works when the coffee table costs at least the side
  * table's price, so selection prefers coffee tables above that floor and falls back to the full
- * list when none qualifies.
+ * list when none qualifies. Without a window there is no side table and no floor.
  */
-export function withReplacementFloor(ranked: Partial<Record<Category, RankedCandidate[]>>, floorCents: number, category: Category = "coffee_table"): Partial<Record<Category, RankedCandidate[]>> {
+export function withReplacementFloor(ranked: Partial<Record<Category, RankedCandidate[]>>, window: BudgetWindow | null, category: Category = "coffee_table"): Partial<Record<Category, RankedCandidate[]>> {
   const rows = ranked[category];
-  if (!rows) return ranked;
+  if (!window || !rows) return ranked;
+  const floorCents = window.max_cents - window.min_cents;
   const above = rows.filter((r) => r.price_cents >= floorCents);
   return above.length > 0 ? { ...ranked, [category]: above } : ranked;
 }
@@ -234,17 +329,29 @@ export function withReplacementFloor(ranked: Partial<Record<Category, RankedCand
 /** Steps 11 and 12: choose the combination inside the window, mark it selected, regenerate the BOM. */
 function selectAndRecord(projectId: string, cp: SourcingCheckpoint, ranked: Partial<Record<Category, RankedCandidate[]>>): { selected: Partial<Record<Category, RankedCandidate>>; subtotal_cents: number } | null {
   const s = appState();
-  let result = selectCombination(ranked, cp.categories, cp.window);
+  const result = withSpanSync(projectId, { kind: "step", name: "select combination", prd_ref: "PRD 9 step 11", input: { window: selectionRange(cp), ranked: Object.fromEntries(Object.entries(ranked).map(([c, rows]) => [c, rows.length])) } }, (span) => {
+    let pick = selectCombination(ranked, cp.categories, selectionRange(cp));
+    if ("no_combination" in pick && cp.window) {
+      // No combination reaches the window even after the second coffee-table search (PRD 8.4): fall
+      // back to the best combination under the budget so the project still gets a proposed BOM.
+      pick = selectCombination(ranked, cp.categories, { min_cents: 0, max_cents: cp.budget_cents });
+      span.setOutput({ fell_back_to_budget: true, ...pick });
+    } else {
+      span.setOutput(pick);
+    }
+    return pick;
+  });
   if ("no_combination" in result) {
-    // No combination reaches the window even after the second coffee-table search (PRD 8.4): fall
-    // back to the best combination under the budget so the project still gets a proposed BOM.
-    result = selectCombination(ranked, cp.categories, { min_cents: 0, max_cents: cp.window.max_cents });
+    recordIssue(projectId, { source: "step select combination", severity: "error", message: `No combination of ranked candidates fits under the budget (gap in ${result.gapCategory.replace("_", " ")}); the run ends with no proposed BOM, so widen the budget or the searches and ask again.` });
+    return null;
   }
-  if ("no_combination" in result) return null;
   const picks = result.selected;
-  s.store.mutate(() => {
-    for (const pick of Object.values(picks)) updateCandidate(pick.id, { ranking_state: "selected" });
-    regenerateBom(s.store, projectId);
+  withSpanSync(projectId, { kind: "step", name: "record selection and regenerate BOM", prd_ref: "PRD 9 step 12", input: { picks: Object.fromEntries(Object.entries(picks).map(([c, p]) => [c, p.id])), subtotal_cents: result.subtotal_cents } }, (span) => {
+    s.store.mutate(() => {
+      for (const pick of Object.values(picks)) updateCandidate(pick.id, { ranking_state: "selected" });
+      const { budget } = regenerateBom(s.store, projectId);
+      span.setOutput(budget);
+    });
   });
   for (const [category, pick] of Object.entries(picks) as [Category, RankedCandidate][]) {
     const progress = progressOf(cp, category);
@@ -259,17 +366,16 @@ function selectAndRecord(projectId: string, cp: SourcingCheckpoint, ranked: Part
 async function finish(projectId: string, run: AgentRun, cp: SourcingCheckpoint, deps: SourcingDeps): Promise<SourcingOutcome> {
   const s = appState();
   await checkDelivery(projectId, cp, deps);
-  const floor = cp.window.max_cents - cp.window.min_cents;
-  let ranked = withReplacementFloor(rankCategories(projectId, cp), floor);
+  let ranked = withReplacementFloor(rankCategoriesSpanned(projectId, cp), cp.window);
 
-  let selection = selectCombination(ranked, cp.categories, cp.window);
+  let selection = selectCombination(ranked, cp.categories, selectionRange(cp));
   if ("no_combination" in selection && cp.categories.includes(selection.gapCategory)) {
     // PRD 8.4: one more search for the gap category with the price range that closes the gap.
     const range = selection.suggestedPriceRange;
     await searchAndEvaluate(projectId, cp, selection.gapCategory, deps, { minCents: range.min_cents, maxCents: range.max_cents });
     await checkDelivery(projectId, cp, deps);
-    ranked = withReplacementFloor(rankCategories(projectId, cp), floor);
-    selection = selectCombination(ranked, cp.categories, cp.window);
+    ranked = withReplacementFloor(rankCategoriesSpanned(projectId, cp), cp.window);
+    selection = selectCombination(ranked, cp.categories, selectionRange(cp));
   }
 
   const recorded = selectAndRecord(projectId, cp, ranked);
@@ -281,7 +387,11 @@ async function finish(projectId: string, run: AgentRun, cp: SourcingCheckpoint, 
     s.activeRuns.delete(projectId);
     return { status: "no_match", categories: missing.length > 0 ? missing : ["coffee_table"], artifact_id: cp.artifact_id };
   }
-  const layoutChecked = writeLayout(projectId);
+  const layoutChecked = withSpanSync(projectId, { kind: "step", name: "propose layout", prd_ref: "PRD 9 step 14" }, (span) => {
+    const checked = writeLayout(projectId);
+    span.setOutput({ layout_checked: checked, geometry: checked ? geometryFor(projectId) : null });
+    return checked;
+  });
   complete(s.runs, run.id);
   s.activeRuns.delete(projectId);
   const selected: Partial<Record<Category, string>> = {};
@@ -289,13 +399,21 @@ async function finish(projectId: string, run: AgentRun, cp: SourcingCheckpoint, 
     const productId = s.store.candidates.get(pick.id)!.product_id;
     selected[category] = productId;
     // Step 13: 3D generation for each selected product, detached (PRD 15.1 never blocks the BOM).
-    startModelGeneration(s.store.getProduct(productId));
+    withSpanSync(projectId, { kind: "step", name: `start 3D ${category}`, prd_ref: "PRD 9 step 13", input: { product_id: productId } }, () => startModelGeneration(s.store.getProduct(productId)));
   }
   return { status: "complete", subtotal_cents: recorded.subtotal_cents, selected, artifact_id: cp.artifact_id, layout_checked: layoutChecked };
 }
 
 /** Pauses the run on a missing address (PRD 5.2): checkpoint, question artifact, `waiting_for_user`. */
 function gateOnAddress(projectId: string, run: AgentRun, cp: SourcingCheckpoint): SourcingOutcome | null {
+  return withSpanSync(projectId, { kind: "step", name: "address gate", prd_ref: "PRD 10", input: { run_id: run.id } }, (span) => {
+    const outcome = gateOnAddressUnspanned(projectId, run, cp);
+    span.setOutput({ waiting: outcome !== null });
+    return outcome;
+  });
+}
+
+function gateOnAddressUnspanned(projectId: string, run: AgentRun, cp: SourcingCheckpoint): SourcingOutcome | null {
   const s = appState();
   if (s.store.getProject(projectId).delivery_address_json) return null;
   checkpoint(s.runs, run.id, cp);
@@ -310,25 +428,34 @@ export async function sourceRoom(projectId: string, goal: string, deps: Sourcing
   const project = s.store.getProject(projectId);
   const run = startRun(s.runs, { projectId, goal });
   s.activeRuns.set(projectId, run.id);
+  const window = selectionWindowFor(projectId);
+  const notes = [...(window ? [] : [NO_WINDOW_NOTE]), ...(project.delivery_address_json ? [] : [COUNTRY_ONLY_NOTE])];
   const cp: SourcingCheckpoint = {
     step: "delivery",
     artifact_id: `sourcing_${run.id}`,
-    categories: requiredCategories(projectId),
-    window: budgetWindow(project.budget_cents, deps.sideTablePriceCents),
-    progress: { categories: {}, window: budgetWindow(project.budget_cents, deps.sideTablePriceCents) },
+    categories: withSpanSync(projectId, { kind: "step", name: "identify required categories", prd_ref: "PRD 9 step 2" }, () => requiredCategories(projectId)),
+    budget_cents: project.budget_cents,
+    window,
+    progress: { categories: {}, ...(window ? { window } : {}), ...(notes.length > 0 ? { notes } : {}) },
     evaluation: {}
   };
   try {
-    for (const category of cp.categories) progressOf(cp, category);
-    writeProgress(projectId, cp);
-    for (const category of cp.categories) await searchAndEvaluate(projectId, cp, category, deps);
-    const waiting = gateOnAddress(projectId, run, cp);
-    if (waiting) return waiting;
-    checkpoint(s.runs, run.id, cp);
-    return await finish(projectId, run, cp, deps);
+    return await withSpan(projectId, { kind: "domain", name: "source_room", prd_ref: "PRD 9", input: { goal, run_id: run.id, categories: cp.categories, window: cp.window } }, async () => {
+      withSpanSync(projectId, { kind: "step", name: "read project spec", prd_ref: "PRD 9 step 1", input: { project_id: projectId } }, (span) =>
+        span.setOutput({ budget_cents: project.budget_cents, required_by: project.required_by, has_address: Boolean(project.delivery_address_json), requirements: snapshot(projectId).requirements.length })
+      );
+      for (const category of cp.categories) progressOf(cp, category);
+      writeProgress(projectId, cp);
+      for (const category of cp.categories) await searchAndEvaluate(projectId, cp, category, deps);
+      const waiting = gateOnAddress(projectId, run, cp);
+      if (waiting) return waiting;
+      checkpoint(s.runs, run.id, cp);
+      return await finish(projectId, run, cp, deps);
+    });
   } catch (e) {
     failRecoverable(s.runs, run.id, (e as Error).message);
     s.activeRuns.delete(projectId);
+    recordIssue(projectId, { source: "domain source_room", severity: "error", message: `The sourcing run ${run.id} stopped with an error (${(e as Error).message}); it is marked failed_recoverable, and a new request starts the pipeline again.` });
     throw e;
   }
 }
@@ -341,12 +468,15 @@ export async function resumeSourcing(projectId: string, runId: string, deps: Sou
   const cp = run.pending_operation_json as SourcingCheckpoint | null;
   if (!cp || cp.step !== "delivery") throw new Error(`Agent run ${runId} has no sourcing checkpoint`);
   try {
-    const waiting = gateOnAddress(projectId, run, cp);
-    if (waiting) return waiting;
-    return await finish(projectId, run, cp, deps);
+    return await withSpan(projectId, { kind: "domain", name: "resume_sourcing", prd_ref: "PRD 5.2", input: { run_id: runId } }, async () => {
+      const waiting = gateOnAddress(projectId, run, cp);
+      if (waiting) return waiting;
+      return await finish(projectId, run, cp, deps);
+    });
   } catch (e) {
     failRecoverable(s.runs, run.id, (e as Error).message);
     s.activeRuns.delete(projectId);
+    recordIssue(projectId, { source: "domain resume_sourcing", severity: "error", message: `The resumed sourcing run ${run.id} stopped with an error (${(e as Error).message}); it is marked failed_recoverable, and a new request starts the pipeline again.` });
     throw e;
   }
 }

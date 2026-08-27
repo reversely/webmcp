@@ -135,7 +135,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
       <h1 className="page-title">Items</h1>
       <p className="page-summary">Source products from the catalog, then place them in the plan. Drag to move; the geometry check runs after every drop.</p>
       <div className={css.splitPlan}>
-        <ProductSearch projectId={projectId} onAdded={(s) => adopt(s)} />
+        <ProductSearch projectId={projectId} budget={snap.budget} onAdded={(s) => adopt(s)} />
         <section className="surface" aria-label="Plan">
           <div className={css.spread}>
             <div>
