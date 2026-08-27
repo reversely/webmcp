@@ -134,6 +134,19 @@ describe("find_cheaper_replacement when the named item cannot cover the overage 
     expect(named.notes?.[0]).toBe("No round coffee table priced at or under $9.99 fits: it costs $159.99 and the budget needs $150 back, so a cheaper round coffee table cannot recover the budget on its own.");
   });
 
+  it("tries the next line when the plan's line ranks empty at its ceiling (#76)", async () => {
+    const projectId = seedOverBudget(15000);
+    const searched: string[] = [];
+    const deps = catalog({ "round coffee table": [5000], "deep couch": [], "big rug": [20000] });
+    const outcome = await findCheaperReplacement(projectId, "round coffee table", { ...deps, search: async (item, options) => (searched.push(item.name), deps.search(item, options)) });
+    expect(searched).toEqual(["round coffee table", "deep couch", "big rug"]);
+    expect(outcome.status).toBe("ranked");
+    if (outcome.status !== "ranked") return;
+    expect(outcome.lines.map((l) => l.category)).toEqual(["big rug"]);
+    const [named] = rankingArtifacts(projectId);
+    expect(named.notes?.some((n) => /no deep couch priced at or under \$1,349 fits.*so the next line is tried/.test(n))).toBe(true);
+  });
+
   it("splits the overage across two lines when no single line can absorb it, and approval commits both in order", async () => {
     const projectId = seedOverBudget(70000);
     const outcome = await findCheaperReplacement(projectId, "round coffee table", catalog({ "deep couch": [95000], "big rug": [20000], "leather ottoman": [10000] }));

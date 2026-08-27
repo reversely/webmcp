@@ -352,28 +352,40 @@ export async function findCheaperReplacement(projectId: string, category: Catego
   const writeNamed = () => writeRankingArtifact(projectId, namedArtifactId, namedArtifact);
   writeNamed();
 
+  // The plan reads each line's capacity from the cheapest price the project has seen, and the
+  // catalog can still return nothing for a line at its ceiling (#76). A line that ranks empty
+  // leaves the pool and the next plan is tried, until one ranks or no plan remains.
   const others = replaceableLines(snap, oldItem.id);
-  const plan = savingsPlan(others.map((line) => savingsLine(projectId, line)), savings);
   const lineById = new Map(others.map((line) => [line.id, line]));
-  if (!plan || plan.length === 0) {
-    notes.push(`No other required line, alone or paired with another, can drop by ${formatMoney(savings)}, so no replacement reaches the budget.`);
+  const excluded = new Set<string>();
+  let rankedLines: RankedLine[] = [];
+  let short: string[] = [];
+  for (;;) {
+    const pool = others.filter((line) => !excluded.has(line.id));
+    const plan = savingsPlan(pool.map((line) => savingsLine(projectId, line)), savings);
+    if (!plan || plan.length === 0) {
+      notes.push(
+        excluded.size === 0
+          ? `No other required line, alone or paired with another, can drop by ${formatMoney(savings)}, so no replacement reaches the budget.`
+          : `No remaining line, alone or paired with another, can drop by ${formatMoney(savings)}, so no replacement reaches the budget.`
+      );
+      writeNamed();
+      return { status: "no_candidates", artifact_id: namedArtifactId, required_savings_cents: savings, ceiling_cents: ceiling, explanation: notes.join(" ") };
+    }
+    const shares = plan.map((share) => ({ line: lineById.get(share.id)!, share_cents: share.share_cents }));
+    notes.push(planNote(shares, savings));
     writeNamed();
-    return { status: "no_candidates", artifact_id: namedArtifactId, required_savings_cents: savings, ceiling_cents: ceiling, explanation: notes.join(" ") };
-  }
-  const shares = plan.map((share) => ({ line: lineById.get(share.id)!, share_cents: share.share_cents }));
-  notes.push(planNote(shares, savings));
-  writeNamed();
 
-  const lines: RankedLine[] = [];
-  for (const { line, share_cents } of shares) {
-    lines.push((await rankLine(projectId, line, share_cents, deps)).line);
-  }
-  const rankedLines = lines.filter((line) => line.ranked.length > 0);
-  const short = lines.filter((line) => line.ranked.length === 0).map((line) => `no ${line.category} priced at or under ${formatMoney(line.ceiling_cents)} fits`);
-  if (rankedLines.length === 0) {
-    notes.push(`The plan found no candidates: ${short.join("; ")}.`);
+    const lines: RankedLine[] = [];
+    for (const { line, share_cents } of shares) {
+      lines.push((await rankLine(projectId, line, share_cents, deps)).line);
+    }
+    rankedLines = lines.filter((line) => line.ranked.length > 0);
+    short = lines.filter((line) => line.ranked.length === 0).map((line) => `no ${line.category} priced at or under ${formatMoney(line.ceiling_cents)} fits`);
+    if (rankedLines.length > 0) break;
+    for (const line of lines) excluded.add(line.old_item_id);
+    notes.push(`That plan found no candidates (${short.join("; ")}), so the next line is tried.`);
     writeNamed();
-    return { status: "no_candidates", artifact_id: namedArtifactId, required_savings_cents: savings, ceiling_cents: ceiling, explanation: notes.join(" ") };
   }
   if (short.length > 0) {
     notes.push(`Part of the plan has no candidate (${short.join("; ")}), so approving the rest recovers less than ${formatMoney(savings)}.`);
