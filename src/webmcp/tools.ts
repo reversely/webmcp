@@ -80,8 +80,9 @@ const bomItemId: JsonSchemaProperty = {
 };
 
 /**
- * Budget and required date live on the Project row (PATCH); every other requirement is part of
- * the ProjectSpec (PUT spec), so the route is chosen per requirement type.
+ * Budget and required date live on the Project row (PATCH); every other requirement is one agreed
+ * row that POST /requirements appends or updates in place (#60), so the route is chosen per type.
+ * PUT /spec replaces every row and stays the plan form's route only.
  */
 function requirementRoute(args: ToolArgs): Route {
   const type = args.type as RequirementType;
@@ -91,10 +92,13 @@ function requirementRoute(args: ToolArgs): Route {
   if (type === "delivery_date") {
     return { method: "PATCH", path: PROJECT_PATH, body: ({ value }) => ({ required_by: value }) };
   }
+  if (type === "room_dimensions") {
+    return { method: "PUT", path: `${PROJECT_PATH}/spec`, body: ({ value }) => ({ space: value }) };
+  }
   return {
-    method: "PUT",
-    path: `${PROJECT_PATH}/spec`,
-    body: ({ type, value, scope }) => ({ requirements: [{ type, value, scope: scope ?? "project" }] })
+    method: "POST",
+    path: `${PROJECT_PATH}/requirements`,
+    body: ({ type, value, scope }) => ({ type, value, scope: scope ?? "project" })
   };
 }
 
@@ -146,7 +150,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   {
     name: "set_project_requirement",
     description:
-      "Set one project requirement: the budget, the room dimensions, an item the project must include, the visual direction (palette), a layout rule, or the delivery date. Call when the user states or changes a constraint. Each call sets one requirement; call again for another. Money is integer cents and lengths are integer millimetres.",
+      "Set one project requirement: the budget, the room dimensions, an item the project must include, the visual direction (palette), a layout rule, or the delivery date. Call when the user states or changes a constraint. Each call sets one requirement and leaves the others in place; a required_item with a name already recorded, or a layout_requirement with the same relation, subject, and objects, updates that row. Call again for another. Money is integer cents and lengths are integer millimetres.",
     inputSchema: {
       type: "object",
       properties: {
@@ -225,7 +229,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   {
     name: "place_product",
     description:
-      "Place a BOM line's product on the room floor, or move it. Position is the product's origin corner in millimetres from the room's origin corner (x along the room width, y along the room length) and rotation is degrees counter-clockwise seen from above; 0 faces +y. The server checks the product stays inside the room and does not overlap other placed products before committing, and reports conflicts. Call when the user asks to put, move, or turn a product.",
+      "Place a BOM line's product on the room floor, or move it. xMm and yMm are the centre of the product's footprint in millimetres from the room's origin corner (x along the room width, y along the room length); rotationDeg turns the footprint counter-clockwise about that centre, seen from above, and 0 faces +y. The server saves the placement, runs the geometry check, and returns warnings: one per product this one overlaps and one if it crosses a room wall. An overlapping placement is saved, not rejected, so read the warnings and move the product when there is one. Call when the user asks to put, move, or turn a product.",
     inputSchema: {
       type: "object",
       properties: {
@@ -233,18 +237,18 @@ export const TOOLS: readonly ToolDefinition[] = [
         xMm: {
           type: "integer",
           minimum: 0,
-          description: "Distance in millimetres from the origin corner along the room width."
+          description: "Footprint centre, in millimetres from the origin corner along the room width."
         },
         yMm: {
           type: "integer",
           minimum: 0,
-          description: "Distance in millimetres from the origin corner along the room length."
+          description: "Footprint centre, in millimetres from the origin corner along the room length."
         },
         rotationDeg: {
           type: "number",
           minimum: 0,
           maximum: 360,
-          description: "Rotation in degrees counter-clockwise about the vertical axis; 0 means the product's front faces +y."
+          description: "Rotation in degrees counter-clockwise about the footprint centre, seen from above; 0 means the product's front faces +y."
         }
       },
       required: ["bomItemId", "xMm", "yMm", "rotationDeg"],

@@ -181,7 +181,7 @@ describe("registerPlannerTools with the polyfill", () => {
     expect((summary.bom as unknown[]).map((line) => (line as { status: string }).status)).toEqual(["approved", "removed"]);
   });
 
-  it("set_project_requirement picks PATCH for budget and PUT spec for a required item", async () => {
+  it("set_project_requirement picks PATCH for budget and POST requirements for a required item", async () => {
     const { fetchImpl, calls } = fakeFetch(200, SNAPSHOT);
     await registerPlannerTools({ projectId: "p1", fetchImpl, signal: controller.signal });
 
@@ -190,10 +190,8 @@ describe("registerPlannerTools with the polyfill", () => {
 
     expect(calls[0]).toMatchObject({ url: "/api/projects/p1", init: { method: "PATCH" } });
     expect(JSON.parse(calls[0].init.body as string)).toEqual({ budget_cents: 250000 });
-    expect(calls[1]).toMatchObject({ url: "/api/projects/p1/spec", init: { method: "PUT" } });
-    expect(JSON.parse(calls[1].init.body as string)).toEqual({
-      requirements: [{ type: "required_item", value: "rug", scope: "project" }]
-    });
+    expect(calls[1]).toMatchObject({ url: "/api/projects/p1/requirements", init: { method: "POST" } });
+    expect(JSON.parse(calls[1].init.body as string)).toEqual({ type: "required_item", value: "rug", scope: "project" });
   });
 
   it("a 409 response yields isError with the server's message", async () => {
