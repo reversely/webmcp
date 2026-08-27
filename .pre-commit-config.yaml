@@ -1,0 +1,26 @@
+# Mechanical, deterministic checks only. Judgment calls (data-structure fit, module boundaries,
+# whether a complex change explains itself) aren't enforceable here; see the clean-code skill.
+#
+# Setup in a fresh clone (pre-commit is a Python tool; uv provides it without a project venv):
+#   uv tool install pre-commit detect-secrets
+#   pre-commit install
+#   detect-secrets scan > .secrets.baseline
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-yaml
+      - id: detect-private-key
+
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]

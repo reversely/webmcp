@@ -1,0 +1,49 @@
+# Session log: local handoff between sessions, never staged.
+docs/log.md
+docs/prd.md
+
+# secrets baseline is committed; the actual secrets it would catch are not
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+dist/
+build/
+.cache/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Browser automation / test output
+playwright-report/
+test-results/
+
+# Python / uv (in case a helper script lands here)
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# OS noise
+.DS_Store
+
+# agent-local files: instructions, skills, agents, settings, worklogs, plans, PRDs
+CLAUDE.md
+AGENTS.md
+.claude/
+docs/log.md
+docs/progress/
+docs/plans/
+docs/prd*.md
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Vitest
+coverage/
