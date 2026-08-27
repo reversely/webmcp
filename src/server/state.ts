@@ -9,6 +9,7 @@ import { calculateBudget, regenerateBom, renameItem, renameItemInRule, replaceBo
 import { startModelGeneration } from "../domain/ingestion/hooks";
 import { normalizeCatalogProduct } from "../domain/products/normalize";
 import { checkLayout, type LayoutCheck, type LayoutItem } from "../domain/geometry";
+import { emptyBoard, type BoardDoc } from "./board";
 import { recordIssue, withSpan } from "./trace";
 import { itemKey, readLayoutRule, readRequiredItem, type Candidate, type Category, type DeliveryAddress, type Kind, type LayoutRule, type Member, type Placement, type Product, type Project, type Requirement, type Space } from "../domain/types";
 
@@ -58,8 +59,11 @@ export type ModelJob = {
   updated_at: string;
 };
 
-/** A project member with the self-assigned role and the last heartbeat the client sent. */
-export type MemberRow = Member & { role: string; stage: string | null; last_seen: string };
+/** Where a member's pointer last was on the board, in tldraw page coordinates (#18). */
+export type BoardCursor = { x: number; y: number };
+
+/** A project member with the self-assigned role, the last heartbeat the client sent, and the board cursor it carried. */
+export type MemberRow = Member & { role: string; stage: string | null; last_seen: string; cursor: BoardCursor | null };
 
 export type AppState = {
   store: ProjectStore;
@@ -69,7 +73,8 @@ export type AppState = {
   members: Map<string, MemberRow>;
   spaces: Map<string, Space>;
   requirements: Map<string, Requirement>;
-  boards: Map<string, unknown>;
+  /** The board per project as versioned tldraw records (src/server/board.ts). */
+  boards: Map<string, BoardDoc>;
   messages: Map<string, ChatMessage[]>;
   jobs: Map<string, ModelJob>;
   events: DomainEvent[];
@@ -189,22 +194,34 @@ export function joinProject(code: string, displayName: string, role: string): Me
     display_name: displayName,
     role,
     stage: null,
-    last_seen: new Date().toISOString()
+    last_seen: new Date().toISOString(),
+    cursor: null
   };
   s.members.set(member.id, member);
   return member;
+}
+
+/** The project's board document, created empty on first use. */
+export function boardFor(projectId: string): BoardDoc {
+  const s = appState();
+  let doc = s.boards.get(projectId);
+  if (!doc) {
+    doc = emptyBoard();
+    s.boards.set(projectId, doc);
+  }
+  return doc;
 }
 
 export function membersFor(projectId: string): MemberRow[] {
   return [...appState().members.values()].filter((m) => m.project_id === projectId);
 }
 
-/** Records a heartbeat; false when the member is unknown (a server restart drops every member). */
-export function touchMember(projectId: string, memberId: string, stage: string | null): boolean {
+/** Records a heartbeat with the board cursor it carried; false when the member is unknown (a server restart drops every member). */
+export function touchMember(projectId: string, memberId: string, stage: string | null, cursor: BoardCursor | null = null): boolean {
   const s = appState();
   const member = s.members.get(memberId);
   if (!member || member.project_id !== projectId) return false;
-  s.members.set(memberId, { ...member, stage, last_seen: new Date().toISOString() });
+  s.members.set(memberId, { ...member, stage, last_seen: new Date().toISOString(), cursor });
   return true;
 }
 
@@ -335,12 +352,26 @@ export function renameProjectItem(projectId: string, bomItemId: string, name: st
   return result;
 }
 
+type MessageListener = (projectId: string, message: ChatMessage) => void;
+const messageListeners = new Set<MessageListener>();
+
+/** Calls `fn` on every message written or updated in place, in write order; returns the unsubscribe. The streaming chat route listens for one run (#19). */
+export function onMessageWrite(fn: MessageListener): () => void {
+  messageListeners.add(fn);
+  return () => messageListeners.delete(fn);
+}
+
+function notifyMessage(projectId: string, message: ChatMessage): void {
+  for (const fn of messageListeners) fn(projectId, message);
+}
+
 export function pushMessage(projectId: string, message: Omit<ChatMessage, "id" | "at">): ChatMessage {
   const s = appState();
   const list = s.messages.get(projectId) ?? [];
   const full: ChatMessage = { ...message, id: `m_${list.length + 1}`, at: new Date().toISOString() };
   list.push(full);
   s.messages.set(projectId, list);
+  notifyMessage(projectId, full);
   return full;
 }
 
@@ -356,6 +387,7 @@ export function upsertArtifact(projectId: string, artifact: Artifact, text: stri
     const updated: ChatMessage = { ...list[index], text, artifact };
     list[index] = updated;
     s.messages.set(projectId, list);
+    notifyMessage(projectId, updated);
     return updated;
   }
   return pushMessage(projectId, { role: "agent", author: "PlanningAgent", text, artifact });

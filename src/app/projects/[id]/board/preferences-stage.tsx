@@ -2,8 +2,9 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { Editor, TLEditorSnapshot } from "tldraw";
+import type { Editor } from "tldraw";
 import { getSnapshot } from "tldraw";
+import type { BoardInitial, SaveState } from "./board-canvas";
 import { collectBoardItems, compileBoard, parseLayoutRule, type CompiledSpec, type Swatch } from "./compileBoard";
 import { latestArtifact, type ArtifactMessage } from "../artifacts";
 import type { SpecData } from "../artifacts/types";
@@ -165,9 +166,8 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
   const router = useRouter();
   const identity = useIdentity(projectId);
   const editorRef = useRef<Editor | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [board, setBoard] = useState<{ loaded: boolean; snapshot: TLEditorSnapshot | null }>({ loaded: false, snapshot: null });
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const [board, setBoard] = useState<{ loaded: boolean; initial: BoardInitial }>({ loaded: false, initial: null });
+  const [saveState, setSaveState] = useState<SaveState>("idle");
   const [form, setForm] = useState<Form | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
   const [approving, setApproving] = useState(false);
@@ -177,23 +177,13 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
     let cancelled = false;
     fetch(`/api/projects/${projectId}/spec`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((data: { board: TLEditorSnapshot | null }) => {
-        if (!cancelled) setBoard({ loaded: true, snapshot: data.board ?? null });
+      .then((data: { board: BoardInitial }) => {
+        if (!cancelled) setBoard({ loaded: true, initial: data.board ?? null });
       });
     return () => {
       cancelled = true;
-      if (saveTimer.current) clearTimeout(saveTimer.current);
     };
   }, [projectId]);
-
-  function persist(snapshot: TLEditorSnapshot) {
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    setSaveState("saving");
-    saveTimer.current = setTimeout(async () => {
-      const res = await fetch(`/api/projects/${projectId}/spec`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ board: snapshot }) });
-      setSaveState(res.ok ? "saved" : "failed");
-    }, 800);
-  }
 
   /**
    * "Create plan from board": the PlanningAgent compiles the board (POST compile) when it can;
@@ -269,11 +259,12 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
           <div className={styles.canvas}>
             {board.loaded ? (
               <BoardCanvas
-                initial={board.snapshot}
+                projectId={projectId}
+                initial={board.initial}
                 onReady={(editor) => {
                   editorRef.current = editor;
                 }}
-                onChange={persist}
+                onSaveState={setSaveState}
               />
             ) : (
               <div className={styles.placeholder}>Loading the board.</div>

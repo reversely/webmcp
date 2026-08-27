@@ -3,17 +3,19 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useIdentity } from "../../identity";
+import { localCursor, setPresenceMembers, type PresenceMember } from "./board/presence-store";
 
 const HEARTBEAT_MS = 5000;
 /** A chip dims after this long without a heartbeat: three missed beats. */
 const AWAY_MS = 15000;
 
-type MemberChip = { id: string; display_name: string; role: string; stage: string | null; last_seen: string };
+type MemberChip = PresenceMember;
 
 /**
- * The code (copyable) and who is in the project. The client heartbeats its stage every 5 s and
- * re-reads the member list on the same beat; a 404 from either call means the server restarted
- * and forgot the project, so the browser goes back to the landing page with a note.
+ * The code (copyable) and who is in the project. The client heartbeats its stage and, on the
+ * board, its pointer every 5 s and re-reads the member list on the same beat (#18: the board draws
+ * the others' cursors from that list); a 404 from either call means the server restarted and
+ * forgot the project, so the browser goes back to the landing page with a note.
  */
 export function ProjectPresence({ projectId, code }: { projectId: string; code: string | null }) {
   const pathname = usePathname();
@@ -29,7 +31,7 @@ export function ProjectPresence({ projectId, code }: { projectId: string; code: 
     async function beat() {
       try {
         if (identity) {
-          const res = await fetch(`/api/projects/${projectId}/presence`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ member_id: identity.member_id, stage }) });
+          const res = await fetch(`/api/projects/${projectId}/presence`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ member_id: identity.member_id, stage, cursor: localCursor() }) });
           if (res.status === 404) return leave();
         }
         const res = await fetch(`/api/projects/${projectId}/members`, { cache: "no-store" });
@@ -37,6 +39,7 @@ export function ProjectPresence({ projectId, code }: { projectId: string; code: 
         if (res.ok && !stopped) {
           const body = (await res.json()) as { members: MemberChip[]; now: string };
           setMembers(body.members);
+          setPresenceMembers(body.members);
           setNow(Date.parse(body.now));
         }
       } catch {
