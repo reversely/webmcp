@@ -87,7 +87,7 @@ async function routeMessage(projectId: string, author: string, text: string, dep
     return snapshot(projectId).messages;
   }
 
-  const runAgent = deps.runAgent ?? runPlanningAgent;
+  const runAgent = deps.runAgent ?? ((ctx: { projectId: string; author: string }, history: ChatMessage[], text: string) => runPlanningAgent(ctx, history, text, { sourcing: deps.sourcing }));
   if (!deps.runAgent && !hasModelKey()) {
     pushMessage(projectId, { role: "agent", author: "PlanningAgent", text: "No OPENAI_API_KEY is set, so the PlanningAgent cannot run. Use the search panel to source products directly." });
     return snapshot(projectId).messages;
