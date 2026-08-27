@@ -5,6 +5,7 @@
  * (PRD 5.2, 10) and a later message can resume it from the delivery step.
  */
 import { CatalogError } from "../commerce";
+import { formatMoney } from "../domain/money";
 import { checkpoint, complete, failRecoverable, requestInput, startRun } from "../domain/agent-run";
 import { calculateBudget, regenerateBom, type Budget } from "../domain/bom";
 import { rankDeliveryConfidence } from "../domain/delivery";
@@ -37,6 +38,8 @@ export const ADDRESS_QUESTION = "What delivery address should I use to check arr
 export const NO_WINDOW_NOTE = "The project has no priced item outside the required list yet, so the selection takes the highest-ranked combination under the budget.";
 export const COUNTRY_ONLY_NOTE = "No delivery address is set, so the search carried no destination. Delivery estimates start once an address is set.";
 export const OVER_BUDGET_NOTE = "The budget is already spent, so the planner adds the cheapest match and reports the overage.";
+/** The note when the budget's remainder is smaller than any product that fits the room (#78). */
+export const smallRemainderNote = (item: string, remaining_cents: number): string => `No ${item} with dimensions costs under the remaining ${formatMoney(remaining_cents)}, so the planner adds the cheapest match and reports the overage.`;
 /** The price ceiling of a single-item search when the budget is already spent: none that a catalog price reaches. */
 const NO_CEILING_CENTS = 1_000_000_000;
 /** Candidates per item that get the (slow) visual and delivery checks. */
@@ -613,10 +616,23 @@ export async function sourceItem(projectId: string, name: string, deps: Sourcing
       writeProgress(projectId, cp);
       await searchAndEvaluate(projectId, cp, item, deps);
       await checkDelivery(projectId, cp, deps);
+      const cheapest = (list: RankedCandidate[]) => list.reduce<RankedCandidate | undefined>((best, c) => (best && best.price_cents <= c.price_cents ? best : c), undefined);
       const ranked = rankCategoriesSpanned(projectId, cp)[item.name] ?? [];
       // Under a live budget the top rank wins; over it, the cheapest keeps the overage smallest.
-      const pick = overBudget ? ranked.reduce<RankedCandidate | undefined>((best, c) => (best && best.price_cents <= c.price_cents ? best : c), undefined) : ranked[0];
-      if (!pick) return noMatch(overBudget ? "no available product with dimensions fits the room." : `no available product with dimensions fits the room under the remaining ${remaining} cents.`);
+      let pick = overBudget ? cheapest(ranked) : ranked[0];
+      let note: string | undefined = overBudget ? OVER_BUDGET_NOTE : undefined;
+      if (!pick && !overBudget) {
+        // Nothing fits under the remainder: the same outcome as a spent budget (#78), so the run
+        // evaluates again with no ceiling and adds the cheapest match that fits the room.
+        note = smallRemainderNote(item.name, remaining);
+        cp.budget_cents = NO_CEILING_CENTS;
+        cp.progress.notes = [...(cp.progress.notes ?? []), note];
+        writeProgress(projectId, cp);
+        await searchAndEvaluate(projectId, cp, item, deps);
+        await checkDelivery(projectId, cp, deps);
+        pick = cheapest(rankCategoriesSpanned(projectId, cp)[item.name] ?? []);
+      }
+      if (!pick) return noMatch("no available product with dimensions fits the room.");
       const { product, bomItemId, budget } = withSpanSync(projectId, { kind: "step", name: "record selection and regenerate BOM", prd_ref: "PRD 9 step 12", input: { pick: pick.id, price_cents: pick.price_cents } }, (span) =>
         s.store.mutate(() => {
           const candidate = updateCandidate(pick.id, { ranking_state: "selected" });
@@ -639,7 +655,7 @@ export async function sourceItem(projectId: string, name: string, deps: Sourcing
       });
       withSpanSync(projectId, { kind: "step", name: `start 3D ${item.name}`, prd_ref: "PRD 9 step 13", input: { product_id: product.id } }, () => deps.startModelGeneration(product));
       end();
-      return { status: "complete", item: item.name, product_id: product.id, bom_item_id: bomItemId, price_cents: product.price_cents, budget, placed, artifact_id: cp.artifact_id, ...(overBudget ? { note: OVER_BUDGET_NOTE } : {}) };
+      return { status: "complete", item: item.name, product_id: product.id, bom_item_id: bomItemId, price_cents: product.price_cents, budget, placed, artifact_id: cp.artifact_id, ...(note ? { note } : {}) };
     });
   } catch (e) {
     failRecoverable(s.runs, run.id, (e as Error).message);

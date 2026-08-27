@@ -5,7 +5,7 @@ import { issuesFor, spansFor } from "../server/trace";
 import type { SourcingArtifact } from "./artifacts";
 import { handleMessage } from "./messages";
 import { upsertRequirement } from "../server/requirements";
-import { ADDRESS_QUESTION, COUNTRY_ONLY_NOTE, NO_WINDOW_NOTE, OVER_BUDGET_NOTE, extraItemPriceFor, selectionWindowFor, sourceItem, sourceRoom, withReplacementFloor } from "./sourcing";
+import { ADDRESS_QUESTION, COUNTRY_ONLY_NOTE, NO_WINDOW_NOTE, OVER_BUDGET_NOTE, extraItemPriceFor, selectionWindowFor, smallRemainderNote, sourceItem, sourceRoom, withReplacementFloor } from "./sourcing";
 import { EXTRA, fakeCatalogProduct, fakeDeps, fakeSearch, ITEM_NAMES, resetState, seedProject } from "./test-helpers";
 
 function sourcingArtifact(projectId: string): SourcingArtifact {
@@ -212,18 +212,22 @@ describe("sourceItem (#61)", () => {
     expect(spans[0].status).toBe("ok");
   });
 
-  it("records an item the project has not agreed yet, and reports no_match when nothing fits under the remaining budget", async () => {
+  it("records an item the project has not agreed yet, and adds the cheapest match with a note when nothing fits under the remaining budget (#78)", async () => {
     const projectId = seedProject({ address: true });
     const s = appState();
     const deps = lampDeps();
     s.store.projects.set(projectId, { ...s.store.getProject(projectId), budget_cents: 5000 });
     const cheap = await sourceItem(projectId, LAMP, deps);
-    expect(cheap.status).toBe("no_match");
-    if (cheap.status !== "no_match") return;
-    expect(cheap.reason).toMatch(/under the remaining 5000 cents/);
+    expect(cheap.status).toBe("complete");
+    if (cheap.status !== "complete") return;
+    expect(cheap.price_cents).toBe(6999);
+    expect(cheap.note).toBe(smallRemainderNote(LAMP, 5000));
+    expect(cheap.budget).toMatchObject({ state: "over", overage_cents: 1999 });
     const row = snapshot(projectId).requirements.find((r) => r.type === "required_item" && JSON.stringify(r.value_json).includes(LAMP));
     expect(row).toMatchObject({ status: "agreed", created_by: "PlanningAgent", value_json: { name: LAMP, kind: "lighting" } });
-    expect(snapshot(projectId).bom).toHaveLength(0);
+    const artifact = snapshot(projectId).messages.find((m) => m.artifact?.id === cheap.artifact_id)!.artifact!.data as SourcingArtifact;
+    expect(artifact.notes).toContain(smallRemainderNote(LAMP, 5000));
+    expect(snapshot(projectId).bom.filter((b) => b.category === LAMP)).toHaveLength(1);
   });
 
   it("adds the cheapest match and reports the overage when the budget is already spent (PRD 8.4 state)", async () => {
