@@ -49,8 +49,12 @@ async function probeStorefront(seller: Seller) {
   const home = await get(`https://${host}/`);
   const html = home && home.ok ? await home.text() : "";
   out.public_host = home?.url ? new URL(home.url).host : host;
-  out.webmcp_adapter = /storefront\/webmcp\/webmcp-[\d.]+\.js/.test(html);
-  out.model_context_ref = /modelContext/.test(html);
+  // Shopify injects an inline loader that feature-detects document.modelContext and only then
+  // fetches cdn.shopify.com/storefront/webmcp/webmcp-<version>.js, so the CDN URL never appears in
+  // server HTML. The loader's localStorage key is the reliable marker, and it appears on Liquid
+  // storefronts only (headless stores such as rugsusa.com and burrow.com lack it).
+  out.webmcp_loader = /shopify:webmcp_adapter_loaded/.test(html);
+  out.webmcp_adapter_version = html.match(/webmcp\\?\/webmcp-([\d.]+)\.js/)?.[1] ?? null;
   const pj = await get(`https://${host}/products.json?limit=1`);
   out.products_json = !!pj && pj.ok && (await pj.text()).includes('"products"');
   const tools = await fetch(storefrontEndpoint(host), { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }), signal: AbortSignal.timeout(15000) }).catch(() => null);
@@ -87,13 +91,13 @@ async function main() {
   for (const seller of sellers) {
     const row = await probeStorefront(seller);
     rows.push(row);
-    console.log(`${row.domain} | cats=${(row.categories as string[]).length} | products=${row.products} dims=${row.with_dims} | tools=${row.ucp_tools} | adapter=${row.webmcp_adapter} | checkout=${row.checkout_status ?? "-"} | ${JSON.stringify(row.shipping_options ?? [])} ${JSON.stringify(row.date_fields ?? [])}`);
+    console.log(`${row.domain} | cats=${(row.categories as string[]).length} | products=${row.products} dims=${row.with_dims} | tools=${row.ucp_tools} | liquid_loader=${row.webmcp_loader}(${row.webmcp_adapter_version ?? "-"}) | checkout=${row.checkout_status ?? "-"} | ${JSON.stringify(row.shipping_options ?? [])} ${JSON.stringify(row.date_fields ?? [])}`);
   }
   writeFileSync("spikes/storefront-survey/discovered.json", JSON.stringify(rows, null, 2) + "\n");
   const md = [
-    "| Seller | Categories | Products (with dims) | UCP tools | WebMCP adapter | Checkout status | Shipping options | Date fields |",
+    "| Seller | Categories | Products (with dims) | UCP tools | Liquid (WebMCP loader) | Checkout status | Shipping options | Date fields |",
     "| --- | --- | --- | --- | --- | --- | --- | --- |",
-    ...rows.map((r) => `| ${r.domain} | ${(r.categories as string[]).join(", ")} | ${r.products} (${r.with_dims}) | ${r.ucp_tools} | ${r.webmcp_adapter ? "yes" : "no"} | ${r.checkout_status ?? ""} | ${((r.shipping_options as string[]) ?? []).join("; ")} | ${((r.date_fields as string[]) ?? []).join(", ") || "none"} |`)
+    ...rows.map((r) => `| ${r.domain} | ${(r.categories as string[]).join(", ")} | ${r.products} (${r.with_dims}) | ${r.ucp_tools} | ${r.webmcp_loader ? `yes (v${r.webmcp_adapter_version})` : "no"} | ${r.checkout_status ?? ""} | ${((r.shipping_options as string[]) ?? []).join("; ")} | ${((r.date_fields as string[]) ?? []).join(", ") || "none"} |`)
   ].join("\n");
   writeFileSync("spikes/storefront-survey/discovered.md", md + "\n");
 }

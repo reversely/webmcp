@@ -94,7 +94,7 @@ one available variant with the demo address. Full table in `discovered.md`, raw 
 | --- | --- |
 | Sellers returned across the five searches | 73 |
 | Sellers answering `/api/ucp/mcp` with 13 tools | 73 of 73 |
-| Sellers loading the storefront WebMCP adapter | 0 of 73 |
+| Sellers carrying Shopify's inline WebMCP loader (Liquid storefronts) | 60 of 73; adapter v0.1.1. The 13 without are headless fronts or unpublished `myshopify.com` hosts |
 | Products returned | 250, of which 103 have dimensions parseable from `tech_specs` or `description.plain` |
 | Sellers covering 3+ demo categories | westwing-main-stage (4), daalshome, ornate-furniture, thuma-bed, burrow-prod |
 | `create_checkout` returning shipping options | 31 sellers |
@@ -109,3 +109,18 @@ GroundAdvantage)`, `Standard Fast Shipping (Ships in 1 business day via Standard
 Consequence for PRD Section 10: the checkout tool on `/api/ucp/mcp` returns the same option text a
 shopper sees, with no browser session and no captcha, for the merchants that configured delivery
 expectations. It is the primary evidence source; the hosted checkout page adds nothing beyond it.
+
+## Step 9 (2026-08-28): why the adapter looked absent, and how to filter for Liquid
+
+The adapter is loaded by an inline script Shopify injects into every Liquid storefront (rolled out
+2026-08-21 per the changelog; a community thread from 2026-07-17 saw an earlier version). The
+loader runs `typeof (document.modelContext || navigator.modelContext)?.registerTool == "function"`
+and only in a WebMCP-capable browser appends `<script type="module" src="https://cdn.shopify.com/storefront/webmcp/webmcp-0.1.1.js">`. A curl or a non-WebMCP browser never sees the CDN URL. The
+marker to grep for is the loader's localStorage key, `shopify:webmcp_adapter_loaded`.
+
+Global Catalog has no storefront-type filter. Its `search_catalog` filters are `categories`, `price`,
+`available`, `shops` (by shop GID, up to 1000), `condition`, `ships_to`, `ships_from`, `attributes`,
+`rating`, `price_tier`. The way to restrict to Liquid sellers is therefore two-step: discover sellers
+as in step 8, fetch each seller's homepage once and keep those with the loader marker, then pass
+their shop GIDs (`variants[].seller.id`) in `filters.shops` on later searches. Headless sellers
+(rugsusa.com, burrow.com, castlery.com) and stores still on a password page lack the marker.

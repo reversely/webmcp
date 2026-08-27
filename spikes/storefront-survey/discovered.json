@@ -11,8 +11,6 @@
     "products": 36,
     "with_dims": 4,
     "public_host": "westwing-main-stage.myshopify.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -21,7 +19,9 @@
     "checkout_messages": [
       "extension_interaction_required",
       "delivery_no_delivery_available_for_merchandise_line"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "daalshome.myshopify.com",
@@ -34,8 +34,6 @@
     "products": 8,
     "with_dims": 7,
     "public_host": "www.daals.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -43,7 +41,9 @@
       "Standard Delivery (3 to 8 business days via USA-MULTIBOX) $19.99"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "ornate-furniture.myshopify.com",
@@ -56,8 +56,6 @@
     "products": 8,
     "with_dims": 7,
     "public_host": "ornatehome.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -65,7 +63,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "thuma-bed.myshopify.com",
@@ -78,8 +78,6 @@
     "products": 5,
     "with_dims": 0,
     "public_host": "checkout.thuma.co",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -87,7 +85,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "burrow-prod.myshopify.com",
@@ -100,8 +100,6 @@
     "products": 4,
     "with_dims": 0,
     "public_host": "checkout.burrow.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -109,7 +107,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "mygarvee.myshopify.com",
@@ -121,8 +121,6 @@
     "products": 51,
     "with_dims": 42,
     "public_host": "www.garvee.com",
-    "webmcp_adapter": false,
-    "model_context_ref": false,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -132,7 +130,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "lulu-and-georgia.myshopify.com",
@@ -144,8 +144,6 @@
     "products": 22,
     "with_dims": 1,
     "public_host": "lulu-and-georgia.myshopify.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -153,7 +151,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "tresings.myshopify.com",
@@ -165,8 +165,6 @@
     "products": 6,
     "with_dims": 2,
     "public_host": "tribesigns.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -176,7 +174,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "7th-avenue-home.myshopify.com",
@@ -188,8 +188,6 @@
     "products": 5,
     "with_dims": 0,
     "public_host": "7thavenue.co",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -197,7 +195,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "rovelab-us.myshopify.com",
@@ -209,8 +209,6 @@
     "products": 5,
     "with_dims": 0,
     "public_host": "rovelab.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -218,7 +216,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "bellaria-homestore.myshopify.com",
@@ -230,8 +230,6 @@
     "products": 5,
     "with_dims": 4,
     "public_host": "www.lunafurn.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -239,7 +237,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "2ddf06-7b.myshopify.com",
@@ -251,8 +251,6 @@
     "products": 4,
     "with_dims": 2,
     "public_host": "www.bludot.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -260,7 +258,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "modway-dev.myshopify.com",
@@ -272,8 +272,6 @@
     "products": 4,
     "with_dims": 2,
     "public_host": "modway.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -283,7 +281,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "gumps-official.myshopify.com",
@@ -295,8 +295,6 @@
     "products": 2,
     "with_dims": 1,
     "public_host": "gumps-official.myshopify.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -304,7 +302,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "linsy-home.myshopify.com",
@@ -315,8 +315,6 @@
     "products": 5,
     "with_dims": 3,
     "public_host": "www.linsyhome.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -324,7 +322,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "plankbeam.myshopify.com",
@@ -335,8 +335,6 @@
     "products": 4,
     "with_dims": 1,
     "public_host": "plankandbeam.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -344,7 +342,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "exco-dev-coley.myshopify.com",
@@ -355,8 +355,6 @@
     "products": 4,
     "with_dims": 0,
     "public_host": "www.coleyhome.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -364,7 +362,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "chitaliving.myshopify.com",
@@ -375,8 +375,6 @@
     "products": 3,
     "with_dims": 1,
     "public_host": "chitaliving.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -384,7 +382,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "albany-park.myshopify.com",
@@ -395,8 +395,6 @@
     "products": 3,
     "with_dims": 3,
     "public_host": "www.albanypark.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -406,7 +404,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "polywood-production.myshopify.com",
@@ -417,8 +417,6 @@
     "products": 3,
     "with_dims": 0,
     "public_host": "www.polywood.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -426,7 +424,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "xng158-df.myshopify.com",
@@ -437,8 +437,6 @@
     "products": 2,
     "with_dims": 1,
     "public_host": "westwingoutlet.de",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -448,7 +446,9 @@
     "date_fields": [],
     "checkout_messages": [
       "redirect_to_checkout_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "loomandloft2.myshopify.com",
@@ -459,8 +459,6 @@
     "products": 2,
     "with_dims": 0,
     "public_host": "anabei.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -470,7 +468,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "nathan-home.myshopify.com",
@@ -481,8 +481,6 @@
     "products": 2,
     "with_dims": 0,
     "public_host": "nathanjames.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -492,7 +490,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "nestig.myshopify.com",
@@ -503,8 +503,6 @@
     "products": 2,
     "with_dims": 0,
     "public_host": "www.nestig.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -512,7 +510,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "denver-modern.myshopify.com",
@@ -523,8 +523,6 @@
     "products": 2,
     "with_dims": 0,
     "public_host": "denvermodern.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -535,7 +533,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "koala-usa.myshopify.com",
@@ -545,9 +545,7 @@
     ],
     "products": 2,
     "with_dims": 0,
-    "public_host": "us.koala.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
+    "public_host": "koala-usa.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -555,7 +553,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "87a1b5-d6.myshopify.com",
@@ -565,9 +565,7 @@
     ],
     "products": 2,
     "with_dims": 2,
-    "public_host": "levinfurniture.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
+    "public_host": "87a1b5-d6.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -575,7 +573,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "poly-bark.myshopify.com",
@@ -585,9 +585,7 @@
     ],
     "products": 2,
     "with_dims": 2,
-    "public_host": "checkout.polyandbark.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
+    "public_host": "poly-bark.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -597,7 +595,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "noo-ma.myshopify.com",
@@ -607,9 +607,7 @@
     ],
     "products": 2,
     "with_dims": 0,
-    "public_host": "noo.ma",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
+    "public_host": "noo-ma.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -620,7 +618,9 @@
     "checkout_messages": [
       "extension_interaction_required",
       "redirect_to_checkout_required"
-    ]
+    ],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "yamazakihome.myshopify.com",
@@ -630,9 +630,7 @@
     ],
     "products": 2,
     "with_dims": 1,
-    "public_host": "theyamazakihome.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
+    "public_host": "yamazakihome.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -640,7 +638,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "b9pa0i-62.myshopify.com",
@@ -650,9 +650,7 @@
     ],
     "products": 1,
     "with_dims": 1,
-    "public_host": "buycura.co",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
+    "public_host": "b9pa0i-62.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -660,7 +658,9 @@
       "Standard (3 to 5 business days via Standard) $19.99"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "ohwillofficial.myshopify.com",
@@ -670,9 +670,7 @@
     ],
     "products": 1,
     "with_dims": 1,
-    "public_host": "www.ohwill.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
+    "public_host": "ohwillofficial.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -680,7 +678,9 @@
       "Standard (Wednesday, September 2–Thursday, September 3 via Standard) $0.00"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "acanva-home.myshopify.com",
@@ -690,9 +690,7 @@
     ],
     "products": 1,
     "with_dims": 0,
-    "public_host": "www.acanva.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
+    "public_host": "acanva-home.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -703,7 +701,9 @@
       "White Glove Delivery $299.00"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "b96296.myshopify.com",
@@ -713,9 +713,7 @@
     ],
     "products": 1,
     "with_dims": 0,
-    "public_host": "www.nectar-us.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
+    "public_host": "b96296.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -724,7 +722,9 @@
       "Standard (3 to 4 business days via Standard) $6.90"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "arhausllc.myshopify.com",
@@ -734,9 +734,7 @@
     ],
     "products": 1,
     "with_dims": 0,
-    "public_host": "www.arhaus.com",
-    "webmcp_adapter": false,
-    "model_context_ref": false,
+    "public_host": "arhausllc.myshopify.com",
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -744,7 +742,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "americanhomefurniture.myshopify.com",
@@ -755,8 +755,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "americanhomefurniture.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -764,7 +762,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "mopioinc.myshopify.com",
@@ -775,8 +775,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "mopio.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -786,7 +784,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "urbannatural.myshopify.com",
@@ -797,8 +797,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "www.urbannatural.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -806,7 +804,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "rubeza.myshopify.com",
@@ -817,8 +817,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "www.rubeza.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -828,7 +826,9 @@
     "date_fields": [],
     "checkout_messages": [
       "redirect_to_checkout_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "casagear.myshopify.com",
@@ -839,8 +839,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "casagear.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -848,7 +846,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "rowsin.myshopify.com",
@@ -859,8 +859,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "pootoo.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -870,7 +868,9 @@
     "date_fields": [],
     "checkout_messages": [
       "redirect_to_checkout_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "the-roost-uk.myshopify.com",
@@ -881,8 +881,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "theroost.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "incomplete",
@@ -890,7 +888,9 @@
     "date_fields": [],
     "checkout_messages": [
       "delivery_no_delivery_available"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "nc-furniture-gallery-nc.myshopify.com",
@@ -901,8 +901,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "usfurnituredirect.com",
-    "webmcp_adapter": false,
-    "model_context_ref": false,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "incomplete",
@@ -910,7 +908,9 @@
     "date_fields": [],
     "checkout_messages": [
       "delivery_no_delivery_available"
-    ]
+    ],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "sundays-company-production.myshopify.com",
@@ -921,8 +921,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "www.sundays-company.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -932,7 +930,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "tov-furnitures.myshopify.com",
@@ -943,8 +943,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "tovfurniture.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -952,7 +950,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "nuggetcomfort-com.myshopify.com",
@@ -963,8 +963,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "nuggetcomfort.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -972,7 +970,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "omhu-na.myshopify.com",
@@ -983,8 +983,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "ca.omhucph.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -992,7 +990,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "cassaro-kids.myshopify.com",
@@ -1003,8 +1003,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "cassarohome.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -1013,7 +1011,9 @@
       "Express shipping $88.00"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "paynes-gray.myshopify.com",
@@ -1024,8 +1024,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "www.paynesgray.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -1035,7 +1033,9 @@
       "White Glove (white glove) $150.00"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "rachel-interior-design.myshopify.com",
@@ -1046,8 +1046,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "racheldonath.com.au",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -1056,7 +1054,9 @@
       "White Glove (White_Glove) $399.00"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "diamond-furniture-alabama.myshopify.com",
@@ -1067,8 +1067,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "diamondfurniture.shop",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -1078,7 +1076,9 @@
       "Priority Mail Express (1 business day via PriorityExpress) $38.18"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "www-lets-playground-shopify-com.myshopify.com",
@@ -1089,8 +1089,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "gathre.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1098,7 +1096,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "mor-furniture.myshopify.com",
@@ -1109,8 +1109,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "www.morfurniture.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1118,7 +1116,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "valencia-theater-seating-usa.myshopify.com",
@@ -1129,8 +1129,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "us.valenciatheaterseating.com",
-    "webmcp_adapter": false,
-    "model_context_ref": false,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1138,7 +1136,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": false,
+    "webmcp_adapter_version": null
   },
   {
     "domain": "luxe-furniture-local.myshopify.com",
@@ -1149,8 +1149,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "www.luxefurnitureforless.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "incomplete",
@@ -1158,7 +1156,9 @@
     "date_fields": [],
     "checkout_messages": [
       "delivery_no_delivery_available_for_merchandise_line"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "ns80wi-dj.myshopify.com",
@@ -1169,8 +1169,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "dnr-store.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "incomplete",
@@ -1180,7 +1178,9 @@
     "date_fields": [],
     "checkout_messages": [
       "delivery_address2_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "stoneandtile.myshopify.com",
@@ -1191,8 +1191,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "stoneandtileshoppe.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1200,7 +1198,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "veradektest.myshopify.com",
@@ -1211,8 +1211,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "veradek.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1222,7 +1220,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "magnoliamom.myshopify.com",
@@ -1233,8 +1233,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "magnolia.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1242,7 +1240,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "createroom.myshopify.com",
@@ -1253,8 +1253,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "www.ca.createroom.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1262,7 +1260,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "kinetic-oasis-llc.myshopify.com",
@@ -1273,8 +1273,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "grounded.so",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1284,7 +1282,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "ecg6vx-8y.myshopify.com",
@@ -1295,8 +1295,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "keelanscott.co",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -1304,7 +1302,9 @@
       "Free Shipping $0.00"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "daa4a2.myshopify.com",
@@ -1315,8 +1315,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "unfnshed.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1324,7 +1322,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "kayu-home.myshopify.com",
@@ -1335,8 +1335,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "kayuhome.co.uk",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1344,7 +1342,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "jl-living-com.myshopify.com",
@@ -1355,8 +1355,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "www.jl-living.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1366,7 +1364,9 @@
     "date_fields": [],
     "checkout_messages": [
       "redirect_to_checkout_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "632fc8-3.myshopify.com",
@@ -1377,8 +1377,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "studiofurnis.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1386,7 +1384,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "bunnywilliams.myshopify.com",
@@ -1397,8 +1397,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "www.bunnywilliamshome.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1406,7 +1404,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "112dfd-3.myshopify.com",
@@ -1417,8 +1417,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "homeinfun.ca",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1428,7 +1426,9 @@
     "date_fields": [],
     "checkout_messages": [
       "redirect_to_checkout_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "buzr8t-s7.myshopify.com",
@@ -1439,8 +1439,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "www.rousehome.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "ready_for_complete",
@@ -1450,7 +1448,9 @@
       "White Glove Delivery (white glove delivery) $149.00"
     ],
     "date_fields": [],
-    "checkout_messages": []
+    "checkout_messages": [],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "hudson-and-vine.myshopify.com",
@@ -1461,8 +1461,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "hudsonandvine.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1472,7 +1470,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "mystic-barrels.myshopify.com",
@@ -1483,8 +1483,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "www.mysticbarrels.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1492,7 +1490,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "2modern3.myshopify.com",
@@ -1503,8 +1503,6 @@
     "products": 1,
     "with_dims": 0,
     "public_host": "www.2modern.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1512,7 +1510,9 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   },
   {
     "domain": "jonathanadler-com.myshopify.com",
@@ -1523,8 +1523,6 @@
     "products": 1,
     "with_dims": 1,
     "public_host": "jonathanadler.com",
-    "webmcp_adapter": false,
-    "model_context_ref": true,
     "products_json": true,
     "ucp_tools": 13,
     "checkout_status": "requires_escalation",
@@ -1532,6 +1530,8 @@
     "date_fields": [],
     "checkout_messages": [
       "extension_interaction_required"
-    ]
+    ],
+    "webmcp_loader": true,
+    "webmcp_adapter_version": "0.1.1"
   }
 ]
