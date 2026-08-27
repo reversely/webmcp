@@ -65,6 +65,9 @@ export type BoardCursor = { x: number; y: number };
 /** A project member with the self-assigned role, the last heartbeat the client sent, and the board cursor it carried. */
 export type MemberRow = Member & { role: string; stage: string | null; last_seen: string; cursor: BoardCursor | null };
 
+/** The room as the board stage estimated it, held until the Room stage confirms it as the Space. */
+export type RoomEstimateRow = { name: string; width_mm: number; length_mm: number; height_mm: number | null };
+
 export type AppState = {
   store: ProjectStore;
   /** Join code (six uppercase letters or digits) per project id, and the reverse lookup. */
@@ -72,6 +75,8 @@ export type AppState = {
   codeIndex: Map<string, string>;
   members: Map<string, MemberRow>;
   spaces: Map<string, Space>;
+  /** Pending room estimate per project id (board approve); cleared when the Room stage confirms. */
+  room_estimates: Map<string, RoomEstimateRow>;
   requirements: Map<string, Requirement>;
   /** The board per project as versioned tldraw records (src/server/board.ts). */
   boards: Map<string, BoardDoc>;
@@ -131,16 +136,16 @@ const traceCatalogCall: CatalogCallHook = (call, run) => {
   });
 };
 
-export function appState(): AppState {
-  if (!globalThis.__plannerState) {
-    const events: DomainEvent[] = [];
-    const store = new ProjectStore({ emit: (e) => events.push(e) });
-    globalThis.__plannerState = {
+function freshState(): AppState {
+  const events: DomainEvent[] = [];
+  const store = new ProjectStore({ emit: (e) => events.push(e) });
+  return {
       store,
       codes: new Map(),
       codeIndex: new Map(),
       members: new Map(),
       spaces: new Map(),
+      room_estimates: new Map(),
       requirements: new Map(),
       boards: new Map(),
       messages: new Map(),
@@ -152,7 +157,18 @@ export function appState(): AppState {
       pendingReplacements: new Map(),
       kinds: new Map()
     };
-  }
+}
+
+/**
+ * The state object lives on globalThis so dev-server reloads keep it. A reload that adds a field
+ * to AppState would otherwise leave the old object without it and crash the first reader, so every
+ * call backfills missing fields from a fresh state; existing tables are never replaced.
+ */
+export function appState(): AppState {
+  if (!globalThis.__plannerState) globalThis.__plannerState = freshState();
+  const current = globalThis.__plannerState as unknown as Record<string, unknown>;
+  const template = freshState() as unknown as Record<string, unknown>;
+  for (const key of Object.keys(template)) if (current[key] === undefined) current[key] = template[key];
   return globalThis.__plannerState;
 }
 
@@ -228,6 +244,8 @@ export function touchMember(projectId: string, memberId: string, stage: string |
 export type ProjectSnapshot = {
   project: ReturnType<ProjectStore["getProject"]>;
   space: Space | null;
+  /** The board's room estimate awaiting confirmation on the Room stage; null once confirmed or never estimated. */
+  room_estimate: RoomEstimateRow | null;
   requirements: Requirement[];
   products: Product[];
   candidates: Candidate[];
@@ -256,6 +274,7 @@ export function snapshot(projectId: string): ProjectSnapshot {
   return {
     project,
     space,
+    room_estimate: s.room_estimates.get(projectId) ?? null,
     requirements: [...s.requirements.values()].filter((r) => r.project_id === projectId),
     products,
     candidates,
