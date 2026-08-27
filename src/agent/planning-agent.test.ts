@@ -52,6 +52,7 @@ describe("PlanningAgent records a stated item and relation (#59)", () => {
     const first = model.requests[0];
     expect(first.systemInstructions).toMatch(/write_requirement once per statement/);
     expect(first.systemInstructions).toMatch(/call source_item with that item's phrase/);
+    expect(first.systemInstructions).toMatch(/call ingest_product_url straight away/);
     const tools = first.tools.map((t) => t.name);
     expect(tools).toEqual(expect.arrayContaining(["write_requirement", "source_item", "source_room"]));
     const writeTool = first.tools.find((t) => t.name === "write_requirement") as { parameters: { properties: Record<string, unknown>; required: string[] } };
