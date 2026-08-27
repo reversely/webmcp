@@ -77,12 +77,9 @@ where a merchant configures one, renders client-side after address entry.
 4. Dimensions come from Global Catalog `tech_specs` for some merchants and from nowhere in the API for
    others; extraction over description and page text stays necessary.
 
-## Not yet run
+## Steps 5 to 7
 
-- Step 5: Storefront GraphQL `unstable` cart `minEstimatedDeliveryDate` (needs each shop's public
-  Storefront token from its page bundle).
-- Step 6: Playwright run through a hosted checkout to the shipping step.
-- Step 7: weekly adapter probe.
+Run on 2026-08-27; see steps 11 and 12 below.
 
 ## Step 8 (2026-08-28): merchants discovered through Global Catalog, no hard-coded list
 
@@ -145,3 +142,77 @@ their shop GIDs (`variants[].seller.id`) in `filters.shops` on later searches. H
 The catalog's own `total_count` is roughly 370 to 400 per category query, so five pages cover about
 two thirds of each; the cursor runs to 1,000. Seller count grows almost linearly with pages because
 most sellers appear once.
+
+## Step 11 (2026-08-27): Storefront GraphQL `unstable` cart estimate (survey step 5)
+
+`npx tsx spikes/storefront-survey/cart-estimate.ts` against five Liquid sellers from `discovered.md`,
+chosen because their `create_checkout` option text carries a delivery duration or window (Modway,
+Tribesigns, Nathan James) or because they were in the hand-picked step 3 set (daals, Floyd). The
+script scrapes the token, takes the first available variant from `/products.json`, and runs
+`cartCreate` on `https://{shop}/api/unstable/graphql.json` with the 10003 address twice: once as
+`buyerIdentity.deliveryAddressPreferences` (the shape the spike plan names; `MailingAddressInput`,
+deprecated after API 2025-01) and once as `delivery.addresses` (`CartDeliveryAddressInput`, the
+current shape). Both shapes are still accepted on `unstable` and returned identical options.
+
+| Merchant | Token in page | Tokenless `{ shop { name } }` | Delivery options on the cart | `minEstimatedDeliveryDate` / `maxEstimatedDeliveryDate` | UCP checkout option text (step 8) |
+| --- | --- | --- | --- | --- | --- |
+| modway.com | `shopify-features` `accessToken` | answers | Standard $0 | null / null | `Standard (3 to 12 business days via Standard)` |
+| tribesigns.com | `shopify-features` `accessToken` | answers | Standard $0 | null / null | `Standard (Tuesday, September 1–Wednesday, September 2 via Standard)` |
+| www.daals.com | `shopify-features` `accessToken` | answers | cart created, 0 delivery groups | no option to read | `Standard Delivery (3 to 8 business days via USA-MULTIBOX)` |
+| floydhome.com | `shopify-features` `accessToken` | answers | cart created, 0 delivery groups | no option to read | `Total Shipping` $299 (step 3) |
+| nathanjames.com | `shopify-features` `accessToken` | answers | FedEx Ground ZS $0 | null / null | `Delivered in 8 to 11 days` |
+
+Findings:
+
+- Token: no seller embeds `storefrontAccessToken` in a theme bundle. Every Liquid storefront embeds
+  its public Storefront token as `accessToken` inside `<script id="shopify-features"
+  type="application/json">` in the homepage HTML (Shopify's own scripts read it). Headless fronts
+  embed theirs in the app bundle (burrow.com: `storefrontAccessToken` in the Next.js data). The
+  token turned out to be optional: the shop's own domain answers `/api/unstable/graphql.json` with
+  no `X-Shopify-Storefront-Access-Token` header.
+- Dates: `null` on every option for all five, including Tribesigns, whose checkout tool option
+  title carries a two-day window for the same address. The Storefront cart names the option
+  `Standard` and drops the window. The estimate fields depend on the merchant configuring
+  processing and transit times in Shopify admin, which these merchants have not done; their delivery
+  text comes from the shipping rate name.
+- Two of five carts (daals, Floyd) return no delivery group at all until the cart is taken to
+  checkout, so there is nothing to read even when the fields were populated.
+
+Consequence: source 2 in PRD Section 10 stays below the checkout tool, and PRD Section 10 now
+records the token location and the tokenless behaviour so #28 needs no bundle scraping.
+
+### Survey step 6 (Playwright checkout run): superseded
+
+Step 8 showed that `create_checkout` on `/api/ucp/mcp` returns the same shipping option text a
+shopper sees on the hosted checkout page, without a browser session and without the captcha and
+challenge scripts the step 3 checkout HTML carries. A Playwright run to the shipping step would
+measure bot protection on a path the planner does not use, so it was not run. The browser agent's
+`proceed_to_checkout` path (PRD Section 10 source 4) reads the option text off the page it is
+already on.
+
+## Step 12 (2026-08-27): weekly adapter probe (survey step 7)
+
+`npm run probe:weekly` runs `probe.sh` over the 293 sellers in `discovered.json`, writes
+`probes/{date}.txt`, prints a dated summary row, and diffs the loader column against
+`discovered.json` and against the previous dated file. `probe.sh` gained three columns: `http`
+(homepage status), `loader` (the `shopify:webmcp_adapter_loaded` marker from step 9), and the
+`shopify-features` token, printed with its first four characters only.
+
+| Date | Run | Sellers probed | Homepage 200 | Liquid loader marker | Adapter CDN URL in server HTML | UCP 200 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-08-27 | parallel, 8 jobs (partial) | 293 | 25 | 25 | 0 | 286 |
+| 2026-08-27 | serial, after the 429 lifted (partial) | 293 | 16 | 15 | 0 | 15 |
+
+Both runs are partial. The first used eight parallel `probe.sh` processes; Shopify's edge answered
+HTTP 429 to every storefront GET after about 25 sellers and kept doing so for eight minutes (UCP
+`tools/list` POSTs were unaffected: 286 of 293 answered 200). The serial rerun started when
+floydhome.com answered 200 again, but 277 of 293 curls then failed with no HTTP status at all
+(`http=000`, including the UCP POST), so the block moved from 429 to a dropped connection. Over the
+homepages that did answer, every Liquid seller carried the loader marker and none carried the
+adapter CDN URL in server HTML, matching step 9; the one row that differs from `discovered.json`
+(bellamiacollections.com, loader true to false) is a shop whose HTML no longer references
+`cdn.shopify.com` and whose UCP endpoint did not answer, so it reads as a migrated or offline shop,
+not a loader change. `probe.sh` now prints the homepage status and the weekly diff only counts rows
+that answered 200; the run is serial with a one-second pause. Rerun from a quiet IP with
+`npm run probe:weekly`; it overwrites `probes/{date}.txt` and prints the row for this table.
+Cadence: weekly, next due 2026-09-03.

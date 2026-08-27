@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "demo:test": "playwright test",
-    "test:webmcp": "playwright test tests/webmcp.spec.ts"
+    "test:webmcp": "playwright test tests/webmcp.spec.ts",
+    "probe:weekly": "bash spikes/storefront-survey/probe-weekly.sh"
   },
   "dependencies": {
     "@gltf-transform/core": "^4.4.2",
