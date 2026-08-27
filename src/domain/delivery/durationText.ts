@@ -13,7 +13,9 @@
  * - A phrase whose verb is ship, dispatch, or send describes when the parcel leaves the merchant,
  *   not when it arrives, so `SHIPPING_BUFFER_BUSINESS_DAYS` is added to both ends of the window.
  *   A bare duration or one with a delivery verb is taken as the delivery window and gets no buffer.
- * - A single number ("within 5 days") gives a window whose earliest edge is today.
+ * - A single number bounded by "within" or "up to" ("within 5 days") gives a window whose earliest
+ *   edge is today; an unbounded single number ("3 business days") means that many days, so both
+ *   edges coincide.
  */
 import { addBusinessDays, addCalendarDays, parseIsoDate, toIsoDate } from "./dates";
 
@@ -47,7 +49,10 @@ const MONTH_NAME =
   "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|" +
   "oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\\.?";
 const MONTH_DAY = `(${MONTH_NAME})\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s*(\\d{4}))?`;
-const RANGE_SEPARATOR = "\\s*(?:-|–|—|to|through)\\s*";
+const WEEKDAY = "(?:(?:mon|tues?|wed(?:nes)?|thu(?:rs)?|fri|sat(?:ur)?|sun)(?:day)?\\.?,?\\s*)?";
+// A checkout option can read "Wednesday, September 2–Thursday, September 3"; the weekday after the
+// separator is optional noise, as is the one before the first date.
+const RANGE_SEPARATOR = "\\s*(?:-|–|—|to|through)\\s*" + WEEKDAY;
 
 const DATE_RANGE = new RegExp(`${MONTH_DAY}${RANGE_SEPARATOR}${MONTH_DAY}`, "i");
 const DATE_BY = new RegExp(`\\b(?:by|before)\\s+${MONTH_DAY}`, "i");
@@ -56,6 +61,7 @@ const DATE_SINGLE = new RegExp(MONTH_DAY, "i");
 const NUMBER = "(\\d+(?:\\.\\d+)?)";
 const DURATION = new RegExp(
   `(\\b(?:ships?|shipping|shipped|dispatch(?:es|ed)?|sen[dt])\\b[^.\\d]{0,40}?)?` +
+    `(\\b(?:within|up\\s+to)\\s+)?` +
     `${NUMBER}(?:${RANGE_SEPARATOR}${NUMBER})?\\s*` +
     `(business\\s+days?|working\\s+days?|days?|weeks?|hours?|hrs?)\\b`,
   "i"
@@ -117,9 +123,9 @@ function addDays(iso: string, days: number, unit: DurationUnit): string {
 function parseDuration(text: string, today: string): ArrivalWindow | null {
   const match = DURATION.exec(text);
   if (!match) return null;
-  const [matched, shipVerb, first, second, unitText] = match;
+  const [matched, shipVerb, upperBoundOnly, first, second, unitText] = match;
   const max = toDays(Number(second ?? first), unitText);
-  const min = second === undefined ? 0 : toDays(Number(first), unitText).days;
+  const min = second !== undefined ? toDays(Number(first), unitText).days : upperBoundOnly ? 0 : max.days;
   const buffer = shipVerb ? SHIPPING_BUFFER_BUSINESS_DAYS : 0;
   const duration: ParsedDuration = {
     min_days: min,

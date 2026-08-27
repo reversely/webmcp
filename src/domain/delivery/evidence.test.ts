@@ -143,3 +143,28 @@ describe("rankDeliveryConfidence", () => {
     expect(rankDeliveryConfidence(null)).toBe(1);
   });
 });
+
+describe("checkout option titles from the storefront survey", () => {
+  const ctx = { requiredBy: "2026-09-15", today: "2026-08-28" };
+  const parse = (text: string) => normalizeDeliveryEvidence({ kind: "duration_text", source: "shipping_policy", text }, ctx);
+
+  it("keeps both ends of a weekday-prefixed en-dash range", () => {
+    const r = parse("Standard (Wednesday, September 2–Thursday, September 3 via Standard)");
+    expect([r.status, r.evidence.arrival_min, r.evidence.arrival_max]).toEqual(["confirmed", "2026-09-02", "2026-09-03"]);
+    const e = parse("Economy (Friday, September 4–Thursday, September 10 via Economy)");
+    expect([e.status, e.evidence.arrival_min, e.evidence.arrival_max]).toEqual(["confirmed", "2026-09-04", "2026-09-10"]);
+  });
+
+  it("treats a bare single duration as that many days, and a within-bound as up to that many", () => {
+    const r = parse("Ground Advantage (3 business days via GroundAdvantage)");
+    expect([r.status, r.evidence.arrival_min, r.evidence.arrival_max]).toEqual(["likely", "2026-09-02", "2026-09-02"]);
+    const w = parse("Delivered within 5 business days");
+    expect([w.evidence.arrival_min, w.evidence.arrival_max]).toEqual(["2026-08-28", "2026-09-04"]);
+  });
+
+  it("parses the remaining survey phrasings", () => {
+    expect(parse("Delivered in 8 to 11 days").status).toBe("likely");
+    expect(parse("Standard (3 to 5 business days via Standard)").evidence.arrival_max).toBe("2026-09-04");
+    expect(parse("Standard Fast Shipping (Ships in 1 business day via Standard Fast Shipping)").evidence.arrival_max).toBe("2026-09-02");
+  });
+});
