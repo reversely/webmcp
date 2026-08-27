@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { KINDS, type Candidate, type Kind, type Product } from "../../../../domain/types";
 import { formatMoney } from "../../../../domain/money";
 import { dimensionText } from "../components/product-card";
@@ -9,17 +9,36 @@ type Filter = "all" | "grounded" | "visual_only";
 const MODEL_TAG: Record<Product["model_status"], string> = { no_model: "", queued: "blue", generating: "blue", ready: "green", proxy: "", failed: "red" };
 const DELIVERY_TAG: Record<NonNullable<Candidate["delivery_status"]>, string> = { confirmed: "green", likely: "", unknown: "", fail: "red" };
 
-const KIND_LABEL: Record<Kind, string> = { seating: "seating", table: "table", storage: "storage", soft_floor: "soft floor", bed: "bed", lighting: "lighting", decor: "decor", other: "other" };
+import { KIND_LABEL } from "../components/item-panel";
+
+const POLL_MS = 4000;
 
 /**
  * Stage 4 (PRD 20): the working table over the project's Product rows (tables.md). Each row shows
  * the item the product answers to in the project's own words and its rendering kind; the kind is
- * editable and saves through PUT /candidates/:id.
+ * editable and saves through PUT /candidates/:id. Polls the snapshot so an item renamed, re-kinded,
+ * or swapped on the plan (#48) shows here on the next poll.
  */
-export function CatalogTable({ projectId, products, candidates: initial }: { projectId: string; products: Product[]; candidates: Candidate[] }) {
+export function CatalogTable({ projectId, products: initialProducts, candidates: initial }: { projectId: string; products: Product[]; candidates: Candidate[] }) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [products, setProducts] = useState(initialProducts);
   const [candidates, setCandidates] = useState(initial);
+  useEffect(() => {
+    const refresh = async () => {
+      const res = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
+      if (!res.ok) return;
+      const snap = (await res.json()) as { products: Product[]; candidates: Candidate[] };
+      setProducts(snap.products);
+      setCandidates(snap.candidates);
+    };
+    const t = setInterval(refresh, POLL_MS);
+    window.addEventListener("project:changed", refresh);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("project:changed", refresh);
+    };
+  }, [projectId]);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const byProduct = useMemo(() => new Map(candidates.map((c) => [c.product_id, c])), [candidates]);

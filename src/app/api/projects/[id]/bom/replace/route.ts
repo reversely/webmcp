@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { appState, snapshot } from "../../../../../../server/state";
 import { NotFoundError, VersionMismatchError, replaceBomItem } from "../../../../../../domain/bom";
+import { withSpanSync } from "../../../../../../server/trace";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -19,12 +20,15 @@ export async function POST(request: Request, { params }: Params) {
   }
   try {
     const project = s.store.getProject(id);
-    replaceBomItem(s.store, {
-      projectId: id,
-      expectedVersion: project.version,
-      oldItemId: body.existingBomItemId,
-      newProductId: body.replacementProductId,
-      actor: body.actor?.trim() || "member"
+    withSpanSync(id, { kind: "domain", name: "replace_bom_item", prd_ref: "PRD 8.5", input: { old_item_id: body.existingBomItemId, new_product_id: body.replacementProductId, expected_version: project.version } }, (span) => {
+      const result = replaceBomItem(s.store, {
+        projectId: id,
+        expectedVersion: project.version,
+        oldItemId: body.existingBomItemId!,
+        newProductId: body.replacementProductId!,
+        actor: body.actor?.trim() || "member"
+      });
+      span.setOutput({ new_item_id: result.new_item_id, decision_id: result.decision_id, version: result.version, budget: result.budget });
     });
     return NextResponse.json(snapshot(id));
   } catch (e) {

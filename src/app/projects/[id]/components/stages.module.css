@@ -73,3 +73,8 @@
 .dotDone { background: var(--line); border-color: var(--line); }
 .dotCurrent { background: var(--signature); border-color: var(--signature); box-shadow: 0 0 0 3px var(--signature-soft); }
 .stageName { color: var(--signature); font-weight: 500; }
+
+/* The plan with the selected item's panel beside it (#48); the panel stacks under the plan on narrow screens. */
+.planWithPanel { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
+.itemPanel { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: var(--card); font-size: 13px; }
+@media (max-width: 1100px) { .planWithPanel { grid-template-columns: minmax(0, 1fr); } }

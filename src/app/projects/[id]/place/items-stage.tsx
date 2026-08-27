@@ -4,6 +4,7 @@ import { ruleSentence, type LayoutCheck } from "../../../../domain/geometry";
 import type { Space } from "../../../../domain/types";
 import { formatFeetInches } from "../../../../domain/types";
 import type { ProjectSnapshot } from "../../../../server/state";
+import { ItemPanel } from "../components/item-panel";
 import { ModelStageStrip } from "../components/model-stage-strip";
 import { PlanView, type PlanItem } from "../components/plan-view";
 import { ProductSearch, requiredItemNames } from "../components/product-search";
@@ -33,6 +34,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
   const [geometry, setGeometry] = useState<LayoutCheck | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<"2d" | "3d">("2d");
+  const [swapFor, setSwapFor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const space = snap.space as Space;
 
@@ -80,8 +82,8 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
     }));
   const tray = lines.filter((b) => !positions[b.id]);
   const selected = placed.find((p) => p.id === selectedId) ?? null;
+  const selectedLine = selected ? lines.find((b) => b.id === selected.id) ?? null : null;
   const productOf = new Map(lines.map((b) => [b.id, b.product!]));
-  const selectedProduct = selected ? productOf.get(selected.id) : undefined;
   const jobFor = (productId: string) => snap.model_jobs?.[productId];
   const roomItems: RoomItem[] = placed.map((p) => {
     const product = productOf.get(p.id)!;
@@ -122,18 +124,19 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
     setPositions(next);
     save(next);
   }
-  async function remove() {
-    if (!selectedId) return;
-    const res = await fetch(`/api/projects/${projectId}/bom`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bomItemId: selectedId, action: "remove" }) });
-    if (!res.ok) {
-      setError(`Removing the item failed (${res.status}).`);
-      return;
-    }
-    const rest = { ...positions };
-    delete rest[selectedId];
+  /** The removed line's placement is gone from the server; the geometry check re-runs over the rest. */
+  async function removed(next: ProjectSnapshot) {
+    adopt(next);
     setSelectedId(null);
-    window.dispatchEvent(new Event("project:changed"));
-    await save(rest);
+    setSwapFor(null);
+    const res = await fetch(`/api/projects/${projectId}/placements`, { cache: "no-store" });
+    if (res.ok) setGeometry(((await res.json()) as { geometry: LayoutCheck | null }).geometry);
+  }
+  /** After a swap the replacement line carries the old placement; select it so the panel follows. */
+  function swapped(next: ProjectSnapshot, newItemId: string | null) {
+    adopt(next);
+    setSwapFor(null);
+    if (newItemId) setSelectedId(newItemId);
   }
 
   const insideCount = placed.filter((p) => geometry?.inside[p.id] !== false).length;
@@ -145,7 +148,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
       <h1 className="page-title">Items</h1>
       <p className="page-summary">Source products from the catalog, then place them in the plan. Drag to move; the geometry check runs after every drop.</p>
       <div className={css.splitPlan}>
-        <ProductSearch projectId={projectId} items={itemNames} budget={snap.budget} onAdded={(s) => adopt(s)} />
+        <ProductSearch projectId={projectId} items={itemNames} budget={snap.budget} onAdded={(s) => adopt(s)} swap={swapFor && selectedLine?.id === swapFor ? { bomItemId: swapFor, name: selectedLine.category, onSwapped: swapped, onCancel: () => setSwapFor(null) } : null} />
         <section className="surface" aria-label="Plan">
           <div className={css.spread}>
             <div>
@@ -168,30 +171,32 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
               </button>
             </div>
           </div>
-          <div className={css.row} style={{ margin: "12px 0", minHeight: 32 }}>
-            {selected ? (
-              <>
-                <span style={{ fontSize: 13, color: "var(--ink)", fontWeight: 500 }}>{selected.title}</span>
-                <span className={css.mm}>
-                  x {selected.placement.x_mm} mm, y {selected.placement.y_mm} mm, {selected.placement.rotation_deg}°
-                </span>
-                <button className="btn" type="button" style={{ height: 30, padding: "0 10px", fontSize: 13 }} onClick={rotate}>
-                  Rotate 90°
-                </button>
-                <button className="btn" type="button" style={{ height: 30, padding: "0 10px", fontSize: 13 }} onClick={remove}>
-                  Remove from project
-                </button>
-                {selectedProduct && <ModelStageStrip job={jobFor(selectedProduct.id)} productId={selectedProduct.id} projectId={projectId} status={selectedProduct.model_status} />}
-              </>
-            ) : (
-              <span className={css.note}>{placed.length === 0 ? "No items placed yet." : "Select an item to rotate or remove it. Hover an item to read clearances."}</span>
-            )}
-          </div>
-          <div className={css.canvas}>
-            {view === "2d" ? (
-              <PlanView space={space} items={placed} selectedId={selectedId} clearances={geometry?.clearances} rules={rules} maxHeight={520} onSelect={setSelectedId} onMove={move} onDrop={() => save(positions)} />
-            ) : (
-              <Room3DView space={space} items={roomItems} selectedId={selectedId} onSelect={setSelectedId} />
+          {!selected && (
+            <div className={css.row} style={{ margin: "12px 0", minHeight: 32 }}>
+              <span className={css.note}>{placed.length === 0 ? "No items placed yet." : "Select an item to rename it, change its kind, swap its product, or remove it. Hover an item to read clearances."}</span>
+            </div>
+          )}
+          <div className={selected ? css.planWithPanel : undefined}>
+            <div className={css.canvas}>
+              {view === "2d" ? (
+                <PlanView space={space} items={placed} selectedId={selectedId} clearances={geometry?.clearances} rules={rules} maxHeight={520} onSelect={setSelectedId} onMove={move} onDrop={() => save(positions)} />
+              ) : (
+                <Room3DView space={space} items={roomItems} selectedId={selectedId} onSelect={setSelectedId} />
+              )}
+            </div>
+            {selected && selectedLine && (
+              <ItemPanel
+                key={selectedLine.id}
+                projectId={projectId}
+                item={selectedLine}
+                placement={selected.placement}
+                job={jobFor(selectedLine.product_id)}
+                swapping={swapFor === selectedLine.id}
+                onChanged={(s) => adopt(s)}
+                onRotate={rotate}
+                onSwap={() => setSwapFor((cur) => (cur === selectedLine.id ? null : selectedLine.id))}
+                onRemoved={removed}
+              />
             )}
           </div>
           <div className={css.status} style={{ marginTop: 12 }} aria-label="Geometry">

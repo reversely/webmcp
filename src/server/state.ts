@@ -5,12 +5,12 @@
  */
 import { catalogClient, GLOBAL_CATALOG_ENDPOINT, type CatalogCallHook, type CatalogClient } from "../commerce";
 import { createInMemoryStore, type AgentRunStore } from "../domain/agent-run";
-import { calculateBudget, regenerateBom, ProjectStore, type Budget, type DomainEvent } from "../domain/bom";
+import { calculateBudget, regenerateBom, renameItem, renameItemInRule, replaceBomItem, ProjectStore, type Budget, type DomainEvent, type RenameResult, type ReplaceResult } from "../domain/bom";
 import { startModelGeneration } from "../domain/ingestion/hooks";
 import { normalizeCatalogProduct } from "../domain/products/normalize";
 import { checkLayout, type LayoutCheck, type LayoutItem } from "../domain/geometry";
 import { recordIssue, withSpan } from "./trace";
-import { readLayoutRule, type Candidate, type Category, type DeliveryAddress, type Kind, type LayoutRule, type Member, type Placement, type Product, type Project, type Requirement, type Space } from "../domain/types";
+import { itemKey, readLayoutRule, readRequiredItem, type Candidate, type Category, type DeliveryAddress, type Kind, type LayoutRule, type Member, type Placement, type Product, type Project, type Requirement, type Space } from "../domain/types";
 
 export type ArtifactKind = "sourcing" | "ranking" | "question" | "spec" | "room_estimate";
 
@@ -257,11 +257,8 @@ export function snapshot(projectId: string): ProjectSnapshot {
  */
 export function addCatalogProduct(projectId: string, raw: unknown, category: Category, kind: Kind, merchant: string, sourceUrl: string) {
   const s = appState();
-  const fresh = normalizeCatalogProduct(raw, { merchant, sourceUrl });
   const added = s.store.mutate(() => {
-    const existing = s.store.products.get(fresh.id);
-    const product: Product = existing ? { ...fresh, glb_url: existing.glb_url, model_status: existing.model_status } : fresh;
-    s.store.products.set(product.id, product);
+    const product = upsertCatalogProduct(raw, merchant, sourceUrl);
     let candidate = [...s.store.candidates.values()].find((c) => c.project_id === projectId && c.product_id === product.id);
     if (!candidate) {
       candidate = {
@@ -285,6 +282,57 @@ export function addCatalogProduct(projectId: string, raw: unknown, category: Cat
   });
   startModelGeneration(added.product);
   return added;
+}
+
+/** Normalizes a catalog object into the global Product row, keeping the 3D fields of a row already ingested. */
+function upsertCatalogProduct(raw: unknown, merchant: string, sourceUrl: string): Product {
+  const s = appState();
+  const fresh = normalizeCatalogProduct(raw, { merchant, sourceUrl });
+  const existing = s.store.products.get(fresh.id);
+  const product: Product = existing ? { ...fresh, glb_url: existing.glb_url, model_status: existing.model_status } : fresh;
+  s.store.products.set(product.id, product);
+  return product;
+}
+
+/**
+ * Swaps one BOM line for a product chosen from catalog search results (#48): upserts the Product
+ * row, then runs the replacement transaction (PRD 8.5) at the project's current version, so the new
+ * line inherits the old line's phrase, kind, and placement.
+ */
+export function swapCatalogProduct(projectId: string, raw: unknown, oldItemId: string, merchant: string, sourceUrl: string, actor: string): ReplaceResult & { product: Product } {
+  const s = appState();
+  const swapped = s.store.mutate(() => {
+    const product = upsertCatalogProduct(raw, merchant, sourceUrl);
+    const result = replaceBomItem(s.store, { projectId, expectedVersion: s.store.getProject(projectId).version, oldItemId, newProductId: product.id, actor });
+    return { ...result, product };
+  });
+  startModelGeneration(swapped.product);
+  return swapped;
+}
+
+/**
+ * Renames an item across the project (#48): the BOM line and candidates through the domain
+ * operation, then the agreed `required_item` row that named it and every layout rule that refers
+ * to it, so the plan's rule marks and the search panel's item list follow the new phrase. The
+ * inferred kind and search query cached under the old phrase carry over to the new one.
+ */
+export function renameProjectItem(projectId: string, bomItemId: string, name: string): RenameResult {
+  const s = appState();
+  const result = renameItem(s.store, bomItemId, name);
+  const oldKey = itemKey(result.old_name);
+  for (const r of s.requirements.values()) {
+    if (r.project_id !== projectId) continue;
+    if (r.type === "required_item") {
+      const item = readRequiredItem(r.value_json);
+      if (item && itemKey(item.name) === oldKey) s.requirements.set(r.id, { ...r, value_json: { ...item, name: result.name } });
+    } else if (r.type === "layout_requirement") {
+      const rule = readLayoutRule(r.value_json);
+      if (rule) s.requirements.set(r.id, { ...r, value_json: renameItemInRule(rule, result.old_name, result.name) });
+    }
+  }
+  const guess = s.kinds.get(oldKey);
+  if (guess && !s.kinds.has(itemKey(result.name))) s.kinds.set(itemKey(result.name), guess);
+  return result;
 }
 
 export function pushMessage(projectId: string, message: Omit<ChatMessage, "id" | "at">): ChatMessage {

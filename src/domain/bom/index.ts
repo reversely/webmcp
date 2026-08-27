@@ -1,5 +1,7 @@
 export { calculateBudget } from "./budget";
 export type { Budget, DomainEvent, Emit } from "./events";
+export { renameItem, renameItemInRule, setItemKind } from "./identity";
+export type { RenameResult } from "./identity";
 export { addToBom, approveBomItem, removeFromBom } from "./items";
 export { regenerateBom } from "./regenerate";
 export type { RegenerateResult } from "./regenerate";

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculateBudget } from "./budget";
 import { PRICES, PROJECT_ID, candidate, demoStore, itemFor, placement, rows } from "./fixture";
+import { renameItem, renameItemInRule, setItemKind } from "./identity";
 import { addToBom, approveBomItem, removeFromBom } from "./items";
 import { regenerateBom } from "./regenerate";
 import { VersionMismatchError, replaceBomItem } from "./replace";
@@ -234,5 +235,62 @@ describe("replaceBomItem", () => {
     expect(result.new_item_id).toBe(cheap.id);
     expect(store.bomItems.size).toBe(count);
     expect(store.getBomItem(cheap.id).status).toBe("proposed");
+  });
+});
+
+describe("renameItem and setItemKind", () => {
+  it("renames the BOM item and every candidate under the old phrase, case-insensitively", () => {
+    const { store } = demoStore();
+    store.candidates.set("c_sofa_alt", candidate("c_sofa_alt", "side_table", "Sofa", "ranked"));
+    regenerateBom(store, PROJECT_ID);
+    const sofa = itemFor(store, "sofa");
+    const before = store.getProject(PROJECT_ID).version;
+    const result = renameItem(store, sofa.id, "  reading sofa ");
+    expect(result).toMatchObject({ old_name: "sofa", name: "reading sofa" });
+    expect(itemFor(store, "sofa").category).toBe("reading sofa");
+    expect(store.candidates.get("c_sofa")?.category).toBe("reading sofa");
+    expect(store.candidates.get("c_sofa_alt")?.category).toBe("reading sofa");
+    expect(store.candidates.get("c_rug")?.category).toBe("rug");
+    expect(itemFor(store, "rug").category).toBe("rug");
+    expect(store.getProject(PROJECT_ID).version).toBe(before + 1);
+  });
+
+  it("rejects an empty name and leaves the rows alone", () => {
+    const { store } = demoStore();
+    regenerateBom(store, PROJECT_ID);
+    const before = rows(store);
+    expect(() => renameItem(store, itemFor(store, "sofa").id, "   ")).toThrow(/name/);
+    expect(rows(store)).toEqual(before);
+  });
+
+  it("changes the kind on the item and the candidate carrying its product", () => {
+    const { store } = demoStore();
+    regenerateBom(store, PROJECT_ID);
+    const ottoman = itemFor(store, "ottoman");
+    expect(setItemKind(store, ottoman.id, "seating").kind).toBe("seating");
+    expect(store.candidates.get("c_ottoman")?.kind).toBe("seating");
+    expect(store.candidates.get("c_sofa")?.kind).toBe("seating");
+    expect(itemFor(store, "rug").kind).toBe("soft_floor");
+  });
+
+  it("rewrites a rule's subject and objects that name the old phrase", () => {
+    const rule = { relation: "under" as const, subject: "Big Rug", objects: ["sofa", "coffee table"], distance_mm: 0 };
+    expect(renameItemInRule(rule, "big rug", "area rug")).toEqual({ ...rule, subject: "area rug" });
+    expect(renameItemInRule(rule, "sofa", "couch")).toEqual({ ...rule, objects: ["couch", "coffee table"] });
+    const text = { relation: "text" as const, text: "keep the sofa away from the window" };
+    expect(renameItemInRule(text, "sofa", "couch")).toBe(text);
+  });
+});
+
+describe("removeFromBom placements", () => {
+  it("drops the removed item's placement and keeps the others", () => {
+    const { store } = demoStore();
+    regenerateBom(store, PROJECT_ID);
+    const rug = itemFor(store, "rug");
+    store.placements.set("pl_rug", placement("pl_rug", rug.id));
+    store.placements.set("pl_sofa", placement("pl_sofa", itemFor(store, "sofa").id));
+    removeFromBom(store, rug.id);
+    expect(store.placements.has("pl_rug")).toBe(false);
+    expect(store.placements.has("pl_sofa")).toBe(true);
   });
 });

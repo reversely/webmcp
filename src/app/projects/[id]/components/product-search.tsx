@@ -21,6 +21,9 @@ export function requiredItemNames(requirements: Pick<Requirement, "type" | "stat
 }
 
 type SearchResult = { raw: unknown; normalized: Product | null; seller: { domain: string; name: string } };
+
+/** Scopes the panel to one BOM line (#48): the search runs for that item and an add replaces the line. */
+export type SwapTarget = { bomItemId: string; name: string; onSwapped: (snapshot: ProjectSnapshot, newItemId: string | null) => void; onCancel: () => void };
 type ShipsTo = { country: string; region?: string; postal_code?: string };
 
 /** The remaining budget in whole dollars as the input's default, or empty once the budget is spent. */
@@ -36,12 +39,12 @@ function remainingDollars(budget: Budget | undefined): string {
  * price cap defaults to the project's remaining budget until the person edits it. "Add to project"
  * posts the raw catalog object with the item's name, then tells the frame (BOM rail) to refresh.
  */
-export function ProductSearch({ projectId, items, budget, onAdded }: { projectId: string; items: string[]; budget?: Budget; onAdded?: (snapshot: ProjectSnapshot) => void }) {
+export function ProductSearch({ projectId, items, budget, onAdded, swap = null }: { projectId: string; items: string[]; budget?: Budget; onAdded?: (snapshot: ProjectSnapshot) => void; swap?: SwapTarget | null }) {
   const [query, setQuery] = useState("");
   const [choice, setChoice] = useState<string>(items[0] ?? OTHER);
   const [otherName, setOtherName] = useState("");
   const selected = items.includes(choice) ? choice : OTHER;
-  const itemName = selected === OTHER ? otherName.trim() : selected;
+  const itemName = swap ? swap.name : selected === OTHER ? otherName.trim() : selected;
   const [maxPriceEdit, setMaxPriceEdit] = useState<string | null>(null);
   const maxPrice = maxPriceEdit ?? remainingDollars(budget);
   const [shipsTo, setShipsTo] = useState<ShipsTo | null>(null);
@@ -85,13 +88,16 @@ export function ProductSearch({ projectId, items, budget, onAdded }: { projectId
       const res = await fetch(`/api/projects/${projectId}/products`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ catalog: r.raw, category })
+        body: JSON.stringify(swap ? { catalog: r.raw, replace_bom_item_id: swap.bomItemId } : { catalog: r.raw, category })
       });
       const body = (await res.json()) as ProjectSnapshot & { error?: string };
       if (!res.ok) throw new Error(body.error ?? `Add failed (${res.status})`);
       setAdded((prev) => new Set(prev).add(key));
       window.dispatchEvent(new Event("project:changed"));
-      onAdded?.(body);
+      if (swap) {
+        const newItem = r.normalized ? body.bom.find((b) => b.product_id === r.normalized!.id && b.status !== "removed") : undefined;
+        swap.onSwapped(body, newItem?.id ?? null);
+      } else onAdded?.(body);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -100,9 +106,17 @@ export function ProductSearch({ projectId, items, budget, onAdded }: { projectId
   }
 
   return (
-    <section className="surface" aria-label="Source products" data-testid="product-search">
+    <section className="surface" aria-label="Source products" data-testid="product-search" data-swap-for={swap?.bomItemId}>
       <div className="eyebrow">Source products</div>
-      <h2 className="surface-title">Search the catalog</h2>
+      <h2 className="surface-title">{swap ? `Swap the product for ${swap.name}` : "Search the catalog"}</h2>
+      {swap && (
+        <div className={css.row} style={{ marginBottom: 12 }}>
+          <span className={css.note}>Adding a result replaces the selected line and keeps its place in the room.</span>
+          <button className="btn" type="button" style={{ height: 30, padding: "0 10px", fontSize: 13 }} onClick={swap.onCancel}>
+            Cancel
+          </button>
+        </div>
+      )}
       <form
         className={css.stack}
         onSubmit={(e) => {
@@ -113,21 +127,25 @@ export function ProductSearch({ projectId, items, budget, onAdded }: { projectId
         <div className={css.row}>
           <div className="field" style={{ flex: 1 }}>
             <label htmlFor="search-cat">Item</label>
-            <select id="search-cat" className="select" value={selected} onChange={(e) => setChoice(e.target.value)}>
-              {items.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
-              ))}
-              <option value={OTHER}>Something else</option>
-            </select>
+            {swap ? (
+              <input id="search-cat" className="input" value={swap.name} readOnly />
+            ) : (
+              <select id="search-cat" className="select" value={selected} onChange={(e) => setChoice(e.target.value)}>
+                {items.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+                <option value={OTHER}>Something else</option>
+              </select>
+            )}
           </div>
           <div className="field" style={{ width: 120 }}>
             <label htmlFor="search-max">Max price (USD)</label>
             <input id="search-max" className="input" type="number" min={0} inputMode="numeric" value={maxPrice} onChange={(e) => setMaxPriceEdit(e.target.value)} />
           </div>
         </div>
-        {selected === OTHER && (
+        {!swap && selected === OTHER && (
           <div className="field">
             <label htmlFor="search-item">What is it? (your words)</label>
             <input id="search-item" className="input" value={otherName} onChange={(e) => setOtherName(e.target.value)} placeholder="Item name" />
@@ -154,7 +172,7 @@ export function ProductSearch({ projectId, items, budget, onAdded }: { projectId
         <div className={css.results} style={{ marginTop: 16 }}>
           {results.map((r, i) => {
             const key = r.normalized?.id ?? String(i);
-            return r.normalized ? <ProductCard key={key} product={r.normalized} seller={r.seller.name} busy={adding === key} added={added.has(key)} onAdd={() => add(r)} /> : null;
+            return r.normalized ? <ProductCard key={key} product={r.normalized} seller={r.seller.name} busy={adding === key} added={!swap && added.has(key)} onAdd={() => add(r)} /> : null;
           })}
         </div>
       )}
