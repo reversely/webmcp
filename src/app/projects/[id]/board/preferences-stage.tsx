@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import type { Editor, TLEditorSnapshot } from "tldraw";
 import { getSnapshot } from "tldraw";
 import { collectBoardItems, compileBoard, type CompiledSpec, type RequiredItem } from "./compileBoard";
+import { latestArtifact, type ArtifactMessage } from "../artifacts";
+import type { SpecData } from "../artifacts/types";
 import styles from "./board.module.css";
 
 // tldraw reads window at import time, so the canvas is loaded on the client only.
@@ -46,6 +48,58 @@ function toForm(spec: CompiledSpec): Form {
 
 const splitList = (s: string) => s.split(",").map((c) => c.trim()).filter(Boolean);
 const MM_PER_FT = 304.8;
+const KNOWN_ITEMS = new Set<string>(ITEM_LABELS.map(([item]) => item));
+
+/** Reads a PRD 16 ProjectSpec from the compile response, which may wrap it as { spec } or return it bare. */
+function readSpec(json: unknown): SpecData | null {
+  if (!json || typeof json !== "object") return null;
+  const o = json as { spec?: unknown };
+  const candidate = "spec" in o ? o.spec : json;
+  if (!candidate || typeof candidate !== "object") return null;
+  const s = candidate as SpecData;
+  return s.room !== undefined || s.budget !== undefined || s.required_items !== undefined ? s : null;
+}
+
+async function compileWithAgent(projectId: string, boardText: string, swatches: string[]): Promise<SpecData | null> {
+  try {
+    const res = await fetch(`/api/projects/${projectId}/compile`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ boardText, swatches }) });
+    if (!res.ok) return null;
+    return readSpec(await res.json());
+  } catch {
+    return null;
+  }
+}
+
+async function latestSpecArtifact(projectId: string): Promise<SpecData | null> {
+  try {
+    const res = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const snap = (await res.json()) as { messages?: ArtifactMessage[] };
+    return latestArtifact(snap.messages, "spec")?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** The agent's spec wins on every field it states; the rule-based result fills the rest. */
+function mergeSpec(local: CompiledSpec, spec: SpecData): CompiledSpec {
+  const items = (spec.required_items ?? []).filter((i): i is RequiredItem => KNOWN_ITEMS.has(i));
+  return {
+    room: spec.room && spec.room.width_ft > 0 && spec.room.length_ft > 0 ? { width_ft: spec.room.width_ft, length_ft: spec.room.length_ft } : local.room,
+    room_name: local.room_name,
+    budget: spec.budget && spec.budget.maximum > 0 ? { maximum: spec.budget.maximum, currency: "USD" } : local.budget,
+    required_by: spec.required_by ?? local.required_by,
+    required_items: spec.required_items ? items : local.required_items,
+    visual_direction: spec.visual_direction
+      ? { base_colors: spec.visual_direction.base_colors ?? [], accent_colors: spec.visual_direction.accent_colors ?? [] }
+      : local.visual_direction,
+    layout_requirements: spec.layout_requirements
+      ? spec.layout_requirements
+          .filter((l) => l.type === "rug_encompasses_group")
+          .map((l) => ({ type: "rug_encompasses_group" as const, items: l.items.filter((i): i is RequiredItem => KNOWN_ITEMS.has(i)) }))
+      : local.layout_requirements
+  };
+}
 
 export function PreferencesStage({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -56,6 +110,7 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
   const [form, setForm] = useState<Form | null>(null);
   const [missing, setMissing] = useState<string[]>([]);
   const [approving, setApproving] = useState(false);
+  const [compiling, setCompiling] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -79,12 +134,28 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
     }, 800);
   }
 
-  function compile() {
+  /**
+   * "Create plan from board": the PlanningAgent compiles the board (POST compile) when it can;
+   * otherwise the newest spec artifact in the chat; otherwise the rule-based compiler. The
+   * board's own room name survives either way because ProjectSpec has no field for it.
+   */
+  async function compile() {
     const editor = editorRef.current;
     if (!editor) return;
-    const spec = compileBoard(collectBoardItems(getSnapshot(editor.store)));
-    setForm(toForm(spec));
-    setMissing([!spec.room && "room size", !spec.budget && "budget", !spec.required_by && "date"].filter((m): m is string => !!m));
+    setCompiling(true);
+    const items = collectBoardItems(getSnapshot(editor.store));
+    const local = compileBoard(items);
+    const boardText = items.filter((i) => i.kind === "text").map((i) => i.text).join("\n");
+    const swatches = items.filter((i) => i.kind === "swatch").map((i) => i.colour);
+    try {
+      let spec = await compileWithAgent(projectId, boardText, swatches);
+      if (!spec) spec = await latestSpecArtifact(projectId);
+      const merged = spec ? mergeSpec(local, spec) : local;
+      setForm(toForm(merged));
+      setMissing([!merged.room && "room size", !merged.budget && "budget", !merged.required_by && "date"].filter((m): m is string => !!m));
+    } finally {
+      setCompiling(false);
+    }
   }
 
   const width = form ? parseFloat(form.width_ft) : NaN;
@@ -151,14 +222,15 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
           {!form && (
             <>
               <p>The plan reads the board's notes and swatches for room size, budget, date, required items, and colours. You can edit it before approving.</p>
-              <button className="btn primary focal" type="button" onClick={compile} disabled={!board.loaded}>
-                Create plan from board
+              <button className="btn primary focal" type="button" onClick={compile} disabled={!board.loaded || compiling} data-testid="create-plan">
+                {compiling ? "Reading the board" : "Create plan from board"}
               </button>
             </>
           )}
           {form && (
             <form
               className={styles.plan}
+              data-testid="spec-form"
               onSubmit={(e) => {
                 e.preventDefault();
                 approve();
@@ -213,10 +285,10 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
                 The rug sits under the sofa and coffee table
               </label>
               <div className={styles.actions}>
-                <button className="btn primary focal" type="submit" disabled={!canApprove}>
+                <button className="btn primary focal" type="submit" disabled={!canApprove} data-testid="approve-plan">
                   Approve
                 </button>
-                <button className="btn" type="button" onClick={compile}>
+                <button className="btn" type="button" onClick={compile} disabled={compiling}>
                   Read the board again
                 </button>
               </div>

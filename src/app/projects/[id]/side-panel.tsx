@@ -1,22 +1,33 @@
 "use client";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { ProjectSnapshot } from "../../../server/state";
 import { formatFeetInches } from "../../../domain/types";
+import { ArtifactView, type ArtifactMessage } from "./artifacts";
+import { useAnimatedNumber } from "./artifacts/animated-number";
+
+type Snapshot = Omit<ProjectSnapshot, "messages"> & { messages: ArtifactMessage[] };
+
+const dollars = (c: number) => `$${(c / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
 /**
  * Right column from stage 2 onward: the BOM and budget rail, then the project chat. Polls the
- * snapshot every few seconds until realtime (#18) replaces it.
+ * snapshot every few seconds until realtime (#18) replaces it. Messages carry optional artifacts
+ * (PRD 9.2, 13.1, 5.2) that render as cards in the stream.
  */
 export function SidePanel({ projectId, children }: { projectId: string; children: ReactNode }) {
   const pathname = usePathname();
   const wide = pathname.endsWith("/board");
-  const [snap, setSnap] = useState<ProjectSnapshot | null>(null);
+  const [snap, setSnap] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const logRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const focusedQuestion = useRef<string | null>(null);
 
   async function refresh() {
     const res = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
-    if (res.ok) setSnap((await res.json()) as ProjectSnapshot);
+    if (res.ok) setSnap((await res.json()) as Snapshot);
   }
   useEffect(() => {
     refresh();
@@ -30,28 +41,57 @@ export function SidePanel({ projectId, children }: { projectId: string; children
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  async function send() {
-    if (!draft.trim()) return;
-    const text = draft;
+  async function send(text: string) {
+    const body = text.trim();
+    if (!body || sending) return;
+    setSending(true);
     setDraft("");
-    await fetch(`/api/projects/${projectId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ author: "Zach", text }) });
-    refresh();
+    try {
+      await fetch(`/api/projects/${projectId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ author: "Zach", text: body }) });
+      await refresh();
+    } finally {
+      setSending(false);
+    }
   }
 
-  const dollars = (c: number) => `$${(c / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+  const messages = snap?.messages ?? [];
+  const last = messages[messages.length - 1];
+
+  // Auto-scroll to the newest message, and to an artifact that changed in place.
+  const lastKey = last ? `${last.id}:${JSON.stringify(last.artifact ?? null).length}` : "";
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [lastKey]);
+
+  // A new question artifact focuses the input once (PRD 5.2: the next message answers it).
+  useEffect(() => {
+    const q = last?.artifact?.kind === "question" ? last.artifact.id : null;
+    if (q && q !== focusedQuestion.current) {
+      focusedQuestion.current = q;
+      inputRef.current?.focus();
+    }
+  }, [last]);
+
+  const committed = useAnimatedNumber(snap ? snap.budget.committed_cents : null);
   const lines = snap?.bom.filter((b) => b.status !== "removed") ?? [];
+  const over = snap?.budget.state === "over";
 
   return (
     <div className={`frame${wide ? " wide" : ""}`}>
       <main className="centre">{children}</main>
       {!wide && (
         <aside className="side">
-          <section className="rail" aria-label="Bill of materials">
+          <section className="rail" aria-label="Bill of materials" data-testid="bom-rail">
             <div className="eyebrow">Budget</div>
-            <div className={`stat${snap?.budget.state === "over" ? " over" : ""}`}>
-              {snap ? `${dollars(snap.budget.committed_cents)} / ${dollars(snap.budget.budget_cents)}` : "—"}
+            <div className={`stat${over ? " over" : ""}`} data-testid="budget-stat" data-state={snap?.budget.state}>
+              {snap && committed !== null ? `${dollars(committed)} / ${dollars(snap.budget.budget_cents)}` : "—"}
             </div>
-            {snap?.budget.state === "over" && <span className="tag red">{dollars(snap.budget.overage_cents)} over</span>}
+            {over && (
+              <span className="tag red appear" key={snap!.budget.overage_cents}>
+                {dollars(snap!.budget.overage_cents)} over
+              </span>
+            )}
             <div className="rail-lines">
               {lines.length === 0 && <div className="empty">No items in the BOM yet.</div>}
               {lines.map((b) => (
@@ -75,24 +115,33 @@ export function SidePanel({ projectId, children }: { projectId: string; children
             <div className="rail" style={{ borderBottom: "1px solid var(--line)" }}>
               <div className="eyebrow">Chat</div>
             </div>
-            <div className="chat-log">
-              {(snap?.messages ?? []).map((m) => (
-                <div key={m.id} className={`msg ${m.role}`}>
-                  <span className="who">{m.author}</span>
-                  {m.text}
-                </div>
-              ))}
-              {snap && snap.messages.length === 0 && <div className="empty">Ask the planner for a room, or paste a product URL.</div>}
+            <div className="chat-log" ref={logRef} data-testid="chat-log">
+              {messages.map((m) => {
+                if (m.artifact && (m.artifact.kind === "sourcing" || m.artifact.kind === "ranking" || m.artifact.kind === "question")) {
+                  return (
+                    <div key={m.id} className="msg-artifact" data-message-id={m.id}>
+                      <ArtifactView artifact={m.artifact} title={m.text} products={snap?.products ?? []} onSend={send} sending={sending} />
+                    </div>
+                  );
+                }
+                return (
+                  <div key={m.id} className={`msg ${m.role}`} data-message-id={m.id}>
+                    {m.role === "user" && <span className="who">{m.author}</span>}
+                    {m.text}
+                  </div>
+                );
+              })}
+              {snap && messages.length === 0 && <div className="empty">Ask the planner for a room, or paste a product URL.</div>}
             </div>
             <form
               className="chat-input"
               onSubmit={(e) => {
                 e.preventDefault();
-                send();
+                send(draft);
               }}
             >
-              <input className="input" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Message the planner" aria-label="Message" />
-              <button className="btn primary" type="submit">
+              <input ref={inputRef} className="input" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Message the planner" aria-label="Message" data-testid="chat-input" />
+              <button className="btn primary" type="submit" data-testid="chat-send" disabled={sending}>
                 Send
               </button>
             </form>

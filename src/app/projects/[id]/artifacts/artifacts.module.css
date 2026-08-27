@@ -1,0 +1,66 @@
+/* Chat-stream artifacts (PRD 9.2, 13.1). The card is a white surface at the app radius; values
+   stay quiet and colour marks only the selected row and a failure. */
+
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+  max-width: 100%;
+  min-width: 0;
+}
+.title { font-size: 15px; font-weight: 500; color: var(--ink); line-height: 1.35; }
+.sub { font-size: 12px; color: var(--ink-3); line-height: 1.5; }
+
+/* Sourcing funnel rows: label and status on the first line, the count funnel wraps beneath so it
+   stays whole at chat width. */
+.rows { display: grid; gap: 8px; }
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px 10px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--ink);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.row:last-child { border-bottom: 0; padding-bottom: 0; }
+.row .label { font-weight: 500; }
+.row .status { justify-self: end; }
+.row .funnel { grid-column: 1 / 3; color: var(--ink-2); font-variant-numeric: tabular-nums; line-height: 1.5; }
+.row .product { grid-column: 1 / 3; color: var(--ink-3); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foot { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 8px; font-variant-numeric: tabular-nums; }
+.foot strong { color: var(--ink); font-weight: 500; }
+
+/* Ranking working table */
+.tableWrap { overflow-x: auto; margin: 0 -16px; padding: 0 16px; }
+.table { border-collapse: collapse; font-size: 13px; min-width: 640px; width: 100%; }
+.table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--ink-3); height: 32px; border-bottom: 1px solid var(--line); padding-right: 12px; white-space: nowrap; }
+.table td { height: 40px; border-bottom: 1px solid var(--line); color: var(--ink); padding-right: 12px; white-space: nowrap; vertical-align: middle; }
+.table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.table tr:last-child td { border-bottom: 0; }
+.productCell { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 8px; align-items: center; max-width: 220px; }
+.productCell img { width: 28px; height: 28px; border-radius: 4px; object-fit: cover; background: var(--paper); display: block; }
+.productCell .blank { width: 28px; height: 28px; border-radius: 4px; background: var(--paper); }
+.productCell .name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.productCell .reason { font-size: 11px; color: var(--ink-3); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.eliminated td { color: var(--ink-3); }
+.eliminated .name { color: var(--ink-3); font-weight: 400; }
+.selected td { background: var(--signature-soft); }
+.table td:first-child, .table th:first-child { padding-left: 8px; }
+.selected td:first-child { box-shadow: inset 2px 0 0 var(--signature); }
+.changed td { animation: rowChange 1.5s var(--ease-out) 1; }
+@keyframes rowChange {
+  from { background-color: var(--signature-soft); }
+  to { background-color: transparent; }
+}
+.selected.changed td { animation: none; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+.actions .hint { font-size: 12px; color: var(--ink-3); margin-right: auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  .changed td { animation: none; }
+}

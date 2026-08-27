@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Requirement, Space } from "../../../../domain/types";
 import { formatFeetInches } from "../../../../domain/types";
@@ -7,6 +7,38 @@ import { FeetInchesField } from "../components/feet-inches-field";
 import { PlanView } from "../components/plan-view";
 import { DEFAULT_ROOM, DOOR_WIDTH_MM, WINDOW_WIDTH_MM, describeSpace, estimateRoom, wallLength, type Opening, type RoomEstimate, type Wall } from "../components/room-estimate";
 import css from "../components/stages.module.css";
+import type { RoomEstimateData } from "../artifacts/types";
+
+const WALLS_SET = new Set<string>(["bottom", "top", "left", "right"]);
+
+function readOpening(o: RoomEstimateData["door"], fallbackWidth: number): Opening | null {
+  if (!o || !WALLS_SET.has(o.wall)) return null;
+  return { wall: o.wall as Wall, offset_mm: Math.max(0, Number(o.offset_mm) || 0), width_mm: Math.max(100, Number(o.width_mm) || fallbackWidth) };
+}
+
+/**
+ * Asks the PlanningAgent for a room estimate (PRD 20 stage 2); null when the route is absent, the
+ * call fails, or the reply carries no plausible dimensions, in which case the rule-based estimate stands.
+ */
+async function estimateWithAgent(projectId: string, text: string, signal: AbortSignal): Promise<RoomEstimate | null> {
+  try {
+    const res = await fetch(`/api/projects/${projectId}/room-estimate`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }), signal });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { estimate?: RoomEstimateData | null } | RoomEstimateData | null;
+    const e = json && typeof json === "object" && "estimate" in json ? json.estimate : (json as RoomEstimateData | null);
+    if (!e || !(e.width_mm > 0) || !(e.length_mm > 0)) return null;
+    return {
+      name: e.name || "Living room",
+      width_mm: Math.round(e.width_mm),
+      length_mm: Math.round(e.length_mm),
+      height_mm: e.height_mm ? Math.round(e.height_mm) : null,
+      door: readOpening(e.door, DOOR_WIDTH_MM),
+      window: readOpening(e.window, WINDOW_WIDTH_MM)
+    };
+  } catch {
+    return null;
+  }
+}
 
 const WALLS: { value: Wall; label: string }[] = [
   { value: "bottom", label: "Bottom wall" },
@@ -44,9 +76,27 @@ export function RoomConfigurator({ projectId, space, requirements }: { projectId
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // The rule-based estimate answers every keystroke; the agent's estimate, asked for after a pause
+  // in typing, replaces it when it arrives and the text has not changed since.
+  const agentCall = useRef<AbortController | null>(null);
+  const agentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    agentCall.current?.abort();
+    if (agentTimer.current) clearTimeout(agentTimer.current);
+  }, []);
+
   function describe(next: string) {
     setText(next);
-    if (next.trim()) setRoom(estimateRoom(next));
+    if (!next.trim()) return;
+    setRoom(estimateRoom(next));
+    agentCall.current?.abort();
+    if (agentTimer.current) clearTimeout(agentTimer.current);
+    agentTimer.current = setTimeout(async () => {
+      const controller = new AbortController();
+      agentCall.current = controller;
+      const estimate = await estimateWithAgent(projectId, next, controller.signal);
+      if (estimate && !controller.signal.aborted) setRoom(estimate);
+    }, 600);
   }
   function setOpening(kind: "door" | "window", patch: Partial<Opening> | null) {
     setRoom((r) => {
@@ -114,7 +164,7 @@ export function RoomConfigurator({ projectId, space, requirements }: { projectId
           <div className={css.stack}>
             <div className="field">
               <label htmlFor="room-text">Describe the room</label>
-              <textarea id="room-text" className="textarea" rows={2} value={text} onChange={(e) => describe(e.target.value)} placeholder="12 by 18 living room, door on the short wall" />
+              <textarea id="room-text" data-testid="room-describe" className="textarea" rows={2} value={text} onChange={(e) => describe(e.target.value)} placeholder="12 by 18 living room, door on the short wall" />
             </div>
             <div>
               <div className="eyebrow">Shape</div>
@@ -158,7 +208,7 @@ export function RoomConfigurator({ projectId, space, requirements }: { projectId
                 {formatFeetInches(room.width_mm)} × {formatFeetInches(room.length_mm)}
                 {room.height_mm ? ` × ${formatFeetInches(room.height_mm)}` : ""}
               </span>
-              <button className="btn primary focal" type="button" onClick={confirm} disabled={saving || room.width_mm < 500 || room.length_mm < 500}>
+              <button className="btn primary focal" type="button" onClick={confirm} disabled={saving || room.width_mm < 500 || room.length_mm < 500} data-testid="confirm-room">
                 {saving ? "Saving" : space ? "Update room" : "Confirm room"}
               </button>
             </div>

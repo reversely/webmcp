@@ -32,19 +32,21 @@ export type BoardCanvasProps = {
 
 export default function BoardCanvas({ initial, onReady, onChange }: BoardCanvasProps) {
   return (
-    <Tldraw
-      snapshot={initial ?? undefined}
-      onMount={(editor) => {
-        // The store survives a dev-mode StrictMode remount, so the guard is the store, not the prop.
-        if (!initial && editor.getCurrentPageShapeIds().size === 0) {
-          seed(editor);
-          editor.selectNone();
-          onChange(getSnapshot(editor.store));
-        }
-        editor.zoomToFit({ animation: { duration: 0 } });
-        onReady(editor);
-        return editor.store.listen(() => onChange(getSnapshot(editor.store)), { scope: "document", source: "user" });
-      }}
-    />
+    <div data-testid="board-canvas" style={{ position: "absolute", inset: 0 }}>
+      <Tldraw
+        snapshot={initial ?? undefined}
+        onMount={(editor) => {
+          // The store survives a dev-mode StrictMode remount, so the guard is the store, not the prop.
+          if (!initial && editor.getCurrentPageShapeIds().size === 0) {
+            seed(editor);
+            editor.selectNone();
+            onChange(getSnapshot(editor.store));
+          }
+          editor.zoomToFit({ animation: { duration: 0 } });
+          onReady(editor);
+          return editor.store.listen(() => onChange(getSnapshot(editor.store)), { scope: "document", source: "user" });
+        }}
+      />
+    </div>
   );
 }

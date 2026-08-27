@@ -71,7 +71,13 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .msg.user { background: var(--signature-soft); color: var(--ink); justify-self: end; }
 .msg.agent { background: var(--card); color: var(--ink-2); box-shadow: var(--shadow-card); }
 .msg .who { display: block; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 4px; }
+.msg-artifact { display: grid; gap: 8px; max-width: 100%; min-width: 0; }
+.msg-artifact .msg { max-width: 92%; }
 .chat-input { display: flex; gap: 8px; padding: 12px 20px 16px; border-top: 1px solid var(--line); background: var(--card); }
+/* Data motion (app-screens.md): a tag that arrives fades in once; the count-up lives in useAnimatedNumber. */
+.tag.appear { animation: tagAppear var(--dur-slow) var(--ease-out) 1; margin-top: 6px; }
+@keyframes tagAppear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tag.appear { animation: none; } }
 .chat-input .input { flex: 1; }
 
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
