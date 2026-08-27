@@ -65,8 +65,8 @@ export function emptyProgress(): CategoryProgress {
   return { found: 0, available: 0, dimensioned: 0, compatible: 0, delivery_checked: 0, status: "searching" };
 }
 
-export function writeSourcingArtifact(projectId: string, id: string, data: SourcingArtifact): void {
-  upsertArtifact(projectId, { kind: "sourcing", id, data }, "Finding your living room");
+export function writeSourcingArtifact(projectId: string, id: string, data: SourcingArtifact, title = "Finding your living room"): void {
+  upsertArtifact(projectId, { kind: "sourcing", id, data }, title);
 }
 
 export function writeRankingArtifact(projectId: string, id: string, data: RankingArtifact): void {

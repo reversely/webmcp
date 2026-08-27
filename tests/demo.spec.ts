@@ -8,8 +8,9 @@
  * sync look for the element first and mark themselves `fixme` when it is absent, so the suite runs
  * before those land and tightens as they do. When the agent has not sourced a BOM, Scene 7 sources
  * one through the search panel so the layout scenes still run; Scene 10 falls back to the
- * `add_product` WebMCP tool when the chat does not ingest the pasted URL. Scene 10b (#50) asks the
- * agent to record Ben's new item and its relation, and falls back to the board when it does not.
+ * `add_product` WebMCP tool when the chat does not ingest the pasted URL. Scene 10b (#50, #59, #61)
+ * asks the agent to record Ben's new item and its relation and then to source it; the board and the
+ * search panel are the fallbacks when it does not.
  *
  * Videos: one per context under tests/videos (zach-*.webm, ben-*.webm).
  */
@@ -102,6 +103,8 @@ const REPLACED_ITEM = "Round coffee table";
 const PASTED_ITEM = "side table";
 /** The item Ben adds in Scene 10b, in his words; the item it goes beside is read from the BOM. */
 const BEN_NEW_ITEM = "floor lamp";
+/** How long the single-item sourcing pipeline (search, visual, delivery, rank, place) may take through the agent. */
+const SOURCE_WAIT_MS = 300_000;
 /** How long a real image-to-3D generation may take before the scene gives up (15 to 70 s observed). */
 const MODEL_WAIT_MS = 180_000;
 /** The gap Scene 10b leaves between the new item and its neighbour; under the engine's 600 mm `beside` limit. */
@@ -383,6 +386,14 @@ test("Scene 10b: Ben adds a floor lamp beside the sofa and watches its model gen
     await ben.waitForURL(/\/room/);
     await waitForSnapshot(request, projectId, recorded, 10_000);
   }
+  // The agent's reply names what it recorded; the next request waits for it so the turns do not overlap.
+  if (viaAgent) {
+    const benIndex = (s: Snapshot) => s.messages.findIndex((m) => m.role === "user" && m.author === "Ben" && m.text.includes(BEN_NEW_ITEM));
+    const replied = await waitForSnapshot(request, projectId, (s) => s.messages.slice(benIndex(s) + 1).some((m) => m.role === "agent" && !m.artifact), AGENT_WAIT_MS).catch(() => null);
+    const reply = replied ? replied.messages.slice(benIndex(replied) + 1).find((m) => m.role === "agent" && !m.artifact)?.text : undefined;
+    note("agent reply", reply ?? "none within the wait");
+    if (reply) expect(reply).toMatch(new RegExp(BEN_NEW_ITEM, "i"));
+  }
   const withRule = await getSnapshot(request, projectId);
   const itemName = requirementName(itemRequirement(withRule)!.value_json);
   const rule = besideRule(withRule)!.value_json as { relation: string; subject: string; objects: string[]; distance_mm?: number };
@@ -391,41 +402,59 @@ test("Scene 10b: Ben adds a floor lamp beside the sofa and watches its model gen
   // Every earlier item survives the addition.
   for (const item of BOARD_ITEMS) expect(requiredItems(withRule).map(lower)).toContain(lower(item));
 
-  // Ben sources it through the search panel, scoped to his phrase; the cheapest dimensioned card
-  // with an image keeps the budget damage small and gives the 3D pipeline an input. A product
-  // whose model is already cached lands at ready with no stages to watch, so such a pick is
-  // removed and the next cheapest tried (PRD 15.1: the cache is production behaviour).
+  // Ben asks the agent to source it (#61): one BOM line under his phrase, placed by the beside
+  // rule, with its 3D model started. The search panel is the fallback when no line appears; that
+  // path picks the cheapest dimensioned card with an image and retries a pick whose model is
+  // already cached, because a cached job records no image_fetched stage (PRD 15.1).
   await openStage(ben, projectId, "place");
   await waitForTools(ben);
-  const panel = ben.getByTestId("product-search");
   const known = new Set(activeBom(withRule).map((l) => l.id));
   const newLine = (s: Snapshot) => activeBom(s).find((l) => !known.has(l.id) && lower(l.category) === lower(itemName));
-  const tried = new Set<string>();
   let line: Snapshot["bom"][number] | undefined;
   let cached = false;
-  for (let pick = 1; pick <= 3; pick++) {
-    await addFromSearch(panel, request, projectId, itemName, 300, () => true, { cheapest: true, requireImage: true, skipTitles: tried });
-    const snap = await waitForSnapshot(request, projectId, (s) => newLine(s) !== undefined, 30_000);
-    line = newLine(snap)!;
-    tried.add(line.product!.title);
-    // The job row appears with the add; a cached GLB ends it at ready inside the same tick.
-    const withJob = await waitForSnapshot(request, projectId, (s) => s.model_jobs?.[line!.product_id] !== undefined, 15_000).catch(() => snap);
+  let viaAgentSource = false;
+  await sendChat(ben, `Source the ${itemName}.`);
+  try {
+    line = newLine(await waitForSnapshot(request, projectId, (s) => newLine(s) !== undefined, SOURCE_WAIT_MS));
+    viaAgentSource = true;
+  } catch {
+    viaAgentSource = false;
+  }
+  if (line) {
+    const withJob = await waitForSnapshot(request, projectId, (s) => s.model_jobs?.[line!.product_id] !== undefined, 15_000).catch(() => getSnapshot(request, projectId));
     const job = withJob.model_jobs?.[line.product_id];
     cached = job?.status === "ready" && job.stages[job.stages.length - 1]?.detail === "cached";
-    if (!cached) break;
-    if (pick === 3) {
-      note("pending", "every tried product had a cached model; the scene watches the cached job instead of a generation");
-      break;
+    await expect(ben.getByTestId("chat-log").locator(".msg.agent").last()).toContainText(/\$|price|added|placed|floor lamp/i, { timeout: POLL_MS });
+  } else {
+    note("pending", `PlanningAgent did not source "${itemName}" within ${SOURCE_WAIT_MS / 1000} s; Ben used the search panel instead`);
+    const panel = ben.getByTestId("product-search");
+    const tried = new Set<string>();
+    for (let pick = 1; pick <= 3; pick++) {
+      await addFromSearch(panel, request, projectId, itemName, 300, () => true, { cheapest: true, requireImage: true, skipTitles: tried });
+      const snap = await waitForSnapshot(request, projectId, (s) => newLine(s) !== undefined, 30_000);
+      line = newLine(snap)!;
+      tried.add(line.product!.title);
+      // The job row appears with the add; a cached GLB ends it at ready inside the same tick.
+      const withJob = await waitForSnapshot(request, projectId, (s) => s.model_jobs?.[line!.product_id] !== undefined, 15_000).catch(() => snap);
+      const job = withJob.model_jobs?.[line.product_id];
+      cached = job?.status === "ready" && job.stages[job.stages.length - 1]?.detail === "cached";
+      if (!cached) break;
+      if (pick === 3) {
+        note("pending", "every tried product had a cached model; the scene watches the cached job instead of a generation");
+        break;
+      }
+      note("cached", `pick ${pick} "${line.product!.title}" had a cached model; removed it to watch a real generation`);
+      const removed = await request.put(`/api/projects/${projectId}/bom`, { data: { bomItemId: line.id, action: "remove" } });
+      expect(removed.ok()).toBeTruthy();
     }
-    note("cached", `pick ${pick} "${line.product!.title}" had a cached model; removed it to watch a real generation`);
-    const removed = await request.put(`/api/projects/${projectId}/bom`, { data: { bomItemId: line.id, action: "remove" } });
-    expect(removed.ok()).toBeTruthy();
   }
   const lamp = line!;
   expect(lower(lamp.category)).toBe(lower(itemName));
   expect(lamp.product?.price_cents).toBeGreaterThan(0);
-  note("sourced", `${lamp.product!.title} at ${lamp.product!.price_cents} cents (${lamp.kind})`);
-  await expect(ben.getByTestId("bom-rail")).toContainText(lamp.product!.title);
+  note("sourced", `${viaAgentSource ? "agent" : "search panel"}: ${lamp.product!.title} at ${lamp.product!.price_cents} cents (${lamp.kind})`);
+  await expect(ben.getByTestId("bom-rail")).toContainText(lamp.product!.title, { timeout: POLL_MS });
+  // Every earlier line survives the addition.
+  for (const id of known) expect(activeBom(await getSnapshot(request, projectId)).some((l) => l.id === id), id).toBe(true);
 
   // The UI stage strip is watched from here: the tray shows it as soon as the line exists.
   const stagesSeen = new Set<string>();
@@ -441,36 +470,43 @@ test("Scene 10b: Ben adds a floor lamp beside the sofa and watches its model gen
     }
   })();
 
-  // Place it beside the neighbour through the place_product WebMCP tool: the first side of the
-  // neighbour where the lamp stays inside the room and clear of every other placed item.
+  // The agent's pipeline placed the lamp by the beside rule; the fallback places it through the
+  // place_product WebMCP tool on the first side of the neighbour where it stays inside the room
+  // and clear of every other placed item.
   const snapNow = await getSnapshot(request, projectId);
   const product = snapNow.products.find((p) => p.id === lamp.product_id)!;
   expect(product.width_mm, "the lamp has a footprint").not.toBeNull();
-  const space = snapNow.space!;
-  const half = (w: number, d: number, rot: number) => (rot % 180 !== 0 ? { x: d / 2, y: w / 2 } : { x: w / 2, y: d / 2 });
-  const boxes = new Map(snapNow.bom.filter((b) => b.product).map((b) => [b.id, snapNow.products.find((p) => p.id === b.product_id)!]));
-  const others = snapNow.placements.filter((p) => p.bom_item_id !== lamp.id && boxes.get(p.bom_item_id)?.width_mm != null).map((p) => ({ ...p, h: half(boxes.get(p.bom_item_id)!.width_mm!, boxes.get(p.bom_item_id)!.depth_mm!, p.rotation_deg), kind: snapNow.bom.find((b) => b.id === p.bom_item_id)!.kind }));
-  const neighbour = others.find((p) => p.bom_item_id === seating!.id)!;
-  const lampHalf = half(product.width_mm!, product.depth_mm!, 0);
-  const candidates = [
-    { x: 1, y: 0 },
-    { x: -1, y: 0 },
-    { x: 0, y: 1 },
-    { x: 0, y: -1 }
-  ].map((side) => ({ x: Math.round(neighbour.x_mm + side.x * (neighbour.h.x + BESIDE_GAP_MM + lampHalf.x)), y: Math.round(neighbour.y_mm + side.y * (neighbour.h.y + BESIDE_GAP_MM + lampHalf.y)) }));
-  const inside = (c: { x: number; y: number }) => c.x - lampHalf.x >= 0 && c.x + lampHalf.x <= space.width_mm && c.y - lampHalf.y >= 0 && c.y + lampHalf.y <= space.length_mm;
-  const clear = (c: { x: number; y: number }) => others.every((o) => o.kind === "soft_floor" || Math.abs(o.x_mm - c.x) >= o.h.x + lampHalf.x || Math.abs(o.y_mm - c.y) >= o.h.y + lampHalf.y);
-  const spot = candidates.find((c) => inside(c) && clear(c)) ?? { x: Math.round(space.width_mm / 2), y: Math.round(space.length_mm / 2) };
-  const placed = await executeTool(ben, "place_product", { bomItemId: lamp.id, xMm: spot.x, yMm: spot.y, rotationDeg: 0 });
-  expect(placed.isError, placed.text).toBe(false);
-  const afterPlace = await waitForSnapshot(request, projectId, (s) => s.placements.some((p) => p.bom_item_id === lamp.id), 10_000);
-  expect(afterPlace.placements.find((p) => p.bom_item_id === lamp.id)).toMatchObject({ x_mm: spot.x, y_mm: spot.y });
+  let spot = snapNow.placements.find((p) => p.bom_item_id === lamp.id);
+  if (spot) {
+    note("placement", `agent placed the lamp at (${spot.x_mm}, ${spot.y_mm})`);
+  } else {
+    const space = snapNow.space!;
+    const half = (w: number, d: number, rot: number) => (rot % 180 !== 0 ? { x: d / 2, y: w / 2 } : { x: w / 2, y: d / 2 });
+    const boxes = new Map(snapNow.bom.filter((b) => b.product).map((b) => [b.id, snapNow.products.find((p) => p.id === b.product_id)!]));
+    const others = snapNow.placements.filter((p) => p.bom_item_id !== lamp.id && boxes.get(p.bom_item_id)?.width_mm != null).map((p) => ({ ...p, h: half(boxes.get(p.bom_item_id)!.width_mm!, boxes.get(p.bom_item_id)!.depth_mm!, p.rotation_deg), kind: snapNow.bom.find((b) => b.id === p.bom_item_id)!.kind }));
+    const neighbour = others.find((p) => p.bom_item_id === seating!.id)!;
+    const lampHalf = half(product.width_mm!, product.depth_mm!, 0);
+    const candidates = [
+      { x: 1, y: 0 },
+      { x: -1, y: 0 },
+      { x: 0, y: 1 },
+      { x: 0, y: -1 }
+    ].map((side) => ({ x: Math.round(neighbour.x_mm + side.x * (neighbour.h.x + BESIDE_GAP_MM + lampHalf.x)), y: Math.round(neighbour.y_mm + side.y * (neighbour.h.y + BESIDE_GAP_MM + lampHalf.y)) }));
+    const inside = (c: { x: number; y: number }) => c.x - lampHalf.x >= 0 && c.x + lampHalf.x <= space.width_mm && c.y - lampHalf.y >= 0 && c.y + lampHalf.y <= space.length_mm;
+    const clear = (c: { x: number; y: number }) => others.every((o) => o.kind === "soft_floor" || Math.abs(o.x_mm - c.x) >= o.h.x + lampHalf.x || Math.abs(o.y_mm - c.y) >= o.h.y + lampHalf.y);
+    const chosen = candidates.find((c) => inside(c) && clear(c)) ?? { x: Math.round(space.width_mm / 2), y: Math.round(space.length_mm / 2) };
+    const placed = await executeTool(ben, "place_product", { bomItemId: lamp.id, xMm: chosen.x, yMm: chosen.y, rotationDeg: 0 });
+    expect(placed.isError, placed.text).toBe(false);
+    const afterPlace = await waitForSnapshot(request, projectId, (s) => s.placements.some((p) => p.bom_item_id === lamp.id), 10_000);
+    spot = afterPlace.placements.find((p) => p.bom_item_id === lamp.id)!;
+    expect(spot).toMatchObject({ x_mm: chosen.x, y_mm: chosen.y });
+  }
   const geometry = (await (await request.get(`/api/projects/${projectId}/placements`)).json()) as { geometry: { rules: { rule: { relation: string; subject: string }; pass: boolean | null; detail: string }[] } };
   const evaluated = geometry.geometry.rules.find((r) => r.rule.relation === "beside")!;
   expect(evaluated, "the beside rule is evaluated").toBeTruthy();
   expect([true, false]).toContain(evaluated.pass);
   expect(evaluated.detail.length).toBeGreaterThan(0);
-  note("beside rule", `${evaluated.pass ? "pass" : "fail"} at (${spot.x}, ${spot.y}): ${evaluated.detail}`);
+  note("beside rule", `${evaluated.pass ? "pass" : "fail"} at (${spot.x_mm}, ${spot.y_mm}): ${evaluated.detail}`);
 
   // Ben's plan shows the rule's row and, with the lamp selected, its stage strip.
   await openStage(ben, projectId, "place");

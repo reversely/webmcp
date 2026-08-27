@@ -260,6 +260,47 @@ function applyRule(rule: LayoutRule, items: Map<string, LayoutInput>, layout: La
   }
 }
 
+/** The first spot, scanning the room from its origin corner, where the item is inside and clear of every placed hard item. */
+function firstFreeSpot(items: Map<string, LayoutInput>, layout: Layout, key: string, space: FloorSpace): FloorPlacement | null {
+  const item = items.get(key)!;
+  const h = halfExtents(item.box, 0);
+  const step = 150;
+  for (let y = Math.ceil(h.y); y + h.y <= space.length_mm; y += step) {
+    for (let x = Math.ceil(h.x); x + h.x <= space.width_mm; x += step) {
+      const candidate = { x_mm: x, y_mm: y, rotation_deg: 0 };
+      if (!collides(items, layout, key, candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
+/**
+ * Places one item into a layout whose other placements stay fixed (#61): a soft floor goes under
+ * the placed hard items; anything else goes beside the anchor (the largest placed seating item, or
+ * the largest placed hard item), else at the first free spot from the origin corner. The rules
+ * whose subject it is then move it, in rule order. Null when the item is not among the inputs.
+ */
+export function placeItem(space: FloorSpace, inputs: LayoutInput[], fixed: Layout, name: string, rules: LayoutRule[] = []): FloorPlacement | null {
+  const key = itemKey(name);
+  const items = new Map<string, LayoutInput>();
+  for (const input of inputs) if (!items.has(itemKey(input.name))) items.set(itemKey(input.name), input);
+  const item = items.get(key);
+  if (!item) return null;
+  const layout: Layout = { ...fixed };
+  delete layout[key];
+  const placedHard = [...items.values()].filter((i) => itemKey(i.name) !== key && i.kind !== "soft_floor" && layout[itemKey(i.name)]).sort((a, b) => area(b.box) - area(a.box));
+  if (item.kind === "soft_floor") {
+    layout[key] = placeSoftFloor(item, placedHard.map((h) => footprint(h.box, layout[itemKey(h.name)])), space);
+  } else {
+    const anchor = placedHard.find((i) => i.kind === "seating") ?? placedHard[0];
+    if (anchor) applyBeside(items, layout, key, [itemKey(anchor.name)], SIDE_GAP_MM, space);
+    layout[key] ??= firstFreeSpot(items, layout, key, space) ?? clampInside(item.box, { x_mm: Math.round(space.width_mm / 2), y_mm: Math.round(space.length_mm / 2), rotation_deg: 0 }, space);
+  }
+  const own = rules.filter((r) => r.relation !== "text" && itemKey(r.subject) === key).sort((a, b) => RULE_ORDER[a.relation as keyof typeof RULE_ORDER] - RULE_ORDER[b.relation as keyof typeof RULE_ORDER]);
+  for (const rule of own) applyRule(rule, items, layout, space);
+  return layout[key];
+}
+
 /** Rules apply in an order where each later one reads the positions the earlier ones settled. */
 const RULE_ORDER: Record<Exclude<LayoutRule["relation"], "text">, number> = { against_wall: 0, facing: 1, beside: 2, on_top_of: 3, under: 4, clear_around: 5 };
 

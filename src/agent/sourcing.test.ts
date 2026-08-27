@@ -4,8 +4,9 @@ import { appState, snapshot, geometryFor } from "../server/state";
 import { issuesFor, spansFor } from "../server/trace";
 import type { SourcingArtifact } from "./artifacts";
 import { handleMessage } from "./messages";
-import { ADDRESS_QUESTION, COUNTRY_ONLY_NOTE, NO_WINDOW_NOTE, extraItemPriceFor, selectionWindowFor, sourceRoom, withReplacementFloor } from "./sourcing";
-import { EXTRA, fakeDeps, ITEM_NAMES, resetState, seedProject } from "./test-helpers";
+import { upsertRequirement } from "../server/requirements";
+import { ADDRESS_QUESTION, COUNTRY_ONLY_NOTE, NO_WINDOW_NOTE, OVER_BUDGET_NOTE, extraItemPriceFor, selectionWindowFor, sourceItem, sourceRoom, withReplacementFloor } from "./sourcing";
+import { EXTRA, fakeCatalogProduct, fakeDeps, fakeSearch, ITEM_NAMES, resetState, seedProject } from "./test-helpers";
 
 function sourcingArtifact(projectId: string): SourcingArtifact {
   const message = snapshot(projectId).messages.find((m) => m.artifact?.kind === "sourcing");
@@ -154,5 +155,90 @@ describe("withReplacementFloor", () => {
   it("applies no floor without a window", () => {
     const ranked = { "deep couch": couch, "round coffee table": [row("cheap", 8500), row("dear", 60000)] };
     expect(withReplacementFloor(ranked, null, required)["round coffee table"].length).toBe(2);
+  });
+});
+
+describe("sourceItem (#61)", () => {
+  beforeEach(resetState);
+
+  const LAMP = "floor lamp";
+  const lampDeps = () =>
+    fakeDeps({
+      search: async (item) => (item.name === LAMP ? [1, 2, 3].map((i) => fakeCatalogProduct(LAMP, i, [12900, 6999, 24900][i - 1])) : fakeSearch(item.name)),
+      inferKind: async (name) => (name === LAMP ? { kind: "lighting", query: "floor lamp" } : fakeDeps().inferKind(name))
+    });
+
+  it("adds one BOM line and one artifact row for the item, placed beside its neighbour, and leaves the other lines and placements untouched", async () => {
+    const projectId = seedProject({ address: true });
+    const deps = lampDeps();
+    await sourceRoom(projectId, "Find a set", deps);
+    upsertRequirement(projectId, { type: "required_item", value: { name: LAMP, kind: null }, created_by: "ben" });
+    upsertRequirement(projectId, { type: "layout_requirement", value: { relation: "beside", subject: LAMP, objects: ["deep couch"] }, created_by: "ben" });
+    const before = snapshot(projectId);
+    const linesBefore = before.bom.map((b) => [b.id, b.status, b.product_id]);
+    const placementsBefore = before.placements.map((p) => [p.bom_item_id, p.x_mm, p.y_mm, p.rotation_deg]);
+
+    const outcome = await sourceItem(projectId, "Floor Lamp", deps);
+    expect(outcome.status).toBe("complete");
+    if (outcome.status !== "complete") return;
+    const after = snapshot(projectId);
+    const line = after.bom.find((b) => b.id === outcome.bom_item_id)!;
+    expect(line).toMatchObject({ category: LAMP, kind: "lighting", status: "proposed" });
+    // The best ranked lamp is the cheapest one with equal delivery and visual evidence.
+    expect(outcome.price_cents).toBe(6999);
+    expect(outcome.budget.committed_cents).toBe(before.budget.committed_cents + 6999);
+    expect(after.bom.filter((b) => b.id !== line.id).map((b) => [b.id, b.status, b.product_id])).toEqual(linesBefore);
+    expect(after.placements.filter((p) => p.bom_item_id !== line.id).map((p) => [p.bom_item_id, p.x_mm, p.y_mm, p.rotation_deg])).toEqual(placementsBefore);
+    expect(outcome.placed).toBe(true);
+    expect(after.placements.some((p) => p.bom_item_id === line.id)).toBe(true);
+    const beside = geometryFor(projectId)!.rules.find((r) => r.rule.relation === "beside");
+    expect(beside).toMatchObject({ pass: true });
+    // The requirement row now carries the inferred kind; the item artifact has exactly one row.
+    const row = after.requirements.find((r) => r.type === "required_item" && JSON.stringify(r.value_json).includes(LAMP));
+    expect(row?.value_json).toEqual({ name: LAMP, kind: "lighting" });
+    const message = after.messages.find((m) => m.artifact?.id === outcome.artifact_id)!;
+    expect(message.text).toBe(`Finding your ${LAMP}`);
+    const artifact = message.artifact!.data as SourcingArtifact;
+    expect(Object.keys(artifact.categories)).toEqual([LAMP]);
+    expect(artifact.categories[LAMP]).toMatchObject({ found: 3, status: "selected", selected_product_id: outcome.product_id });
+    expect(artifact.subtotal_cents).toBe(6999);
+    expect(appState().activeRuns.has(projectId)).toBe(false);
+    const model = after.model_jobs?.[outcome.product_id];
+    expect(model === undefined || ["queued", "generating", "ready", "proxy"].includes(model.status)).toBe(true);
+    const spans = spansFor(projectId).filter((s) => s.kind === "domain" && s.name === "source_item");
+    expect(spans).toHaveLength(1);
+    expect(spans[0].status).toBe("ok");
+  });
+
+  it("records an item the project has not agreed yet, and reports no_match when nothing fits under the remaining budget", async () => {
+    const projectId = seedProject({ address: true });
+    const s = appState();
+    const deps = lampDeps();
+    s.store.projects.set(projectId, { ...s.store.getProject(projectId), budget_cents: 5000 });
+    const cheap = await sourceItem(projectId, LAMP, deps);
+    expect(cheap.status).toBe("no_match");
+    if (cheap.status !== "no_match") return;
+    expect(cheap.reason).toMatch(/under the remaining 5000 cents/);
+    const row = snapshot(projectId).requirements.find((r) => r.type === "required_item" && JSON.stringify(r.value_json).includes(LAMP));
+    expect(row).toMatchObject({ status: "agreed", created_by: "PlanningAgent", value_json: { name: LAMP, kind: "lighting" } });
+    expect(snapshot(projectId).bom).toHaveLength(0);
+  });
+
+  it("adds the cheapest match and reports the overage when the budget is already spent (PRD 8.4 state)", async () => {
+    const projectId = seedProject({ address: true });
+    const deps = lampDeps();
+    await sourceRoom(projectId, "Find a set", deps);
+    const s = appState();
+    const committed = snapshot(projectId).budget.committed_cents;
+    s.store.projects.set(projectId, { ...s.store.getProject(projectId), budget_cents: committed - 1000 });
+    const outcome = await sourceItem(projectId, LAMP, deps);
+    expect(outcome.status).toBe("complete");
+    if (outcome.status !== "complete") return;
+    expect(outcome.price_cents).toBe(6999);
+    expect(outcome.note).toBe(OVER_BUDGET_NOTE);
+    expect(outcome.budget).toMatchObject({ state: "over", overage_cents: 1000 + 6999 });
+    const artifact = snapshot(projectId).messages.find((m) => m.artifact?.id === outcome.artifact_id)!.artifact!.data as SourcingArtifact;
+    expect(artifact.notes).toEqual([OVER_BUDGET_NOTE]);
+    expect(snapshot(projectId).bom.filter((b) => b.category === LAMP)).toHaveLength(1);
   });
 });

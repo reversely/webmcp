@@ -5,7 +5,7 @@
  * (PRD 5.2, 10) and a later message can resume it from the delivery step.
  */
 import { checkpoint, complete, failRecoverable, requestInput, startRun } from "../domain/agent-run";
-import { regenerateBom } from "../domain/bom";
+import { calculateBudget, regenerateBom, type Budget } from "../domain/bom";
 import { rankDeliveryConfidence } from "../domain/delivery";
 import { startModelGeneration } from "../domain/ingestion/hooks";
 import { candidateFits, type FloorPlacement } from "../domain/geometry";
@@ -22,18 +22,22 @@ import {
   type VisualEvaluation
 } from "../domain/ranking";
 import { itemKey, readRequiredItem, type AgentRun, type Candidate, type Category, type Kind, type Placement, type Product, type Requirement } from "../domain/types";
+import { upsertRequirement } from "../server/requirements";
 import { appState, geometryFor, layoutRulesFor, snapshot, spaceFor, updateCandidate } from "../server/state";
 import { recordIssue, withSpan, withSpanSync } from "../server/trace";
 import { emptyProgress, writeQuestionArtifact, writeSourcingArtifact, type CategoryProgress, type SourcingArtifact } from "./artifacts";
 import { boxOf, isAvailable, mapLimit, searchProducts, shipsToFor, upsertCandidate, type SearchOptions } from "./catalog";
 import { evaluateDelivery } from "./delivery";
 import { inferKind, type KindGuess } from "./kinds";
-import { proposeLayout, type LayoutInput } from "./layout";
+import { placeItem, proposeLayout, type Layout, type LayoutInput } from "./layout";
 import { evaluateVisualFit } from "./visual";
 
 export const ADDRESS_QUESTION = "What delivery address should I use to check arrival dates?";
 export const NO_WINDOW_NOTE = "No priced item outside the required list is known to the project yet, so the selection takes the best combination under the budget.";
 export const COUNTRY_ONLY_NOTE = "Searched with the country only; delivery estimates improve after an address is set.";
+export const OVER_BUDGET_NOTE = "The budget is already spent, so the cheapest match is added and the overage is reported.";
+/** The price ceiling of a single-item search when the budget is already spent: none that a catalog price reaches. */
+const NO_CEILING_CENTS = 1_000_000_000;
 /** Candidates per item that get the (slow) visual and delivery checks. */
 const EVALUATE_PER_CATEGORY = 6;
 const CONCURRENCY = 4;
@@ -120,6 +124,8 @@ export type SourcingCheckpoint = {
   progress: SourcingArtifact;
   /** Candidate ids per item that passed the hard filter and await delivery evidence. */
   evaluation: Record<Category, string[]>;
+  /** The artifact's heading; the room run uses the default, a single-item run names the item. */
+  title?: string;
 };
 
 export type SourcingOutcome =
@@ -145,7 +151,7 @@ async function requiredItems(projectId: string, deps: SourcingDeps): Promise<Sou
 }
 
 function writeProgress(projectId: string, cp: SourcingCheckpoint): void {
-  writeSourcingArtifact(projectId, cp.artifact_id, cp.progress);
+  writeSourcingArtifact(projectId, cp.artifact_id, cp.progress, cp.title);
 }
 
 function progressOf(cp: SourcingCheckpoint, category: Category): CategoryProgress {
@@ -333,6 +339,36 @@ export function writeLayout(projectId: string): boolean {
 }
 
 /**
+ * Places one BOM line with the other placements fixed (#61): the layout solver's default for its
+ * kind, then the rules whose subject it is. Returns whether a placement was written.
+ */
+export function placeBomItem(projectId: string, bomItemId: string): boolean {
+  const s = appState();
+  const space = spaceFor(projectId);
+  if (!space) return false;
+  const snap = snapshot(projectId);
+  const target = snap.bom.find((b) => b.id === bomItemId);
+  if (!target?.product) return false;
+  const inputs: LayoutInput[] = [];
+  const fixed: Layout = {};
+  // The target goes first so its box wins when another line shares its phrase.
+  for (const item of [target, ...snap.bom.filter((b) => b.id !== bomItemId)]) {
+    if (item.status === "removed" || !item.product) continue;
+    const box = boxOf(item.product);
+    if (!box) continue;
+    inputs.push({ name: item.category, kind: item.kind, box });
+    const placement = item.id === bomItemId ? undefined : snap.placements.find((p) => p.bom_item_id === item.id);
+    if (placement && !fixed[itemKey(item.category)]) fixed[itemKey(item.category)] = placement;
+  }
+  const placement = placeItem(space, inputs, fixed, target.category, layoutRulesFor(projectId));
+  if (!placement) return false;
+  const existing = [...s.store.placements.values()].find((p) => p.bom_item_id === bomItemId);
+  const row: Placement = { id: existing?.id ?? s.store.newId("pl"), space_id: space.id, bom_item_id: bomItemId, x_mm: placement.x_mm, y_mm: placement.y_mm, z_mm: 0, rotation_deg: placement.rotation_deg };
+  s.store.placements.set(row.id, row);
+  return true;
+}
+
+/**
  * PRD 8.4 guarantees the extra item pushes the project over budget; PRD 8.5 then replaces one item
  * to get back under. That only works when the replaced item costs at least the extra item's price,
  * so selection prefers candidates above that floor for the pivot item (the one whose prices spread
@@ -494,6 +530,101 @@ export async function sourceRoom(projectId: string, goal: string, deps: Sourcing
     failRecoverable(s.runs, run.id, (e as Error).message);
     s.activeRuns.delete(projectId);
     recordIssue(projectId, { source: "domain source_room", severity: "error", message: `The sourcing run ${run.id} stopped with an error (${(e as Error).message}); it is marked failed_recoverable, and a new request starts the pipeline again.` });
+    throw e;
+  }
+}
+
+export type SourceItemOutcome =
+  | { status: "complete"; item: Category; product_id: string; bom_item_id: string; price_cents: number; budget: Budget; placed: boolean; artifact_id: string; note?: string }
+  | { status: "no_match"; item: Category; reason: string; artifact_id: string };
+
+/**
+ * Sources one item by its phrase (#61): the same steps as the room run for that item alone, the
+ * best ranked pick under the remaining budget, one new BOM line, its placement with the other
+ * lines fixed, and its 3D model. When the budget is already spent (PRD 8.4 puts a project there
+ * on purpose, before PRD 8.5 replaces an item), the cheapest match is added and the outcome's
+ * budget reports the overage, the way the room run falls back rather than refuses. An item the
+ * project has not agreed yet is recorded first. The delivery step runs with what the project
+ * knows; a missing address never pauses this run.
+ */
+export async function sourceItem(projectId: string, name: string, deps: SourcingDeps = defaultSourcingDeps(projectId)): Promise<SourceItemOutcome> {
+  const s = appState();
+  const project = s.store.getProject(projectId);
+  const known = requiredItemRows(projectId).find((r) => itemKey(r.name) === itemKey(name));
+  const row = known ?? (() => {
+    const { requirement } = upsertRequirement(projectId, { type: "required_item", value: { name: name.trim(), kind: null }, created_by: "PlanningAgent", source: "chat" });
+    const item = readRequiredItem(requirement.value_json)!;
+    return { row: requirement, name: item.name, kind: item.kind };
+  })();
+  const guess = await deps.inferKind(row.name);
+  const kind = row.kind ?? guess.kind;
+  if (row.kind === null) s.requirements.set(row.row.id, { ...row.row, value_json: { name: row.name, kind } });
+  const item: SourcingItem = { name: row.name, kind, query: guess.query };
+  const remaining = project.budget_cents - calculateBudget(s.store, projectId).committed_cents;
+  const overBudget = remaining <= 0;
+  const run = startRun(s.runs, { projectId, goal: `source ${item.name}` });
+  s.activeRuns.set(projectId, run.id);
+  const notes = [...(project.delivery_address_json ? [] : [COUNTRY_ONLY_NOTE]), ...(overBudget ? [OVER_BUDGET_NOTE] : [])];
+  const cp: SourcingCheckpoint = {
+    step: "delivery",
+    artifact_id: `sourcing_${run.id}`,
+    items: [item],
+    categories: [item.name],
+    budget_cents: overBudget ? NO_CEILING_CENTS : remaining,
+    window: null,
+    progress: { categories: {}, ...(notes.length > 0 ? { notes } : {}) },
+    evaluation: {},
+    title: `Finding your ${item.name}`
+  };
+  const end = (): void => {
+    complete(s.runs, run.id);
+    s.activeRuns.delete(projectId);
+  };
+  const noMatch = (reason: string): SourceItemOutcome => {
+    progressOf(cp, item.name).status = "no match";
+    writeProgress(projectId, cp);
+    recordIssue(projectId, { source: "domain source_item", severity: "error", message: `No ${item.name} was added: ${reason}` });
+    end();
+    return { status: "no_match", item: item.name, reason, artifact_id: cp.artifact_id };
+  };
+  try {
+    return await withSpan(projectId, { kind: "domain", name: "source_item", prd_ref: "PRD 9", input: { item, run_id: run.id, remaining_cents: remaining, over_budget: overBudget } }, async () => {
+      progressOf(cp, item.name);
+      writeProgress(projectId, cp);
+      await searchAndEvaluate(projectId, cp, item, deps);
+      await checkDelivery(projectId, cp, deps);
+      const ranked = rankCategoriesSpanned(projectId, cp)[item.name] ?? [];
+      // Under a live budget the top rank wins; over it, the cheapest keeps the overage smallest.
+      const pick = overBudget ? ranked.reduce<RankedCandidate | undefined>((best, c) => (best && best.price_cents <= c.price_cents ? best : c), undefined) : ranked[0];
+      if (!pick) return noMatch(overBudget ? "no available product with dimensions fits the room." : `no available product with dimensions fits the room under the remaining ${remaining} cents.`);
+      const { product, bomItemId, budget } = withSpanSync(projectId, { kind: "step", name: "record selection and regenerate BOM", prd_ref: "PRD 9 step 12", input: { pick: pick.id, price_cents: pick.price_cents } }, (span) =>
+        s.store.mutate(() => {
+          const candidate = updateCandidate(pick.id, { ranking_state: "selected" });
+          const { budget } = regenerateBom(s.store, projectId);
+          const line = [...s.store.bomItems.values()].find((b) => b.project_id === projectId && b.product_id === candidate.product_id && b.status !== "removed");
+          if (!line) throw new Error(`The BOM has no line for ${candidate.product_id} after regeneration`);
+          span.setOutput({ bom_item_id: line.id, budget });
+          return { product: s.store.getProduct(candidate.product_id), bomItemId: line.id, budget };
+        })
+      );
+      const progress = progressOf(cp, item.name);
+      progress.status = "selected";
+      progress.selected_product_id = product.id;
+      cp.progress.subtotal_cents = product.price_cents;
+      writeProgress(projectId, cp);
+      const placed = withSpanSync(projectId, { kind: "step", name: "place item", prd_ref: "PRD 9 step 14", input: { bom_item_id: bomItemId } }, (span) => {
+        const done = placeBomItem(projectId, bomItemId);
+        span.setOutput({ placed: done, geometry: done ? geometryFor(projectId) : null });
+        return done;
+      });
+      withSpanSync(projectId, { kind: "step", name: `start 3D ${item.name}`, prd_ref: "PRD 9 step 13", input: { product_id: product.id } }, () => startModelGeneration(product));
+      end();
+      return { status: "complete", item: item.name, product_id: product.id, bom_item_id: bomItemId, price_cents: product.price_cents, budget, placed, artifact_id: cp.artifact_id, ...(overBudget ? { note: OVER_BUDGET_NOTE } : {}) };
+    });
+  } catch (e) {
+    failRecoverable(s.runs, run.id, (e as Error).message);
+    s.activeRuns.delete(projectId);
+    recordIssue(projectId, { source: "domain source_item", severity: "error", message: `Sourcing ${item.name} stopped with an error (${(e as Error).message}); the run is marked failed_recoverable, and asking again starts it over.` });
     throw e;
   }
 }
