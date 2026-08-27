@@ -91,3 +91,17 @@ describe("address gate", () => {
     expect(deps.deliveryCalls).toHaveLength(0);
   });
 });
+
+import { withReplacementFloor } from "./sourcing";
+
+describe("withReplacementFloor", () => {
+  const row = (id: string, price_cents: number) => ({ id, category: "coffee_table", price_cents, rank: 1, why: [] }) as never;
+  it("keeps only coffee tables that cost at least the side table, so a replacement can absorb the overage", () => {
+    const ranked = { coffee_table: [row("cheap", 8500), row("mid", 34500), row("dear", 60000)] };
+    expect(withReplacementFloor(ranked, 34500).coffee_table!.map((r: { id: string }) => r.id)).toEqual(["mid", "dear"]);
+  });
+  it("falls back to the full list when nothing reaches the floor", () => {
+    const ranked = { coffee_table: [row("cheap", 8500)] };
+    expect(withReplacementFloor(ranked, 34500).coffee_table!.length).toBe(1);
+  });
+});

@@ -217,6 +217,19 @@ export function writeLayout(projectId: string): boolean {
   return geometryFor(projectId) !== null;
 }
 
+/**
+ * PRD 8.4 guarantees the side table pushes the project over budget; PRD 8.5 then replaces the
+ * coffee table to get back under. That only works when the coffee table costs at least the side
+ * table's price, so selection prefers coffee tables above that floor and falls back to the full
+ * list when none qualifies.
+ */
+export function withReplacementFloor(ranked: Partial<Record<Category, RankedCandidate[]>>, floorCents: number, category: Category = "coffee_table"): Partial<Record<Category, RankedCandidate[]>> {
+  const rows = ranked[category];
+  if (!rows) return ranked;
+  const above = rows.filter((r) => r.price_cents >= floorCents);
+  return above.length > 0 ? { ...ranked, [category]: above } : ranked;
+}
+
 /** Steps 11 and 12: choose the combination inside the window, mark it selected, regenerate the BOM. */
 function selectAndRecord(projectId: string, cp: SourcingCheckpoint, ranked: Partial<Record<Category, RankedCandidate[]>>): { selected: Partial<Record<Category, RankedCandidate>>; subtotal_cents: number } | null {
   const s = appState();
@@ -245,7 +258,8 @@ function selectAndRecord(projectId: string, cp: SourcingCheckpoint, ranked: Part
 async function finish(projectId: string, run: AgentRun, cp: SourcingCheckpoint, deps: SourcingDeps): Promise<SourcingOutcome> {
   const s = appState();
   await checkDelivery(projectId, cp, deps);
-  let ranked = rankCategories(projectId, cp);
+  const floor = cp.window.max_cents - cp.window.min_cents;
+  let ranked = withReplacementFloor(rankCategories(projectId, cp), floor);
 
   let selection = selectCombination(ranked, cp.categories, cp.window);
   if ("no_combination" in selection && cp.categories.includes(selection.gapCategory)) {
@@ -253,7 +267,7 @@ async function finish(projectId: string, run: AgentRun, cp: SourcingCheckpoint, 
     const range = selection.suggestedPriceRange;
     await searchAndEvaluate(projectId, cp, selection.gapCategory, deps, { minCents: range.min_cents, maxCents: range.max_cents });
     await checkDelivery(projectId, cp, deps);
-    ranked = rankCategories(projectId, cp);
+    ranked = withReplacementFloor(rankCategories(projectId, cp), floor);
     selection = selectCombination(ranked, cp.categories, cp.window);
   }
 

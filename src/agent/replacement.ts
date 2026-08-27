@@ -156,6 +156,12 @@ export async function findCheaperReplacement(projectId: string, category: Catego
     updateCandidate(c.id, { ranking_state: "ranked", rank: c.rank });
   }
   artifact.rows.sort((a, b) => (a.rank ?? Infinity) - (b.rank ?? Infinity));
+  // PRD 13: the top-ranked survivor is the proposed replacement; approval commits it (PRD 8.5).
+  const top = artifact.rows.find((row) => row.rank === 1);
+  if (top) {
+    top.status = "selected";
+    artifact.selected_product_id = top.product_id;
+  }
   write();
 
   const decision: Decision = {
@@ -208,7 +214,10 @@ export function approveReplacement(projectId: string, index: number, actor: stri
     if (message?.artifact) {
       const data = message.artifact.data as RankingArtifact;
       data.selected_product_id = productId;
-      for (const row of data.rows) if (row.product_id === productId) row.status = "selected";
+      for (const row of data.rows) {
+        if (row.product_id === productId) row.status = "selected";
+        else if (row.status === "selected") row.status = "ranked";
+      }
       writeRankingArtifact(projectId, pending.artifact_id, data);
     }
     return { status: "replaced", result, product_id: productId };

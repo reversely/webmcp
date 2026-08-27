@@ -80,7 +80,7 @@ describe("replacement flow", () => {
     expect(outcome.ranked.map((r) => r.product_id)).toEqual([cheaper[0].id].map((id) => `coffee-table-shop-11.myshopify.com:${id}`));
 
     const artifact = snapshot(projectId).messages.find((m) => m.artifact?.kind === "ranking")!.artifact!.data as RankingArtifact;
-    expect(artifact.rows.map((r) => r.status)).toEqual(["ranked", "eliminated", "eliminated"]);
+    expect(artifact.rows.map((r) => r.status)).toEqual(["selected", "eliminated", "eliminated"]);
     expect(artifact.rows[1].reason).toBe("insufficient savings");
     expect(artifact.rows[2].geometry).toBe("fail");
     expect(s.store.decisions.size).toBe(1);
