@@ -12,6 +12,8 @@ export const BUDGET_CENTS = 250000;
 export const POLL_MS = 6000;
 
 export type Snapshot = {
+  /** Present on the create response only: the six-character room code. */
+  code?: string;
   project: { id: string; name: string; budget_cents: number; required_by: string | null; delivery_address_json: { postal_code?: string; city?: string; region?: string } | null; version: number };
   space: { width_mm: number; length_mm: number } | null;
   requirements: { type: string; status: string; value_json: unknown }[];
@@ -56,6 +58,54 @@ export async function appears(locator: Locator, timeoutMs: number): Promise<bool
   } catch {
     return false;
   }
+}
+
+/** Reads the project id out of a /projects/:id/... URL. */
+export function projectIdFrom(page: Page): string {
+  const m = /\/projects\/([^/?#]+)/.exec(page.url());
+  if (!m) throw new Error(`Not on a project page: ${page.url()}`);
+  return m[1];
+}
+
+/** Fills the name and role fields of a landing card (`create` after creating, `join` on the join card). */
+async function fillWhoAmI(page: Page, prefix: "create" | "join", name: string, role: string) {
+  await page.getByTestId(`${prefix}-name`).fill(name);
+  const chip = page.getByTestId(`${prefix}-role-${role}`);
+  if ((await chip.count()) > 0) await chip.click();
+  else await page.getByTestId(`${prefix}-role`).fill(role);
+  await expect(page.getByTestId(`${prefix}-role`)).toHaveValue(role);
+}
+
+/**
+ * Creates a project through the landing form, enters it as `name` with `role`, and returns the
+ * room code shown after creation. Leaves the page on the board with the polyfill flag on the URL.
+ */
+export async function createThroughLanding(page: Page, project: { name: string; budgetUsd: number; requiredBy: string }, name: string, role: string): Promise<{ code: string; projectId: string }> {
+  await page.goto(`/${POLYFILL}`);
+  await page.getByTestId("create-name").fill(project.name);
+  await page.getByTestId("create-budget").fill(String(project.budgetUsd));
+  await page.getByTestId("create-date").fill(project.requiredBy);
+  await page.getByTestId("create-submit").click();
+  const codeEl = page.getByTestId("project-code");
+  await expect(codeEl).toBeVisible();
+  const code = (await codeEl.innerText()).trim();
+  expect(code).toMatch(/^[A-Z0-9]{6}$/);
+  await fillWhoAmI(page, "create", name, role);
+  await page.getByTestId("create-enter").click();
+  await page.waitForURL(/\/projects\/[^/]+\/board/);
+  await expect(page.getByTestId("stage-nav")).toBeVisible();
+  return { code, projectId: projectIdFrom(page) };
+}
+
+/** Joins an existing project through the landing form's join card and lands on its board. */
+export async function joinThroughLanding(page: Page, code: string, name: string, role: string): Promise<string> {
+  await page.goto(`/${POLYFILL}`);
+  await page.getByTestId("join-code").fill(code);
+  await fillWhoAmI(page, "join", name, role);
+  await page.getByTestId("join-submit").click();
+  await page.waitForURL(/\/projects\/[^/]+\/board/);
+  await expect(page.getByTestId("stage-nav")).toBeVisible();
+  return projectIdFrom(page);
 }
 
 export async function openStage(page: Page, projectId: string, stage: "board" | "room" | "place" | "catalog") {
@@ -110,6 +160,26 @@ export async function addBoardNote(page: Page, text: string, at: { x: number; y:
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(boardText(page, text)).toBeVisible();
+}
+
+type TldrawWindow = Window & {
+  __tldraw_addNote?: (text: string, x: number, y: number, color?: string) => void;
+  __tldraw_addSwatch?: (color: string, x: number, y: number, label?: string) => void;
+};
+
+/** Creates sticky notes through the editor the board exposes on `window` (board-canvas.tsx), then waits for them to render. */
+export async function addBoardNotesByEditor(page: Page, notes: { text: string; x: number; y: number; color?: string }[]) {
+  await expect.poll(() => page.evaluate(() => typeof (window as TldrawWindow).__tldraw_addNote === "function"), { timeout: 20_000 }).toBe(true);
+  await page.evaluate((list) => {
+    for (const n of list) (window as TldrawWindow).__tldraw_addNote!(n.text, n.x, n.y, n.color);
+  }, notes);
+  for (const n of notes) await expect(boardText(page, n.text)).toBeVisible();
+}
+
+/** Creates a filled rectangle in a tldraw colour; the plan reads its fill as a hex swatch. */
+export async function addBoardSwatch(page: Page, color: string, at: { x: number; y: number }) {
+  await expect.poll(() => page.evaluate(() => typeof (window as TldrawWindow).__tldraw_addSwatch === "function"), { timeout: 20_000 }).toBe(true);
+  await page.evaluate(({ color, at }) => (window as TldrawWindow).__tldraw_addSwatch!(color, at.x, at.y), { color, at });
 }
 
 /** tldraw renders a note's text twice (the shape and its editor), so the first match is the check. */

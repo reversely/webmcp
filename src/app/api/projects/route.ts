@@ -1,24 +1,19 @@
 import { NextResponse } from "next/server";
-import { appState, snapshot } from "../../../server/state";
+import { appState, createProject, projectCode, snapshot } from "../../../server/state";
 
-/** Creates a project. Body: { name, budget_cents?, required_by? }. */
+/** Creates a project and its join code. Body: { name, budget_cents?, required_by? }. Returns the snapshot plus `code`. */
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as { name?: string; budget_cents?: number; required_by?: string };
-  const s = appState();
-  const id = s.store.newId("proj");
-  s.store.insertProject({
-    id,
+  const body = (await request.json().catch(() => ({}))) as { name?: string; budget_cents?: number; required_by?: string | null };
+  const budget = Number(body.budget_cents);
+  const { id, code } = createProject({
     name: body.name?.trim() || "Untitled project",
-    budget_cents: body.budget_cents ?? 250000,
-    currency: "USD",
-    required_by: body.required_by ?? null,
-    delivery_address_json: null,
-    created_at: new Date().toISOString()
+    budget_cents: Number.isFinite(budget) && budget > 0 ? Math.round(budget) : 250000,
+    required_by: body.required_by || null
   });
-  return NextResponse.json(snapshot(id), { status: 201 });
+  return NextResponse.json({ ...snapshot(id), code }, { status: 201 });
 }
 
 export async function GET() {
   const s = appState();
-  return NextResponse.json([...s.store.projects.values()].map((p) => ({ id: p.id, name: p.name, created_at: p.created_at })));
+  return NextResponse.json([...s.store.projects.values()].map((p) => ({ id: p.id, name: p.name, code: projectCode(p.id), created_at: p.created_at })));
 }

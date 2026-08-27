@@ -8,6 +8,7 @@ import { PlanView } from "../components/plan-view";
 import { DEFAULT_ROOM, DOOR_WIDTH_MM, WINDOW_WIDTH_MM, describeSpace, estimateRoom, wallLength, type Opening, type RoomEstimate, type Wall } from "../components/room-estimate";
 import css from "../components/stages.module.css";
 import type { RoomEstimateData } from "../artifacts/types";
+import { ANONYMOUS, useIdentity } from "../../../identity";
 
 const WALLS_SET = new Set<string>(["bottom", "top", "left", "right"]);
 
@@ -70,6 +71,7 @@ function sentenceFromRequirements(requirements: Requirement[]): string {
  */
 export function RoomConfigurator({ projectId, space, requirements }: { projectId: string; space: Space | null; requirements: Requirement[] }) {
   const router = useRouter();
+  const identity = useIdentity(projectId);
   const initialText = space ? describeSpace(space) : sentenceFromRequirements(requirements);
   const [text, setText] = useState(initialText);
   const [room, setRoom] = useState<RoomEstimate>(() => (initialText ? estimateRoom(initialText) : DEFAULT_ROOM));
@@ -113,7 +115,7 @@ export function RoomConfigurator({ projectId, space, requirements }: { projectId
       const res = await fetch(`/api/projects/${projectId}/spec`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ space: { name: room.name, width_mm: room.width_mm, length_mm: room.length_mm, height_mm: room.height_mm } })
+        body: JSON.stringify({ space: { name: room.name, width_mm: room.width_mm, length_mm: room.length_mm, height_mm: room.height_mm }, created_by: identity?.display_name ?? ANONYMOUS })
       });
       if (!res.ok) throw new Error(`Save failed (${res.status})`);
       window.dispatchEvent(new Event("project:changed"));

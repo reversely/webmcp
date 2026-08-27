@@ -1,21 +1,7 @@
-import { redirect } from "next/navigation";
-import { appState } from "../server/state";
+import { Landing } from "./landing";
 
-/** Creates the demo project on first visit and sends the visitor into stage 1. */
-export default async function Home() {
-  const s = appState();
-  let id = [...s.store.projects.keys()][0];
-  if (!id) {
-    id = s.store.newId("proj");
-    s.store.insertProject({
-      id,
-      name: "Zach + Ben Living Room",
-      budget_cents: 250000,
-      currency: "USD",
-      required_by: "2026-09-15",
-      delivery_address_json: null,
-      created_at: new Date().toISOString()
-    });
-  }
-  redirect(`/projects/${id}/board`);
+/** The landing surface: create a project and get its code, or join one with a code (PRD 3.1 leaves accounts to a later version). */
+export default async function Home({ searchParams }: { searchParams: Promise<{ missing?: string; code?: string }> }) {
+  const { missing, code } = await searchParams;
+  return <Landing missingId={missing ?? null} initialCode={code ?? null} />;
 }

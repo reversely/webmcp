@@ -1,0 +1,43 @@
+.page {
+  min-height: 100vh;
+  background: var(--paper);
+  padding: 64px 24px;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 32px;
+}
+.head { max-width: 62ch; text-align: center; display: grid; gap: 8px; }
+.head h1 { font-size: var(--text-h2); font-weight: 400; color: var(--ink); margin: 0; line-height: 1.15; }
+.head p { color: var(--ink-2); margin: 0; line-height: 1.55; }
+.message {
+  max-width: 62ch;
+  background: var(--card);
+  border-left: 3px solid var(--annotate);
+  border-radius: 8px;
+  padding: 12px 16px;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 420px)); gap: 24px; width: 100%; max-width: 880px; }
+@media (max-width: 900px) { .pair { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-card); padding: 24px; display: grid; gap: 16px; align-content: start; }
+.card h2 { font-size: var(--text-surface-title); font-weight: 500; color: var(--ink); margin: 0; }
+.card p { margin: 0; color: var(--ink-2); font-size: 14px; line-height: 1.5; }
+.code {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  letter-spacing: 0.18em;
+  color: var(--signature);
+  background: var(--signature-soft);
+  border-radius: 12px;
+  padding: 16px 20px;
+  text-align: center;
+  user-select: all;
+}
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 14px; cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--signature-soft); border-color: var(--signature); color: var(--signature); }
+.error { color: var(--tag-red-text); font-size: 13px; margin: 0; }
+.actions { display: flex; gap: 8px; align-items: center; }

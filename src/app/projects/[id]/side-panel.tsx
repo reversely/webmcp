@@ -5,6 +5,8 @@ import type { ProjectSnapshot } from "../../../server/state";
 import { formatFeetInches } from "../../../domain/types";
 import { ArtifactView, type ArtifactMessage } from "./artifacts";
 import { useAnimatedNumber } from "./artifacts/animated-number";
+import { TracePanel } from "./trace-panel";
+import { ANONYMOUS, useIdentity } from "../../identity";
 
 type Snapshot = Omit<ProjectSnapshot, "messages"> & { messages: ArtifactMessage[] };
 
@@ -25,6 +27,7 @@ function modelTag(status: ProjectSnapshot["products"][number]["model_status"]): 
 export function SidePanel({ projectId, children }: { projectId: string; children: ReactNode }) {
   const pathname = usePathname();
   const wide = pathname.endsWith("/board");
+  const identity = useIdentity(projectId);
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -54,7 +57,7 @@ export function SidePanel({ projectId, children }: { projectId: string; children
     setSending(true);
     setDraft("");
     try {
-      await fetch(`/api/projects/${projectId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ author: "Zach", text: body }) });
+      await fetch(`/api/projects/${projectId}/messages`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ author: identity?.display_name ?? ANONYMOUS, text: body }) });
       await refresh();
     } finally {
       setSending(false);
@@ -158,6 +161,7 @@ export function SidePanel({ projectId, children }: { projectId: string; children
               </button>
             </form>
           </section>
+          <TracePanel projectId={projectId} />
         </aside>
       )}
     </div>

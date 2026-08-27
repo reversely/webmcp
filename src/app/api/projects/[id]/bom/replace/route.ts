@@ -5,14 +5,15 @@ import { NotFoundError, VersionMismatchError, replaceBomItem } from "../../../..
 type Params = { params: Promise<{ id: string }> };
 
 /**
- * The replacement transaction (PRD 8.5, 19). Body: { existingBomItemId, replacementProductId }.
+ * The replacement transaction (PRD 8.5, 19). Body: { existingBomItemId, replacementProductId, actor? };
+ * `actor` is the display name of the person approving and lands on the Decision row.
  * The transaction runs against the project's current version; a concurrent write between the read
  * and the commit answers 409.
  */
 export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   const s = appState();
-  const body = (await request.json().catch(() => ({}))) as { existingBomItemId?: string; replacementProductId?: string };
+  const body = (await request.json().catch(() => ({}))) as { existingBomItemId?: string; replacementProductId?: string; actor?: string };
   if (typeof body.existingBomItemId !== "string" || typeof body.replacementProductId !== "string") {
     return NextResponse.json({ error: "Provide existingBomItemId and replacementProductId" }, { status: 400 });
   }
@@ -23,7 +24,7 @@ export async function POST(request: Request, { params }: Params) {
       expectedVersion: project.version,
       oldItemId: body.existingBomItemId,
       newProductId: body.replacementProductId,
-      actor: "zach"
+      actor: body.actor?.trim() || "member"
     });
     return NextResponse.json(snapshot(id));
   } catch (e) {
