@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "setup": "bash scripts/setup.sh",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
@@ -41,5 +42,9 @@
   },
   "allowScripts": {
     "esbuild@0.28.2": true
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
   }
 }

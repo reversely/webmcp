@@ -1,12 +1,19 @@
 # Mechanical, deterministic checks only. Judgment calls (data-structure fit, module boundaries,
 # whether a complex change explains itself) aren't enforceable here; see the clean-code skill.
 #
-# Setup in a fresh clone (pre-commit is a Python tool; uv provides it without a project venv):
-#   uv tool install pre-commit detect-secrets
-#   pre-commit install
-#   detect-secrets scan > .secrets.baseline
+# Setup in a fresh clone (npm run setup does all three):
+#   uv sync
+#   uv run pre-commit install
+#   uv run detect-secrets scan > .secrets.baseline   # only when the baseline needs regenerating
 
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.5
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
@@ -16,6 +23,7 @@ repos:
         args: [--maxkb=1000]
       - id: check-merge-conflict
       - id: check-json
+      - id: check-toml
       - id: check-yaml
       - id: detect-private-key
 

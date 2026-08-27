@@ -18,7 +18,7 @@ reads the URL from `MODAL_IMAGE_TO_3D_URL` in `.env`.
 
 ## Operating
 
-- Deploy or redeploy: `modal deploy modal/image_to_3d.py` under the `reversely` profile.
+- Deploy or redeploy: `uv run modal deploy modal/image_to_3d.py` under the `reversely` profile. The `modal` client is pinned in the repo's `pyproject.toml`; `uv sync` installs it.
 - GPU: one A10G per container, `timeout=180`, `scaledown_window=60`, no keep-warm. A container
   costs nothing while none is running.
 - Weights (TripoSR checkpoint, rembg u2net) live in the volume `webmcp-image-to-3d-weights`.
