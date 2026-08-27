@@ -1,20 +1,12 @@
 /**
- * Catalog access shared by the sourcing and replacement flows: one search per category against
- * the Global Catalog, and the upsert that turns a raw catalog object into a Product row plus a
- * project Candidate without selecting it (selection is the ranking's job).
+ * Catalog access shared by the sourcing and replacement flows: one search per query against the
+ * Global Catalog, and the upsert that turns a raw catalog object into a Product row plus a project
+ * Candidate without selecting it (selection is the ranking's job).
  */
-import type { CatalogClient, ShipsTo } from "../commerce";
+import { CatalogError, type CatalogClient, type ShipsTo } from "../commerce";
 import { normalizeCatalogProduct } from "../domain/products/normalize";
-import type { Box, Candidate, Category, Product, Project } from "../domain/types";
+import type { Box, Candidate, Category, Kind, Product, Project } from "../domain/types";
 import { appState } from "../server/state";
-
-export const CATEGORY_QUERIES: Record<Category, string> = {
-  sofa: "three seat sofa",
-  coffee_table: "coffee table",
-  ottoman: "ottoman",
-  rug: "area rug 8x10",
-  side_table: "side table"
-};
 
 export const SEARCH_LIMIT = 24;
 /** The catalog serves US sellers; a project without an address searches by country alone. */
@@ -30,18 +22,35 @@ export function shipsToFor(project: Pick<Project, "delivery_address_json">): Shi
   return { country: address.country, ...(address.region ? { region: address.region } : {}), postal_code: address.postal_code };
 }
 
-export type SearchOptions = { minCents?: number; maxCents?: number; limit?: number; query?: string };
+export type SearchOptions = { minCents?: number; maxCents?: number; limit?: number };
 
-/** One live `search_catalog` call filtered to in-stock products that ship to the project address. */
-export async function searchCategory(client: CatalogClient, category: Category, shipsTo: ShipsTo, options: SearchOptions = {}): Promise<unknown[]> {
+/** Waits before each retry of a rate-limited search; a run sources one search per item, so a burst of items can trip the catalog's limit. */
+const RATE_LIMIT_WAITS_MS = [2000, 6000];
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * One live `search_catalog` call for `query`, filtered to in-stock products that ship to the
+ * project address. An HTTP 429 from the catalog is retried after a pause, twice, before it
+ * propagates.
+ */
+export async function searchProducts(client: CatalogClient, query: string, shipsTo: ShipsTo, options: SearchOptions = {}): Promise<unknown[]> {
   const price = options.minCents !== undefined || options.maxCents !== undefined ? { min: options.minCents, max: options.maxCents } : undefined;
-  const result = await client.searchCatalog({
-    query: options.query ?? CATEGORY_QUERIES[category],
-    filters: { ships_to: shipsTo, available: true, ...(price ? { price } : {}) },
-    context: { address_country: shipsTo.country, address_region: shipsTo.region, postal_code: shipsTo.postal_code, currency: "USD" },
-    pagination: { limit: options.limit ?? SEARCH_LIMIT }
-  });
-  return result.products ?? [];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const result = await client.searchCatalog({
+        query,
+        filters: { ships_to: shipsTo, available: true, ...(price ? { price } : {}) },
+        context: { address_country: shipsTo.country, address_region: shipsTo.region, postal_code: shipsTo.postal_code, currency: "USD" },
+        pagination: { limit: options.limit ?? SEARCH_LIMIT }
+      });
+      return result.products ?? [];
+    } catch (e) {
+      const rateLimited = e instanceof CatalogError && e.code === 429;
+      if (!rateLimited || attempt >= RATE_LIMIT_WAITS_MS.length) throw e;
+      await sleep(RATE_LIMIT_WAITS_MS[attempt]);
+    }
+  }
 }
 
 type RawCatalog = { url?: string; variants?: { seller?: { domain?: string }; url?: string; availability?: { available?: boolean } }[] };
@@ -58,8 +67,8 @@ export function sellerOf(raw: unknown): { merchant: string; sourceUrl: string } 
   return { merchant, sourceUrl: r.url ?? variant?.url ?? `https://${merchant}/` };
 }
 
-/** Normalizes a raw catalog object into the store as a `pending` candidate, or returns the existing one. */
-export function upsertCandidate(projectId: string, raw: unknown, category: Category): { product: Product; candidate: Candidate } {
+/** Normalizes a raw catalog object into the store as a `pending` candidate for the named item, or returns the existing one. */
+export function upsertCandidate(projectId: string, raw: unknown, category: Category, kind: Kind): { product: Product; candidate: Candidate } {
   const s = appState();
   const { merchant, sourceUrl } = sellerOf(raw);
   const fresh = normalizeCatalogProduct(raw, { merchant, sourceUrl });
@@ -73,6 +82,7 @@ export function upsertCandidate(projectId: string, raw: unknown, category: Categ
       project_id: projectId,
       product_id: product.id,
       category,
+      kind,
       hard_constraint_results_json: null,
       visual_evaluation_json: null,
       delivery_status: null,

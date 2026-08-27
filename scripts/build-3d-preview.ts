@@ -1,34 +1,32 @@
-// Builds a standalone HTML viewer of the demo room with the five category proxies placed
+// Builds a standalone HTML viewer of the demo room with five kind proxies placed
 // by the geometry engine, so the 3D pipeline can be reviewed without the app.
 // Run: npx tsx scripts/build-3d-preview.ts  → docs/progress/<date>-3d-preview.html
 import { mkdirSync, writeFileSync } from "node:fs";
 import { build } from "esbuild";
 import { proxyToGlb, verifyBounds } from "../src/domain/three";
 import { checkLayout } from "../src/domain/geometry";
-import type { Box, Category } from "../src/domain/types";
+import type { Box, Kind } from "../src/domain/types";
 
 const ROOM = { width_mm: 3658, length_mm: 5486 };
 
-const ITEMS: { id: string; category: Category; box: Box; x_mm: number; y_mm: number; rotation_deg: number }[] = [
-  { id: "sofa", category: "sofa", box: { width_mm: 2134, depth_mm: 914, height_mm: 838 }, x_mm: 1829, y_mm: 700, rotation_deg: 0 },
-  { id: "table", category: "coffee_table", box: { width_mm: 1220, depth_mm: 610, height_mm: 450 }, x_mm: 1829, y_mm: 1900, rotation_deg: 0 },
-  { id: "ottoman", category: "ottoman", box: { width_mm: 610, depth_mm: 610, height_mm: 430 }, x_mm: 2900, y_mm: 1900, rotation_deg: 0 },
-  { id: "rug", category: "rug", box: { width_mm: 2438, depth_mm: 3048, height_mm: 10 }, x_mm: 1829, y_mm: 1900, rotation_deg: 0 },
-  { id: "side", category: "side_table", box: { width_mm: 508, depth_mm: 508, height_mm: 610 }, x_mm: 3200, y_mm: 700, rotation_deg: 0 }
+const ITEMS: { id: string; kind: Kind; box: Box; x_mm: number; y_mm: number; rotation_deg: number }[] = [
+  { id: "sofa", kind: "seating", box: { width_mm: 2134, depth_mm: 914, height_mm: 838 }, x_mm: 1829, y_mm: 700, rotation_deg: 0 },
+  { id: "table", kind: "table", box: { width_mm: 1220, depth_mm: 610, height_mm: 450 }, x_mm: 1829, y_mm: 1900, rotation_deg: 0 },
+  { id: "ottoman", kind: "decor", box: { width_mm: 610, depth_mm: 610, height_mm: 430 }, x_mm: 2900, y_mm: 1900, rotation_deg: 0 },
+  { id: "rug", kind: "soft_floor", box: { width_mm: 2438, depth_mm: 3048, height_mm: 10 }, x_mm: 1829, y_mm: 1900, rotation_deg: 0 },
+  { id: "side", kind: "table", box: { width_mm: 508, depth_mm: 508, height_mm: 610 }, x_mm: 3200, y_mm: 700, rotation_deg: 0 }
 ];
 
 async function main() {
   const layout = checkLayout(
     ROOM,
-    ITEMS.map((i) => ({ id: i.id, box: i.box, placement: { x_mm: i.x_mm, y_mm: i.y_mm, rotation_deg: i.rotation_deg } })),
-    "rug",
-    "table",
-    "sofa"
+    ITEMS.map((i) => ({ id: i.id, name: i.id, kind: i.kind, box: i.box, placement: { x_mm: i.x_mm, y_mm: i.y_mm, rotation_deg: i.rotation_deg } })),
+    [{ relation: "under", subject: "rug", objects: ["table"] }]
   );
 
   const assets: Record<string, string> = {};
   for (const item of ITEMS) {
-    const glb = await proxyToGlb(item.category, item.box);
+    const glb = await proxyToGlb(item.kind, item.box);
     await verifyBounds(glb, item.box);
     assets[item.id] = Buffer.from(glb).toString("base64");
   }
@@ -54,11 +52,11 @@ async function main() {
         const left = new THREE.Mesh(new THREE.PlaneGeometry(L, 2.6), wallMat); left.rotation.y = Math.PI / 2; left.position.set(0, 1.3, -L / 2); scene.add(left);
         scene.add(new THREE.GridHelper(Math.max(W, L), Math.round(Math.max(W, L) / 0.3048), 0x999999, 0xcccccc).translateX(W / 2).translateZ(-L / 2));
         const loader = new GLTFLoader();
-        const colors = { sofa: 0x7a5c3e, coffee_table: 0x9a7b55, ottoman: 0x2f3e5c, rug: 0xc9b8a0, side_table: 0x8b6a45 };
+        const colors = { seating: 0x7a5c3e, table: 0x9a7b55, decor: 0x2f3e5c, soft_floor: 0xc9b8a0, other: 0x9fa8b2 };
         for (const item of data.items) {
           const bytes = Uint8Array.from(atob(data.assets[item.id]), (c) => c.charCodeAt(0));
           loader.parse(bytes.buffer, "", (gltf) => {
-            gltf.scene.traverse((o) => { if (o.isMesh) { o.material = new THREE.MeshStandardMaterial({ color: colors[item.category], roughness: 0.8 }); o.castShadow = o.receiveShadow = true; } });
+            gltf.scene.traverse((o) => { if (o.isMesh) { o.material = new THREE.MeshStandardMaterial({ color: colors[item.kind], roughness: 0.8 }); o.castShadow = o.receiveShadow = true; } });
             // Project (x, y, z-up) → three (x, z-up, -y); rotation about +Y.
             gltf.scene.position.set(item.x_mm / 1000, 0, -item.y_mm / 1000);
             gltf.scene.rotation.y = (item.rotation_deg * Math.PI) / 180;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CATEGORY_COLOURS, averageColourFromImage, averagePixelColour, fallbackColour, productColourFromImage, productPixelColour, type CanvasLike } from "./colour";
+import { KIND_COLOURS, averageColourFromImage, averagePixelColour, fallbackColour, productColourFromImage, productPixelColour, type CanvasLike } from "./colour";
 import { GRID_STEP_M, cameraPose, gridSegments, itemRenderMode, itemTransform, roomMetres } from "./transform";
 
 /** A 32 × 32 RGBA buffer: white studio background with a coloured block over the centre `inner` × `inner` pixels. */
@@ -90,7 +90,7 @@ describe("average-colour fallback", () => {
     expect(canvas.width).toBe(32);
   });
 
-  it("falls back to null on a tainted canvas and to the category colour after that", () => {
+  it("falls back to null on a tainted canvas and to the kind colour after that", () => {
     const tainted: CanvasLike = {
       width: 0,
       height: 0,
@@ -103,8 +103,8 @@ describe("average-colour fallback", () => {
     };
     const average = averageColourFromImage({}, () => tainted);
     expect(average).toBeNull();
-    expect(fallbackColour(average, "ottoman")).toBe(CATEGORY_COLOURS.ottoman);
-    expect(fallbackColour("#123456", "ottoman")).toBe("#123456");
+    expect(fallbackColour(average, "decor")).toBe(KIND_COLOURS.decor);
+    expect(fallbackColour("#123456", "decor")).toBe("#123456");
   });
 });
 
@@ -129,11 +129,11 @@ describe("product colour sampler", () => {
     expect(productPixelColour(data, 32, 32)).toBeNull();
   });
 
-  it("falls back to the average when the crop is all background, then to the category colour", () => {
+  it("falls back to the average when the crop is all background, then to the kind colour", () => {
     const white = productImage(0, [0, 0, 0]);
     expect(productPixelColour(white, 32, 32)).toBeNull();
     expect(productColourFromImage({}, () => canvasReturning(white))).toBe("#ffffff");
-    expect(fallbackColour(productColourFromImage({}, () => ({ width: 0, height: 0, getContext: () => null })), "rug")).toBe(CATEGORY_COLOURS.rug);
+    expect(fallbackColour(productColourFromImage({}, () => ({ width: 0, height: 0, getContext: () => null })), "soft_floor")).toBe(KIND_COLOURS.soft_floor);
   });
 });
 

@@ -1,11 +1,29 @@
 import type { Category } from "../types";
-import type { BudgetWindow, RankedCandidate, SelectionResult } from "./types";
+import type { BudgetWindow, RankedByItem, RankedCandidate, SelectionResult } from "./types";
 
-/** Search depth per category; 8^4 combinations is cheap and the demo never needs deeper picks. */
-const TOP_PER_CATEGORY = 8;
+/** Search depth per item; 8^4 combinations is cheap and the demo never needs deeper picks. */
+const TOP_PER_ITEM = 8;
 
-/** PRD 8.4: when nothing lands in the window the agent re-searches the coffee table. */
-const GAP_CATEGORY: Category = "coffee_table";
+/**
+ * The item whose price the selection can move most (PRD 8.4's gap item): a required item with no
+ * ranked candidates first, otherwise the one whose ranked prices spread widest, ties in required
+ * order. The second search and the replacement floor both target it.
+ */
+export function pivotItem(rankedByItem: Partial<RankedByItem>, required: Category[]): Category {
+  const empty = required.find((item) => (rankedByItem[item] ?? []).length === 0);
+  if (empty !== undefined) return empty;
+  let best = required[0];
+  let bestSpread = -1;
+  for (const item of required) {
+    const prices = (rankedByItem[item] ?? []).map((row) => row.price_cents);
+    const spread = Math.max(...prices) - Math.min(...prices);
+    if (spread > bestSpread) {
+      best = item;
+      bestSpread = spread;
+    }
+  }
+  return best;
+}
 
 interface Combination {
   picks: RankedCandidate[];
@@ -42,10 +60,8 @@ function bestCombination(lists: RankedCandidate[][], accepts: (subtotal: number)
   return best;
 }
 
-function topPicks(rankedByCategory: Partial<Record<Category, RankedCandidate[]>>, categories: Category[]) {
-  return categories.map((category) =>
-    [...(rankedByCategory[category] ?? [])].sort((a, b) => a.rank - b.rank).slice(0, TOP_PER_CATEGORY)
-  );
+function topPicks(rankedByItem: Partial<RankedByItem>, items: Category[]) {
+  return items.map((item) => [...(rankedByItem[item] ?? [])].sort((a, b) => a.rank - b.rank).slice(0, TOP_PER_ITEM));
 }
 
 function suggestedRange(partialSubtotal: number, window: BudgetWindow): BudgetWindow {
@@ -56,34 +72,24 @@ function suggestedRange(partialSubtotal: number, window: BudgetWindow): BudgetWi
 }
 
 /**
- * Picks one ranked candidate per required category whose subtotal lies in `[min, max)`.
+ * Picks one ranked candidate per required item whose subtotal lies in `[min, max)`.
  *
- * Without a valid combination it reports the gap category and the price range a candidate there
- * would need so the best partial combination of the other categories lands in the window.
+ * Without a valid combination it reports the pivot item and the price range a candidate there
+ * would need so the best partial combination of the other items lands in the window.
  */
-export function selectCombination(
-  rankedByCategory: Partial<Record<Category, RankedCandidate[]>>,
-  required: Category[],
-  window: BudgetWindow
-): SelectionResult {
-  const full = bestCombination(
-    topPicks(rankedByCategory, required),
-    (subtotal) => subtotal >= window.min_cents && subtotal < window.max_cents
-  );
+export function selectCombination(rankedByItem: Partial<RankedByItem>, required: Category[], window: BudgetWindow): SelectionResult {
+  const full = bestCombination(topPicks(rankedByItem, required), (subtotal) => subtotal >= window.min_cents && subtotal < window.max_cents);
   if (full) {
-    const selected: Partial<Record<Category, RankedCandidate>> = {};
-    required.forEach((category, index) => {
-      selected[category] = full.picks[index];
+    const selected: Record<Category, RankedCandidate> = {};
+    required.forEach((item, index) => {
+      selected[item] = full.picks[index];
     });
     return { selected, subtotal_cents: full.subtotal };
   }
 
-  const others = topPicks(rankedByCategory, required.filter((category) => category !== GAP_CATEGORY));
-  // Prefer a partial that a gap-category price can still close; fall back to the best partial by rank.
+  const gap = pivotItem(rankedByItem, required);
+  const others = topPicks(rankedByItem, required.filter((item) => item !== gap));
+  // Prefer a partial that a pivot price can still close; fall back to the best partial by rank.
   const partial = bestCombination(others, (subtotal) => subtotal < window.max_cents) ?? bestCombination(others, () => true);
-  return {
-    no_combination: true,
-    gapCategory: GAP_CATEGORY,
-    suggestedPriceRange: suggestedRange(partial?.subtotal ?? 0, window)
-  };
+  return { no_combination: true, gapCategory: gap, suggestedPriceRange: suggestedRange(partial?.subtotal ?? 0, window) };
 }

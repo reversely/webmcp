@@ -46,7 +46,7 @@ export function replaceBomItem(store: ProjectStore, request: ReplaceRequest): Re
 
     store.markChanged(projectId);
     store.bomItems.set(oldItem.id, { ...oldItem, status: "removed" });
-    ensureSelectedCandidate(store, projectId, newProductId, oldItem.category);
+    ensureSelectedCandidate(store, projectId, newProductId, oldItem.category, oldItem.kind);
     // A product removed from the BOM earlier still owns a row, which regenerateBom skips; restore
     // it the way addToBom would so the replacement never creates a duplicate.
     const priorItem = findItemByProduct(store, projectId, newProductId);
@@ -98,7 +98,8 @@ function ensureSelectedCandidate(
   store: ProjectStore,
   projectId: string,
   productId: string,
-  category: Candidate["category"]
+  category: Candidate["category"],
+  kind: Candidate["kind"]
 ): void {
   for (const candidate of store.candidates.values()) {
     if (candidate.project_id !== projectId || candidate.product_id !== productId) continue;
@@ -112,6 +113,7 @@ function ensureSelectedCandidate(
     project_id: projectId,
     product_id: productId,
     category,
+    kind,
     hard_constraint_results_json: null,
     visual_evaluation_json: null,
     delivery_status: null,

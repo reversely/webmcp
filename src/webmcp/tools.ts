@@ -8,7 +8,7 @@
  * Argument names are camelCase, matching the PRD's registration example; the request bodies use
  * the domain's snake_case column names.
  */
-import { Category } from "@/domain/types";
+import { Kind } from "@/domain/types";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH";
 
@@ -121,8 +121,12 @@ export const TOOLS: readonly ToolDefinition[] = [
         },
         category: {
           type: "string",
-          enum: Category.options,
-          description: "Furniture category of the product, when the user states it or it is obvious from the URL. Omit to let the server classify."
+          description: "What the user calls the item, in their own words (for example \"side table\" or \"reading lamp\"), when they name it. Omit to use the product's title."
+        },
+        kind: {
+          type: "string",
+          enum: Kind.options,
+          description: "How the item renders in the room plan. seating: sofas, chairs, benches. table: any table or desk. storage: shelves, cabinets. soft_floor: rugs. bed. lighting: lamps. decor: ottomans, plants, art. other. Omit to let the server infer it from the item name."
         },
         room: {
           type: "string",
@@ -136,7 +140,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     route: {
       method: "POST",
       path: `${PROJECT_PATH}/products`,
-      body: ({ url, category, room }) => ({ url, category, room })
+      body: ({ url, category, kind, room }) => ({ url, category, kind, room })
     }
   },
   {
@@ -149,11 +153,11 @@ export const TOOLS: readonly ToolDefinition[] = [
         type: {
           type: "string",
           enum: REQUIREMENT_TYPES,
-          description: "Which requirement to set. budget: maximum spend in cents. room_dimensions: room size. required_item: a furniture category the project must include. visual_direction: colours. layout_requirement: a placement rule. delivery_date: the date everything must arrive by."
+          description: "Which requirement to set. budget: maximum spend in cents. room_dimensions: room size. required_item: an item the project must include, in the user's words. visual_direction: colours. layout_requirement: a placement rule between named items. delivery_date: the date everything must arrive by."
         },
         value: {
           description:
-            "The requirement value, shaped by type. budget: integer cents, e.g. 250000 for $2,500. room_dimensions: {\"width_mm\": integer, \"length_mm\": integer}. required_item: a category name (sofa, coffee_table, ottoman, rug, side_table). visual_direction: {\"base_colors\": [string], \"accent_colors\": [string]}. layout_requirement: {\"type\": string, \"items\": [category]}, e.g. rug_encompasses_group. delivery_date: ISO date YYYY-MM-DD."
+            "The requirement value, shaped by type. budget: integer cents, e.g. 250000 for $2,500. room_dimensions: {\"width_mm\": integer, \"length_mm\": integer}. required_item: the item in the user's words, either a string such as \"reading chair\" or {\"name\": string, \"kind\": seating | table | storage | soft_floor | bed | lighting | decor | other | null}. visual_direction: {\"base\": [hex colour], \"accent\": [hex colour]}. layout_requirement: {\"relation\": under | on_top_of | beside | facing | against_wall | clear_around, \"subject\": item name, \"objects\": [item name], \"distance_mm\"?: integer}, e.g. {\"relation\": \"under\", \"subject\": \"big rug\", \"objects\": [\"sofa\", \"coffee table\"]}. delivery_date: ISO date YYYY-MM-DD."
         },
         scope: {
           type: "string",
@@ -258,7 +262,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   {
     name: "evaluate_project",
     description:
-      "Check the project against its requirements without changing anything: budget state (under, exact, over) with the total, required categories still missing from the BOM, geometry conflicts between placed products, each BOM line's delivery status against the deadline, and unresolved issues. Call after a change to confirm the project still meets its constraints, or when the user asks whether the plan works.",
+      "Check the project against its requirements without changing anything: budget state (under, exact, over) with the total, required items still missing from the BOM, geometry conflicts between placed products and the result of each layout rule, each BOM line's delivery status against the deadline, and unresolved issues. Call after a change to confirm the project still meets its constraints, or when the user asks whether the plan works.",
     inputSchema: NO_INPUT,
     annotations: { readOnlyHint: true },
     route: { method: "GET", path: PROJECT_PATH }

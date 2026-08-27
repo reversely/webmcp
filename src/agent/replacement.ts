@@ -7,15 +7,17 @@ import { calculateBudget, replaceBomItem, VersionMismatchError, type ReplaceResu
 import { rankDeliveryConfidence } from "../domain/delivery";
 import { candidateFits, footprint, type Footprint } from "../domain/geometry";
 import { hardFilter, rankSurvivors, replacementCeiling, requiredSavings, type RankableCandidate, type VisualEvaluation } from "../domain/ranking";
-import type { Category, Decision } from "../domain/types";
+import { itemKey, type Category, type Decision } from "../domain/types";
 import { appState, snapshot, spaceFor, updateCandidate, type PendingReplacement } from "../server/state";
 import { writeRankingArtifact, type RankingArtifact, type RankingRow } from "./artifacts";
-import { boxOf, dimsText, isAvailable, mapLimit, searchCategory, shipsToFor, upsertCandidate, type SearchOptions } from "./catalog";
+import { boxOf, dimsText, isAvailable, mapLimit, searchProducts, shipsToFor, upsertCandidate, type SearchOptions } from "./catalog";
 import { evaluateDelivery } from "./delivery";
+import { kindFor } from "./kinds";
+import type { SourcingItem } from "./sourcing";
 import { evaluateVisualFit } from "./visual";
 
 export type ReplacementDeps = {
-  search: (category: Category, options?: SearchOptions) => Promise<unknown[]>;
+  search: (item: SourcingItem, options?: SearchOptions) => Promise<unknown[]>;
   evaluateDelivery: (projectId: string, candidateId: string) => Promise<unknown>;
   evaluateVisualFit: (projectId: string, candidateId: string) => Promise<VisualEvaluation | null>;
   evaluatePerCategory: number;
@@ -24,7 +26,7 @@ export type ReplacementDeps = {
 export function defaultReplacementDeps(projectId: string): ReplacementDeps {
   const s = appState();
   return {
-    search: (category, options) => searchCategory(s.client, category, shipsToFor(s.store.getProject(projectId)), options),
+    search: (item, options) => searchProducts(s.client, item.query, shipsToFor(s.store.getProject(projectId)), options),
     evaluateDelivery,
     evaluateVisualFit,
     evaluatePerCategory: 6
@@ -52,18 +54,24 @@ function placedFootprints(projectId: string, excludeItemId: string): Footprint[]
   const snap = snapshot(projectId);
   const byItem = new Map(snap.placements.map((p) => [p.bom_item_id, p]));
   return snap.bom
-    .filter((b) => b.id !== excludeItemId && b.status !== "removed" && b.category !== "rug" && b.product && byItem.has(b.id))
+    .filter((b) => b.id !== excludeItemId && b.status !== "removed" && b.kind !== "soft_floor" && b.product && byItem.has(b.id))
     .flatMap((b) => {
       const box = boxOf(b.product!);
       return box ? [footprint(box, byItem.get(b.id)!)] : [];
     });
 }
 
+/**
+ * Ranks cheaper products for the BOM item named `category` (the project's phrase for it, matched
+ * case-insensitively) and writes the ranking artifact.
+ */
 export async function findCheaperReplacement(projectId: string, category: Category, deps: ReplacementDeps = defaultReplacementDeps(projectId)): Promise<ReplacementOutcome> {
   const s = appState();
   const snap = snapshot(projectId);
-  const oldItem = snap.bom.find((b) => b.category === category && b.status !== "removed" && b.product);
+  const oldItem = snap.bom.find((b) => itemKey(b.category) === itemKey(category) && b.status !== "removed" && b.product);
   if (!oldItem) return { status: "no_item", category };
+  category = oldItem.category;
+  const item: SourcingItem = { name: category, kind: oldItem.kind, query: kindFor(category).query };
   const oldPrice = oldItem.product!.price_cents;
   const savings = requiredSavings(calculateBudget(s.store, projectId).committed_cents, snap.project.budget_cents);
   const ceiling = replacementCeiling(oldPrice, savings);
@@ -72,10 +80,10 @@ export async function findCheaperReplacement(projectId: string, category: Catego
   const write = () => writeRankingArtifact(projectId, artifactId, artifact);
   write();
 
-  const raws = (await deps.search(category, { maxCents: ceiling })).filter(isAvailable);
+  const raws = (await deps.search(item, { maxCents: ceiling })).filter(isAvailable);
   const rows = raws.flatMap((raw) => {
     try {
-      const row = upsertCandidate(projectId, raw, category);
+      const row = upsertCandidate(projectId, raw, category, item.kind);
       return row.product.id === oldItem.product_id ? [] : [row];
     } catch {
       return [];

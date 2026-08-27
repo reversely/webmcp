@@ -16,12 +16,12 @@ async function boxGlb(width: number, height: number, depth: number): Promise<Uin
 }
 
 describe("proxyToGlb", () => {
-  it.each(DEMO_BOXES)("%s proxy survives a GLB round trip with its bounds intact", async (category, box) => {
-    await expect(verifyBounds(await proxyToGlb(category, box), box)).resolves.toBeDefined();
+  it.each(DEMO_BOXES)("%s proxy survives a GLB round trip with its bounds intact", async (kind, box) => {
+    await expect(verifyBounds(await proxyToGlb(kind, box), box)).resolves.toBeDefined();
   });
 
   it("verifyBounds rejects a GLB whose bounds are not the box", async () => {
-    const glb = await proxyToGlb("ottoman", DEMO_BOXES[2][1]);
+    const glb = await proxyToGlb("decor", DEMO_BOXES[6][1]);
     await expect(verifyBounds(glb, SOFA)).rejects.toThrow(/expected/);
   });
 });

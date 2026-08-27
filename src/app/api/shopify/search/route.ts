@@ -2,24 +2,27 @@ import { NextResponse } from "next/server";
 import { appState } from "../../../../server/state";
 import { withProject } from "../../../../server/trace";
 import { normalizeCatalogProduct } from "../../../../domain/products/normalize";
-import { Category } from "../../../../domain/types";
 import { CatalogError } from "../../../../commerce";
-import { CATEGORY_QUERIES, DEFAULT_COUNTRY, shipsToFor } from "../../../../agent/catalog";
+import { DEFAULT_COUNTRY, shipsToFor } from "../../../../agent/catalog";
+import { inferKind } from "../../../../agent/kinds";
 
 /**
  * Thin server wrapper around Global Catalog search_catalog (PRD 19). Body:
- * { category?, query?, project_id?, limit?, max_cents?, cursor? }. The query is the category's
- * standard search when `query` is empty. `ships_to` and the buyer context come from the project's
- * delivery address; without one (or without a project) the search carries the country alone.
- * Each result carries the raw catalog object (for adding to a project) and the normalized product
- * (for display); `ships_to` echoes what the search used so the panel can say so.
+ * { item?, query?, project_id?, limit?, max_cents?, cursor? }. `item` is a project item's phrase;
+ * its inferred search query is used when `query` is empty, and the keywords are appended to it
+ * otherwise. `ships_to` and the buyer context come from the project's delivery address; without
+ * one (or without a project) the search carries the country alone. Each result carries the raw
+ * catalog object (for adding to a project) and the normalized product (for display); `ships_to`
+ * echoes what the search used so the panel can say so.
  */
 export async function POST(request: Request) {
-  const body = (await request.json()) as { category?: string; query?: string; project_id?: string; limit?: number; max_cents?: number; cursor?: string };
+  const body = (await request.json()) as { item?: string; query?: string; project_id?: string; limit?: number; max_cents?: number; cursor?: string };
   const s = appState();
-  const category = Category.safeParse(body.category);
-  const query = body.query?.trim() || (category.success ? CATEGORY_QUERIES[category.data] : "");
-  if (!query) return NextResponse.json({ error: "A category or a query is required" }, { status: 400 });
+  const item = body.item?.trim();
+  const keywords = body.query?.trim() ?? "";
+  const base = item ? (await inferKind(item)).query : "";
+  const query = [base, keywords].filter(Boolean).join(" ").trim();
+  if (!query) return NextResponse.json({ error: "An item or a query is required" }, { status: 400 });
   const project = body.project_id ? s.store.projects.get(body.project_id) : undefined;
   const ships_to = project ? shipsToFor(project) : { country: DEFAULT_COUNTRY };
   try {

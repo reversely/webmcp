@@ -1,16 +1,19 @@
 /**
  * The flat colour a proxy wears (PRD 15.1: a proxy reads as the product's colour, never as a
  * billboard of its photo). Preference order: the median colour of the image's central crop with
- * the background removed, the image's average colour, then a per-category default.
+ * the background removed, the image's average colour, then a per-kind default.
  */
-import type { Category } from "../../domain/types";
+import type { Kind } from "../../domain/types";
 
-export const CATEGORY_COLOURS: Record<Category, string> = {
-  sofa: "#7a5c3e",
-  coffee_table: "#9a7b55",
-  ottoman: "#2f3e5c",
-  rug: "#c9b8a0",
-  side_table: "#8b6a45"
+export const KIND_COLOURS: Record<Kind, string> = {
+  seating: "#7a5c3e",
+  table: "#9a7b55",
+  storage: "#8b6a45",
+  soft_floor: "#c9b8a0",
+  bed: "#b9a894",
+  lighting: "#d9c8b0",
+  decor: "#2f3e5c",
+  other: "#9fa8b2"
 };
 
 const ALPHA_FLOOR = 8;
@@ -109,8 +112,8 @@ export function productColourFromImage(image: unknown, createCanvas: () => Canva
   return productPixelColour(data, SAMPLE_SIZE, SAMPLE_SIZE) ?? averagePixelColour(data);
 }
 
-export function fallbackColour(sampled: string | null, category: Category): string {
-  return sampled ?? CATEGORY_COLOURS[category];
+export function fallbackColour(sampled: string | null, kind: Kind): string {
+  return sampled ?? KIND_COLOURS[kind];
 }
 
 function median(values: number[]): number {

@@ -1,8 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { formatMoney } from "../../../../domain/money";
 import { formatFeetInches } from "../../../../domain/types";
 import css from "./artifacts.module.css";
-import { CATEGORY_LABEL, dollars, statusText, type RankingData, type RankingRow } from "./types";
+import { statusText, type RankingData, type RankingRow } from "./types";
 
 function dims(d: RankingRow["dims"]): string {
   if (!d) return "pending";
@@ -56,13 +57,13 @@ export function RankingArtifact({ data, title, onApprove, approving = false }: {
     return ea - eb;
   });
   const selected = data.selected_product_id;
-  const category = CATEGORY_LABEL[data.category] ?? data.category;
+  const category = data.category;
 
   return (
-    <div className={css.card} data-testid="artifact-ranking" role="group" aria-label={`Replacement ${category.toLowerCase()}`}>
-      <div className={css.title}>{title ?? `Cheaper ${category.toLowerCase()} options`}</div>
+    <div className={css.card} data-testid="artifact-ranking" role="group" aria-label={`Replacement ${category}`}>
+      <div className={css.title}>{title ?? `Cheaper ${category} options`}</div>
       <div className={css.sub}>
-        Needs {dollars(data.required_savings_cents)} in savings, so the new price stays at or under {dollars(data.ceiling_cents)}. Rows rank by visual match, then delivery, then price.
+        Needs {formatMoney(data.required_savings_cents)} in savings, so the new price stays at or under {formatMoney(data.ceiling_cents)}. Rows rank by visual match, then delivery, then price.
       </div>
       <div className={css.tableWrap}>
         <table className={css.table}>
@@ -103,8 +104,8 @@ export function RankingArtifact({ data, title, onApprove, approving = false }: {
                       </div>
                     </div>
                   </td>
-                  <td className={css.num}>{dollars(r.price_cents)}</td>
-                  <td className={css.num}>{dollars(r.savings_cents)}</td>
+                  <td className={css.num}>{formatMoney(r.price_cents)}</td>
+                  <td className={css.num}>{formatMoney(r.savings_cents)}</td>
                   <td>{dims(r.dims)}</td>
                   <td>
                     <Check value={r.geometry} />

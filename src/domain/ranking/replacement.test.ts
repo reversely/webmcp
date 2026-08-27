@@ -22,7 +22,7 @@ describe("replacement flow (Scenes 11 to 13)", () => {
         candidate("barely-cheaper", { price_cents: 45000 }),
         candidate("glass", { price_cents: 20000, delivery_status: "fail" })
       ],
-      { mode: "replacement", category: "coffee_table", requiredSavings_cents: savings, oldPrice_cents: oldCoffeeTable, fits: () => true }
+      { mode: "replacement", category: "round coffee table", requiredSavings_cents: savings, oldPrice_cents: oldCoffeeTable, fits: () => true }
     );
     expect(filtered.eliminated.map((e) => [e.candidate.id, e.reason])).toEqual([
       ["barely-cheaper", "insufficient_savings"],

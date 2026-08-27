@@ -8,7 +8,7 @@ const fits: FilterContext["fits"] = (c) => c.id !== "too-big";
 describe("hardFilter initial mode", () => {
   const ctx: FilterContext = {
     mode: "initial",
-    category: "coffee_table",
+    category: "round coffee table",
     budgetWindow: { min_cents: 231100, max_cents: 250000 },
     fits
   };
@@ -17,7 +17,7 @@ describe("hardFilter initial mode", () => {
     const result = hardFilter(
       [
         candidate("ok"),
-        candidate("rug", { category: "rug" }),
+        candidate("rug", { category: "big rug" }),
         candidate("too-big"),
         candidate("no-delivery", { delivery_status: "fail" }),
         candidate("too-pricey", { price_cents: 250001 }),
@@ -38,7 +38,7 @@ describe("hardFilter initial mode", () => {
 describe("hardFilter replacement mode", () => {
   const ctx: FilterContext = {
     mode: "replacement",
-    category: "coffee_table",
+    category: "round coffee table",
     requiredSavings_cents: 11800,
     oldPrice_cents: 49900,
     fits
@@ -48,7 +48,7 @@ describe("hardFilter replacement mode", () => {
     const result = hardFilter(
       [
         candidate("cheaper", { price_cents: 30000 }),
-        candidate("sofa", { category: "sofa", price_cents: 30000 }),
+        candidate("sofa", { category: "deep couch", price_cents: 30000 }),
         candidate("too-big", { price_cents: 30000 }),
         candidate("no-delivery", { price_cents: 30000, delivery_status: "fail" }),
         candidate("saves-too-little", { price_cents: 38200 }),

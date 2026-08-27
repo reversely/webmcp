@@ -1,11 +1,12 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { LayoutCheck } from "../../../../domain/geometry";
+import { ruleSentence, type LayoutCheck } from "../../../../domain/geometry";
 import type { Space } from "../../../../domain/types";
 import { formatFeetInches } from "../../../../domain/types";
 import type { ProjectSnapshot } from "../../../../server/state";
+import { ModelStageStrip } from "../components/model-stage-strip";
 import { PlanView, type PlanItem } from "../components/plan-view";
-import { ProductSearch } from "../components/product-search";
+import { ProductSearch, requiredItemNames } from "../components/product-search";
 import { Room3DView, type RoomItem } from "../components/room3d-view";
 import css from "../components/stages.module.css";
 
@@ -13,8 +14,13 @@ type Pos = { x_mm: number; y_mm: number; rotation_deg: number };
 type BomLine = ProjectSnapshot["bom"][number];
 
 const hasBox = (b: BomLine) => b.product?.spatial_status === "grounded" && b.product.width_mm != null && b.product.depth_mm != null;
-const label = (category: string) => category.replace("_", " ");
 const MODEL_POLL_MS = 4000;
+
+/** The status tag for one rule: red only on a fail; a rule that could not be evaluated stays gray. */
+function ruleTag(pass: boolean | null): { cls: string; text: string } {
+  if (pass === null) return { cls: "tag", text: "not checked" };
+  return pass ? { cls: "tag green", text: "pass" } : { cls: "tag red", text: "fail" };
+}
 
 /**
  * Stage 3 (PRD 20): the 2D plan with the BOM's placed items, a tray for unplaced ones, and the
@@ -66,6 +72,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
       id: b.id,
       title: b.product!.title,
       category: b.category,
+      kind: b.kind,
       image_url: b.product!.primary_image_url,
       box: { width_mm: b.product!.width_mm!, depth_mm: b.product!.depth_mm!, height_mm: b.product!.height_mm ?? 0 },
       placement: positions[b.id],
@@ -74,9 +81,11 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
   const tray = lines.filter((b) => !positions[b.id]);
   const selected = placed.find((p) => p.id === selectedId) ?? null;
   const productOf = new Map(lines.map((b) => [b.id, b.product!]));
+  const selectedProduct = selected ? productOf.get(selected.id) : undefined;
+  const jobFor = (productId: string) => snap.model_jobs?.[productId];
   const roomItems: RoomItem[] = placed.map((p) => {
     const product = productOf.get(p.id)!;
-    return { id: p.id, category: p.category, title: p.title, imageUrl: p.image_url, glbUrl: product.glb_url, modelStatus: product.model_status, box: p.box, placement: p.placement };
+    return { id: p.id, kind: p.kind, title: p.title, imageUrl: p.image_url, glbUrl: product.glb_url, modelStatus: product.model_status, box: p.box, placement: p.placement };
   });
   const generated = roomItems.filter((i) => i.modelStatus === "ready").length;
   const proxies = roomItems.length - generated;
@@ -128,14 +137,15 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
   }
 
   const insideCount = placed.filter((p) => geometry?.inside[p.id] !== false).length;
-  const coverage = geometry?.rugCoverage;
+  const rules = geometry?.rules ?? [];
+  const itemNames = requiredItemNames(snap.requirements);
 
   return (
     <>
       <h1 className="page-title">Items</h1>
       <p className="page-summary">Source products from the catalog, then place them in the plan. Drag to move; the geometry check runs after every drop.</p>
       <div className={css.splitPlan}>
-        <ProductSearch projectId={projectId} budget={snap.budget} onAdded={(s) => adopt(s)} />
+        <ProductSearch projectId={projectId} items={itemNames} budget={snap.budget} onAdded={(s) => adopt(s)} />
         <section className="surface" aria-label="Plan">
           <div className={css.spread}>
             <div>
@@ -171,6 +181,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
                 <button className="btn" type="button" style={{ height: 30, padding: "0 10px", fontSize: 13 }} onClick={remove}>
                   Remove from project
                 </button>
+                {selectedProduct && <ModelStageStrip job={jobFor(selectedProduct.id)} productId={selectedProduct.id} projectId={projectId} status={selectedProduct.model_status} />}
               </>
             ) : (
               <span className={css.note}>{placed.length === 0 ? "No items placed yet." : "Select an item to rotate or remove it. Hover an item to read clearances."}</span>
@@ -178,7 +189,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
           </div>
           <div className={css.canvas}>
             {view === "2d" ? (
-              <PlanView space={space} items={placed} selectedId={selectedId} clearances={geometry?.clearances} maxHeight={520} onSelect={setSelectedId} onMove={move} onDrop={() => save(positions)} />
+              <PlanView space={space} items={placed} selectedId={selectedId} clearances={geometry?.clearances} rules={rules} maxHeight={520} onSelect={setSelectedId} onMove={move} onDrop={() => save(positions)} />
             ) : (
               <Room3DView space={space} items={roomItems} selectedId={selectedId} onSelect={setSelectedId} />
             )}
@@ -190,9 +201,15 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
             <span>
               Collisions <span className={`tag${geometry && geometry.collisions.length > 0 ? " red" : ""}`}>{geometry ? geometry.collisions.length : "not checked"}</span>
             </span>
-            <span>
-              Rug coverage <span className={`tag${coverage ? (coverage.pass ? " green" : " red") : ""}`}>{coverage ? (coverage.pass ? "pass" : "fail") : "needs rug, sofa, and coffee table"}</span>
-            </span>
+            {rules.map((r, i) => {
+              const tag = ruleTag(r.pass);
+              return (
+                <span key={i} data-testid="rule-result" data-relation={r.rule.relation} data-result={tag.text} title={r.detail}>
+                  {ruleSentence(r.rule)} <span className={tag.cls}>{tag.text}</span>
+                </span>
+              );
+            })}
+            {geometry && rules.length === 0 && <span className={css.note}>No layout rules were agreed on the board.</span>}
             {error && <span className={css.error}>{error}</span>}
           </div>
           {tray.length > 0 && (
@@ -207,7 +224,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
                     <div>
                       <div style={{ color: "var(--ink)" }}>{b.product?.title ?? b.product_id}</div>
                       <div className={css.sub}>
-                        {label(b.category)}
+                        {b.category}
                         {hasBox(b) ? ` · ${formatFeetInches(b.product!.width_mm!)} × ${formatFeetInches(b.product!.depth_mm!)}` : ""}
                       </div>
                       {hasBox(b) ? (
@@ -219,6 +236,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
                           dimensions unknown
                         </span>
                       )}
+                      {b.product && <ModelStageStrip job={jobFor(b.product.id)} productId={b.product.id} projectId={projectId} status={b.product.model_status} />}
                     </div>
                   </div>
                 ))}

@@ -24,10 +24,9 @@ export type CompiledSpec = {
   layout_rules: string[];
 };
 
-export type Relation = "under" | "on_top_of" | "beside" | "facing" | "against_wall" | "clear_around";
+import type { LayoutRule, Relation } from "../../../../domain/types";
 
-/** A layout_requirement value: a recognised relation between items, or the sentence as written. */
-export type LayoutRule = { relation: Relation; subject: string; objects: string[] } | { relation: "text"; text: string };
+export type { LayoutRule, Relation };
 
 const FT_PER_M = 1 / 0.3048;
 

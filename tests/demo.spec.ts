@@ -20,15 +20,17 @@ import {
   addBoardSwatch,
   appears,
   boardText,
+  bomLineFor,
   BUDGET_CENTS,
   createThroughLanding,
   executeTool,
   getSnapshot,
   joinThroughLanding,
   openStage,
+  PASTED_URL,
   POLL_MS,
+  requiredItems,
   sendChat,
-  SIDE_TABLE_URL,
   waitForSnapshot,
   waitForTools,
   type Snapshot
@@ -39,13 +41,6 @@ test.describe.configure({ mode: "serial" });
 const AGENT_WAIT_MS = 120_000;
 const PLACEHOLDER_AGENT = /not wired|No OPENAI_API_KEY/;
 
-/** Sourcing fallback for Scene 7: per-category price caps that keep four items inside the PRD 8.4 window. */
-const FALLBACK_CAPS: { category: string; maxUsd: number }[] = [
-  { category: "sofa", maxUsd: 1500 },
-  { category: "ottoman", maxUsd: 400 },
-  { category: "rug", maxUsd: 450 },
-  { category: "coffee_table", maxUsd: 600 }
-];
 
 let browserRef: Browser;
 let zachContext: BrowserContext;
@@ -84,16 +79,25 @@ test.afterAll(async () => {
   await Promise.all(videos.map((v) => v?.delete()));
 });
 
-/** The PRD 16 board, typed by Zach in Scene 1: three fixed facts and four items in his own words. */
+/**
+ * The PRD 16 board as PRD 22 splits it: Zach types the three fixed facts and the rug rule in
+ * Scene 1, then Zach and Ben add the other items in Scene 2, each in their own words. Every later
+ * assertion about an item uses the phrase the board named, read back from the plan.
+ */
 const ZACH_NOTES = [
   { text: "12 × 18 living room", x: 0, y: 0, color: "yellow" },
-  { text: "Need sofa", x: 240, y: 0, color: "light-green" },
-  { text: "Coffee table", x: 480, y: 0, color: "light-green" },
-  { text: "Ottoman", x: 720, y: 0, color: "light-green" },
   { text: "big rug underneath everything", x: 0, y: 240, color: "light-green" },
   { text: "$2500 max", x: 240, y: 240, color: "yellow" },
   { text: "Need Sept 15", x: 480, y: 240, color: "yellow" }
 ];
+const ZACH_ITEMS = ["Deep couch", "Round coffee table"];
+const BEN_ITEMS = ["Leather ottoman"];
+/** The phrases the plan reads off the whole board: the rule's subject plus what Scene 2 adds. */
+const BOARD_ITEMS = ["big rug", ...ZACH_ITEMS, ...BEN_ITEMS];
+/** The item Scene 11 asks to replace, as the board named it. */
+const REPLACED_ITEM = "Round coffee table";
+/** The phrase Zach gives the pasted product in Scene 10. */
+const PASTED_ITEM = "side table";
 
 test("Scene 1: Zach creates the project from the landing page and the values persist after reload", async ({ request }) => {
   const created = await createThroughLanding(zach, { name: "Zach + Ben Living Room", budgetUsd: 2500, requiredBy: "2026-09-15" }, "Zach", "Zach");
@@ -122,29 +126,28 @@ test("Scene 2: Ben joins with the code; each sees the other's board objects", as
   await waitForTools(ben);
   await expect(boardText(ben, "$2500 max")).toBeVisible();
 
-  await addBoardNote(zach, "Deep couch", { x: 360, y: 110 });
-  await addBoardNote(zach, "Round coffee table", { x: 580, y: 110 });
+  await addBoardNote(zach, ZACH_ITEMS[0], { x: 360, y: 110 });
+  await addBoardNote(zach, ZACH_ITEMS[1], { x: 580, y: 110 });
   await addBoardSwatch(zach, "orange", { x: 720, y: 240 });
   await zach.waitForTimeout(1500);
   await waitForSnapshot(request, projectId, (s) => JSON.stringify(s).length > 0, 2_000);
 
   // Realtime sync (#18) is pending: Ben re-reads the board to see Zach's notes, then adds his own.
-  const live = await appears(boardText(ben, "Deep couch"), POLL_MS);
+  const live = await appears(boardText(ben, ZACH_ITEMS[0]), POLL_MS);
   if (!live) {
     note("pending", "Board realtime sync (#18) absent: Ben reloads to see Zach's notes");
     await ben.reload();
   }
-  await expect(boardText(ben, "Deep couch")).toBeVisible();
-  await expect(boardText(ben, "Round coffee table")).toBeVisible();
+  for (const item of ZACH_ITEMS) await expect(boardText(ben, item)).toBeVisible();
 
-  await addBoardNote(ben, "Leather ottoman", { x: 360, y: 110 });
-  await addBoardNote(ben, "Large wool rug", { x: 580, y: 110 });
+  await addBoardNote(ben, BEN_ITEMS[0], { x: 360, y: 110 });
+  await addBoardNote(ben, "would love a wool one if the budget allows", { x: 580, y: 110 });
   await addBoardSwatch(ben, "blue", { x: 720, y: 350 });
   await ben.waitForTimeout(1500);
-  const liveBack = await appears(boardText(zach, "Leather ottoman"), POLL_MS);
+  const liveBack = await appears(boardText(zach, BEN_ITEMS[0]), POLL_MS);
   if (!liveBack) await zach.reload();
-  await expect(boardText(zach, "Leather ottoman")).toBeVisible();
-  await expect(boardText(zach, "Large wool rug")).toBeVisible();
+  for (const item of BEN_ITEMS) await expect(boardText(zach, item)).toBeVisible();
+  await expect(boardText(zach, "would love a wool one if the budget allows")).toBeVisible();
 });
 
 test("Scene 2b: each person sees the other in the top bar within 10 s", async () => {
@@ -164,8 +167,9 @@ test("Scene 3: create plan from board; both approve; the structured plan appears
   await expect(form.locator("#required_by")).toHaveValue("2026-09-15");
   // Items, colours, and rules come from the board in its own words: nothing on the form is preset.
   const itemRows = form.getByTestId("item-row");
-  expect(await itemRows.count()).toBeGreaterThanOrEqual(4);
-  expect(await itemRows.evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value))).toContain("sofa");
+  expect(await itemRows.count()).toBe(BOARD_ITEMS.length);
+  const values = await itemRows.evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value));
+  for (const item of BOARD_ITEMS) expect(values).toContain(item);
   await expect(form.getByTestId("swatch-row")).toHaveCount(2);
   await expect(form.getByTestId("rule-row")).toHaveValue("big rug underneath everything");
   await zach.getByTestId("approve-plan").click();
@@ -180,10 +184,13 @@ test("Scene 3: create plan from board; both approve; the structured plan appears
   expect(snap.space!.width_mm).toBe(Math.round(12 * 304.8));
   expect(snap.space!.length_mm).toBe(Math.round(18 * 304.8));
   const agreed = snap.requirements.filter((r) => r.status === "agreed");
-  expect(agreed.filter((r) => r.type === "required_item").map((r) => r.value_json)).toContain("sofa");
+  for (const item of BOARD_ITEMS) expect(requiredItems(snap)).toContain(item);
   const colours = agreed.find((r) => r.type === "visual_direction")!.value_json as { base: string[]; accent: string[] };
   expect(colours.base.length + colours.accent.length).toBe(2);
-  expect(agreed.find((r) => r.type === "layout_requirement")!.value_json).toMatchObject({ relation: "under", subject: "big rug" });
+  // "everything" expands to every other item on the board, including the phrases Scene 2 added.
+  const rule = agreed.find((r) => r.type === "layout_requirement")!.value_json as { relation: string; subject: string; objects: string[] };
+  expect(rule).toMatchObject({ relation: "under", subject: "big rug" });
+  expect(rule.objects).toEqual(expect.arrayContaining(BOARD_ITEMS.filter((i) => i !== "big rug")));
 
   // Stage 2: Zach confirms the room estimate, which unlocks the items stage.
   await openStage(zach, projectId, "room");
@@ -211,13 +218,15 @@ test("Scene 5: the agent asks for a delivery address; 10003 resolves to a city a
   expect(snap.project.delivery_address_json?.city).toBeTruthy();
   expect(snap.project.delivery_address_json?.region).toBeTruthy();
   // The run resumes without another command: the sourcing artifact advances past "searching".
-  await expect(zach.getByTestId("artifact-sourcing")).not.toContainText(/No category has started yet/, { timeout: AGENT_WAIT_MS });
+  await expect(zach.getByTestId("artifact-sourcing")).not.toContainText(/No item has started yet/, { timeout: AGENT_WAIT_MS });
 });
 
 test("Scene 6: the sourcing artifact updates with live product cards", async () => {
   const artifact = zach.getByTestId("artifact-sourcing");
   test.fixme(!(await appears(artifact, 1_000)), "PlanningAgent sourcing artifact has not landed");
   await expect(artifact.locator("[data-category]")).not.toHaveCount(0, { timeout: AGENT_WAIT_MS });
+  // Rows are the board's own phrases, never a category label of the app's.
+  for (const item of BOARD_ITEMS) await expect(artifact.locator(`[data-category="${item}"]`)).toHaveCount(1);
   await expect(artifact.locator("[data-category] .tag")).toContainText([/selected|searching|retrieving|checking/], { timeout: AGENT_WAIT_MS });
 });
 
@@ -226,19 +235,21 @@ test("Scene 7: the BOM appears with one line per item and a total inside the bud
   if (agentSourced) {
     await waitForSnapshot(request, projectId, (s) => activeBom(s).length >= 4, 240_000);
   } else {
-    note("pending", "PlanningAgent absent: sourced four categories through the search panel instead");
+    note("pending", "PlanningAgent absent: sourced every board item through the search panel instead");
     await sourceThroughSearchPanel(zach, request, projectId);
   }
   const snap = await getSnapshot(request, projectId);
-  // One line per item the board named (four), and a subtotal inside the budget. The PRD 8.4 window
-  // needs a known side-table price, which this project does not have yet, so only the ceiling holds.
-  expect(activeBom(snap)).toHaveLength(4);
-  await expect(rail.locator(".rail-line")).toHaveCount(4);
+  // One line per item the board named, keyed by that phrase, and a subtotal inside the budget. The
+  // PRD 8.4 window needs a known extra-item price, which this project does not have yet, so only the ceiling holds.
+  expect(activeBom(snap)).toHaveLength(BOARD_ITEMS.length);
+  for (const item of BOARD_ITEMS) expect(bomLineFor(snap, item), item).toBeTruthy();
+  expect(bomLineFor(snap, "big rug")!.kind).toBe("soft_floor");
+  await expect(rail.locator(".rail-line")).toHaveCount(BOARD_ITEMS.length);
   note("subtotal", `${agentSourced ? "agent" : "search-panel fallback"} total ${snap.budget.committed_cents} cents of ${BUDGET_CENTS}`);
   expect(snap.budget.committed_cents).toBeLessThanOrEqual(BUDGET_CENTS);
   // Ben's rail follows within one poll.
   await openStage(ben, projectId, "place");
-  await expect(ben.getByTestId("bom-rail").locator(".rail-line")).toHaveCount(4, { timeout: POLL_MS });
+  await expect(ben.getByTestId("bom-rail").locator(".rail-line")).toHaveCount(BOARD_ITEMS.length, { timeout: POLL_MS });
 });
 
 test("Scene 8: the 3D room loads with a model for every grounded BOM item", async ({ request }) => {
@@ -263,33 +274,52 @@ test("Scene 8: the 3D room loads with a model for every grounded BOM item", asyn
   await zach.locator('[role="group"][aria-label="View"] button', { hasText: "2D" }).click();
 });
 
-test("Scene 9: Zach asks whether the layout meets the agreement; the agent reports geometry results", async () => {
+test("Scene 9: Zach asks whether the layout meets the agreement; the agent reports the under rule's result", async ({ request }) => {
+  // The board's "big rug underneath everything" is the one agreed rule; the engine evaluates it as
+  // under(big rug, [sofa, Coffee table, Ottoman]) and the status row shows the result.
+  const status = zach.getByTestId("rule-result");
+  await expect(status).toHaveCount(1);
+  await expect(status).toHaveAttribute("data-relation", "under");
+  await expect(status).toContainText(/big rug under/i);
+  const result = await status.getAttribute("data-result");
+  expect(["pass", "fail"]).toContain(result);
+  const geometry = (await (await request.get(`/api/projects/${projectId}/placements`)).json()) as { geometry: { rules: { rule: { relation: string; subject: string }; pass: boolean | null; detail: string }[] } };
+  expect(geometry.geometry.rules).toHaveLength(1);
+  expect(geometry.geometry.rules[0]).toMatchObject({ rule: { relation: "under", subject: "big rug" }, pass: result === "pass" });
+  note("under rule", `${result}: ${geometry.geometry.rules[0].detail}`);
+
   await sendChat(zach, "Does this layout meet what we agreed on?");
   const agentMessages = zach.getByTestId("chat-log").locator(".msg.agent");
   const replied = await appears(agentMessages.last(), AGENT_WAIT_MS);
   test.fixme(!replied, "PlanningAgent (#20) sent no reply within the wait");
   const text = await agentMessages.last().innerText();
   test.fixme(PLACEHOLDER_AGENT.test(text), "PlanningAgent (#20) has not landed: placeholder reply");
-  expect(text).toMatch(/inside|collision|rug|clearance|fits|overlap/i);
+  expect(text).toMatch(/rug|under|inside|collision|clearance|fits|overlap/i);
 });
 
-test("Scene 10: Zach pastes the side-table URL; the product ingests and the BOM regenerates", async ({ request }) => {
+test("Scene 10: Zach pastes a product URL; the product ingests under his phrase and the BOM regenerates", async ({ request }) => {
   const before = await getSnapshot(request, projectId);
-  await sendChat(zach, SIDE_TABLE_URL);
+  const known = new Set(activeBom(before).map((l) => l.id));
+  const newLine = (s: Snapshot) => activeBom(s).find((l) => !known.has(l.id));
+  await sendChat(zach, `Add this ${PASTED_ITEM}: ${PASTED_URL}`);
   let ingested = false;
   try {
-    await waitForSnapshot(request, projectId, (s) => activeBom(s).some((l) => l.category === "side_table"), AGENT_WAIT_MS);
+    await waitForSnapshot(request, projectId, (s) => newLine(s) !== undefined, AGENT_WAIT_MS);
     ingested = true;
   } catch {
     ingested = false;
   }
   if (!ingested) {
     note("pending", "PlanningAgent did not ingest the pasted URL; added it through the add_product WebMCP tool");
-    const result = await executeTool(zach, "add_product", { url: SIDE_TABLE_URL, category: "side_table" });
+    const result = await executeTool(zach, "add_product", { url: PASTED_URL, category: PASTED_ITEM });
     expect(result.isError, result.text).toBe(false);
   }
-  const snap = await waitForSnapshot(request, projectId, (s) => activeBom(s).some((l) => l.category === "side_table"), 30_000);
-  const side = activeBom(snap).find((l) => l.category === "side_table")!;
+  const snap = await waitForSnapshot(request, projectId, (s) => newLine(s) !== undefined, 30_000);
+  const side = newLine(snap)!;
+  // The line carries the phrase the person used (or the product title when the agent passed none) and an inferred kind.
+  expect(side.category.length).toBeGreaterThan(0);
+  expect(side.kind.length).toBeGreaterThan(0);
+  note("pasted item", `${side.category} (${side.kind})`);
   expect(side.product?.price_cents).toBeGreaterThan(0);
   expect(snap.budget.committed_cents).toBe(before.budget.committed_cents + side.product!.price_cents);
   await expect(zach.getByTestId("bom-rail")).toContainText(side.product!.title);
@@ -302,11 +332,11 @@ test("Scene 10: Zach pastes the side-table URL; the product ingests and the BOM 
   await expect(ben.getByTestId("bom-rail")).toContainText(side.product!.title, { timeout: POLL_MS });
 });
 
-test("Scene 11: Zach asks for a cheaper coffee table; the replacement artifact appears", async () => {
-  await sendChat(zach, "Find a cheaper coffee table that still matches everything we agreed on.");
+test("Scene 11: Zach asks for a cheaper coffee table; the replacement artifact appears under the board's phrase", async () => {
+  await sendChat(zach, `Find a cheaper ${REPLACED_ITEM.toLowerCase()} that still matches everything we agreed on.`);
   const ranking = zach.getByTestId("artifact-ranking");
   test.fixme(!(await appears(ranking, AGENT_WAIT_MS)), "PlanningAgent replacement (#20) has not landed: no artifact-ranking in the chat");
-  await expect(ranking).toContainText(/coffee table/i);
+  await expect(ranking).toContainText(new RegExp(REPLACED_ITEM, "i"));
 });
 
 test("Scene 12: at least two real candidates evaluate and the selected one meets required_savings", async ({ request }) => {
@@ -331,10 +361,11 @@ test("Scene 13: approving the replacement updates the BOM, the scene, and the bu
   const approve = zach.getByTestId("approve-replacement");
   test.fixme(!(await appears(approve, 1_000)), "Replacement approval has not landed");
   const before = await getSnapshot(request, projectId);
-  const oldTable = activeBom(before).find((l) => l.category === "coffee_table")!;
+  const oldTable = bomLineFor(before, REPLACED_ITEM)!;
   await approve.click();
-  const snap = await waitForSnapshot(request, projectId, (s) => activeBom(s).some((l) => l.category === "coffee_table" && l.id !== oldTable.id), 30_000);
-  const newTable = activeBom(snap).find((l) => l.category === "coffee_table")!;
+  const snap = await waitForSnapshot(request, projectId, (s) => bomLineFor(s, REPLACED_ITEM)?.id !== oldTable.id, 30_000);
+  const newTable = bomLineFor(snap, REPLACED_ITEM)!;
+  expect(newTable.kind).toBe(oldTable.kind);
   // required_savings may be zero when the budget is not over; the replacement still never costs more.
   expect(newTable.product!.price_cents).toBeLessThanOrEqual(oldTable.product!.price_cents);
   expect(snap.budget.committed_cents).toBeLessThanOrEqual(BUDGET_CENTS);
@@ -347,31 +378,31 @@ test("Scene 13: approving the replacement updates the BOM, the scene, and the bu
 });
 
 /**
- * Sources one product per required category through the search panel. Sofa, ottoman, and rug take
- * the priciest card with stated dimensions under their cap; the coffee table is chosen last, at a
- * price that keeps the four under the budget.
+ * Sources one product per item the board named through the search panel, in plan order. Each item
+ * takes the priciest card with stated dimensions under an even share of what is left of the
+ * budget, so the set stays inside the budget whatever the board asked for.
  */
 async function sourceThroughSearchPanel(page: Page, request: APIRequestContext, projectId: string) {
   const panel = page.getByTestId("product-search");
   await expect(panel).toBeVisible();
-  const first = FALLBACK_CAPS.filter((c) => c.category !== "coffee_table");
-  for (const { category, maxUsd } of first) {
-    await addFromSearch(panel, request, projectId, category, maxUsd, () => true);
+  const items = requiredItems(await getSnapshot(request, projectId));
+  expect(items.length).toBeGreaterThan(0);
+  for (const [index, item] of items.entries()) {
+    const committed = (await getSnapshot(request, projectId)).budget.committed_cents;
+    const share = Math.floor((BUDGET_CENTS - committed - 100) / (items.length - index));
+    await addFromSearch(panel, request, projectId, item, Math.floor(share / 100), (cents) => cents <= share);
   }
-  const others = (await getSnapshot(request, projectId)).budget.committed_cents;
-  const maxCents = BUDGET_CENTS - others - 100;
-  await addFromSearch(panel, request, projectId, "coffee_table", Math.floor(maxCents / 100), (cents) => cents <= maxCents);
 }
 
 /**
- * Runs one category search and adds the priciest dimensioned card that `accept`s, or the priciest
+ * Runs one item's search and adds the priciest dimensioned card that `accept`s, or the priciest
  * under the cap. Fast Refresh from a concurrent source edit resets the panel mid-flow, so each
  * attempt re-runs the search and the add is confirmed against the API rather than the card.
  */
 async function addFromSearch(panel: Locator, request: APIRequestContext, projectId: string, category: string, maxUsd: number, accept: (cents: number) => boolean) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      await panel.locator("#search-cat").selectOption(category);
+      await panel.locator("#search-cat").selectOption({ label: category });
       await panel.locator("#search-max").fill(String(maxUsd));
       await panel.getByRole("button", { name: "Search" }).click();
       const cards = panel.locator(".card").filter({ hasNot: panel.page().locator(".tag", { hasText: "dimensions unknown" }) });
@@ -384,7 +415,7 @@ async function addFromSearch(panel: Locator, request: APIRequestContext, project
       expect(priced.length, `no dimensioned ${category} under $${maxUsd}`).toBeGreaterThan(0);
       const pick = priced.find((p) => accept(p.cents)) ?? priced[0];
       await cards.nth(pick.index).getByRole("button", { name: "Add to project" }).click({ timeout: 10_000 });
-      await waitForSnapshot(request, projectId, (s) => activeBom(s).some((l) => l.category === category), 30_000);
+      await waitForSnapshot(request, projectId, (s) => bomLineFor(s, category) !== undefined, 30_000);
       return;
     } catch (e) {
       if (attempt === 3) throw e;

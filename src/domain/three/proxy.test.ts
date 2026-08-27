@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import { projectToThree, threeToProject } from "./coordinates";
 import { DEMO_BOXES } from "./demo-boxes";
-import { proxyForCategory } from "./proxy";
+import { proxyForKind } from "./proxy";
 
 const TOLERANCE_M = 0.001;
 
-describe("proxyForCategory", () => {
-  it.each(DEMO_BOXES)("%s proxy bounds equal its box, bottom on Y=0, centred in X and Z", (category, box) => {
-    const geometry = proxyForCategory(category, box);
+describe("proxyForKind", () => {
+  it.each(DEMO_BOXES)("%s proxy bounds equal its box, bottom on Y=0, centred in X and Z", (kind, box) => {
+    const geometry = proxyForKind(kind, box);
     geometry.computeBoundingBox();
     const bounds = geometry.boundingBox as Box3;
     const size = bounds.getSize(new Vector3());
@@ -21,9 +21,9 @@ describe("proxyForCategory", () => {
     expect(Math.abs(bounds.min.z + bounds.max.z)).toBeLessThanOrEqual(TOLERANCE_M);
   });
 
-  it("puts the sofa back on +Z so the seat faces -Z", () => {
+  it("puts the seating back on +Z so the seat faces -Z", () => {
     const box = DEMO_BOXES[0][1];
-    const position = proxyForCategory("sofa", box).getAttribute("position");
+    const position = proxyForKind("seating", box).getAttribute("position");
     let frontTop = 0;
     let backTop = 0;
     for (let i = 0; i < position.count; i++) {
@@ -35,8 +35,8 @@ describe("proxyForCategory", () => {
     expect(frontTop).toBeLessThan(box.height_mm / 1000 / 2);
   });
 
-  it("gives a rug without a height the 10 mm default thickness", () => {
-    const geometry = proxyForCategory("rug", { width_mm: 2438, depth_mm: 3048, height_mm: 0 });
+  it("gives a soft floor without a height the 10 mm default thickness", () => {
+    const geometry = proxyForKind("soft_floor", { width_mm: 2438, depth_mm: 3048, height_mm: 0 });
     geometry.computeBoundingBox();
     expect((geometry.boundingBox as Box3).max.y).toBeCloseTo(0.01, 6);
   });

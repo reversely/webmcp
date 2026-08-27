@@ -23,8 +23,54 @@ export const DeliveryStatus = z.enum(["confirmed", "likely", "unknown", "fail"])
 export const AgentRunStatus = z.enum(["running", "waiting_for_user", "complete", "failed_recoverable"]);
 export const BudgetState = z.enum(["under", "exact", "over"]);
 
-export const Category = z.enum(["sofa", "coffee_table", "ottoman", "rug", "side_table"]);
+/**
+ * An item's own phrase from the board ("reading chair", "big rug"). The application carries no
+ * vocabulary of item names; the phrase is the key that sourcing, ranking, the BOM, and the layout
+ * rules share (PRD 16, 20).
+ */
+export const Category = z.string().min(1);
 export type Category = z.infer<typeof Category>;
+
+/** The rendering kind of an item, inferred by the PlanningAgent from its name and editable by a person (PRD 20). */
+export const Kind = z.enum(["seating", "table", "storage", "soft_floor", "bed", "lighting", "decor", "other"]);
+export type Kind = z.infer<typeof Kind>;
+export const KINDS = Kind.options;
+
+/** A `required_item` requirement value: the item's name in the users' words plus its kind once inferred. */
+export const RequiredItem = z.object({ name: z.string().min(1), kind: Kind.nullable() });
+export type RequiredItem = z.infer<typeof RequiredItem>;
+
+/** Reads a `required_item` value, accepting the bare string older rows and the board form write. */
+export function readRequiredItem(value: unknown): RequiredItem | null {
+  if (typeof value === "string") return value.trim() ? { name: value.trim(), kind: null } : null;
+  const parsed = RequiredItem.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+export const Relation = z.enum(["under", "on_top_of", "beside", "facing", "against_wall", "clear_around"]);
+export type Relation = z.infer<typeof Relation>;
+
+/**
+ * A `layout_requirement` value (PRD 14, 16): a relation between named items, or a sentence the
+ * board stated that no relation matched, kept as text and never evaluated.
+ */
+export const LayoutRule = z.union([
+  z.object({ relation: Relation, subject: z.string().min(1), objects: z.array(z.string()), distance_mm: Millimetres.optional() }),
+  z.object({ relation: z.literal("text"), text: z.string() })
+]);
+export type LayoutRule = z.infer<typeof LayoutRule>;
+
+/** Reads a `layout_requirement` value; a bare string is a text rule. */
+export function readLayoutRule(value: unknown): LayoutRule | null {
+  if (typeof value === "string") return { relation: "text", text: value };
+  const parsed = LayoutRule.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+/** Comparison key for item names: case and surrounding whitespace never distinguish two items. */
+export function itemKey(name: string): string {
+  return name.trim().toLowerCase();
+}
 
 export const DeliveryAddress = z.object({
   line1: z.string().nullable(),
@@ -110,6 +156,7 @@ export const Candidate = z.object({
   project_id: z.string(),
   product_id: z.string(),
   category: Category,
+  kind: Kind,
   hard_constraint_results_json: z.unknown().nullable(),
   visual_evaluation_json: z.unknown().nullable(),
   delivery_status: DeliveryStatus.nullable(),
@@ -124,6 +171,7 @@ export const BomItem = z.object({
   project_id: z.string(),
   product_id: z.string(),
   category: Category,
+  kind: Kind,
   quantity: z.number().int().positive(),
   status: BomItemStatus
 });

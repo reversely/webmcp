@@ -2,22 +2,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import type { ProjectSnapshot } from "../../../server/state";
+import { formatMoney } from "../../../domain/money";
 import { formatFeetInches } from "../../../domain/types";
 import { ArtifactView, type ArtifactMessage } from "./artifacts";
 import { useAnimatedNumber } from "./artifacts/animated-number";
+import { modelTagFor } from "./components/model-stage-strip";
 import { TracePanel } from "./trace-panel";
 import { ANONYMOUS, useIdentity } from "../../identity";
 
 type Snapshot = Omit<ProjectSnapshot, "messages"> & { messages: ArtifactMessage[] };
 
-const dollars = (c: number) => `$${(c / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-
-/** Rail tag for a product's 3D state: only the states a person may wait on or wonder about (PRD 15.1); ready shows nothing. */
-function modelTag(status: ProjectSnapshot["products"][number]["model_status"]): string | null {
-  if (status === "queued" || status === "generating") return "3D generating";
-  if (status === "proxy") return "3D proxy";
-  return null;
-}
 
 /**
  * Right column from stage 2 onward: the BOM and budget rail, then the project chat. Polls the
@@ -95,11 +89,11 @@ export function SidePanel({ projectId, children }: { projectId: string; children
           <section className="rail" aria-label="Bill of materials" data-testid="bom-rail">
             <div className="eyebrow">Budget</div>
             <div className={`stat${over ? " over" : ""}`} data-testid="budget-stat" data-state={snap?.budget.state}>
-              {snap && committed !== null ? `${dollars(committed)} / ${dollars(snap.budget.budget_cents)}` : "—"}
+              {snap && committed !== null ? `${formatMoney(committed)} / ${formatMoney(snap.budget.budget_cents)}` : "—"}
             </div>
             {over && (
               <span className="tag red appear" key={snap!.budget.overage_cents}>
-                {dollars(snap!.budget.overage_cents)} over
+                {formatMoney(snap!.budget.overage_cents)} over
               </span>
             )}
             <div className="rail-lines">
@@ -110,18 +104,18 @@ export function SidePanel({ projectId, children }: { projectId: string; children
                   <div>
                     <div>{b.product?.title ?? b.product_id}</div>
                     <div className="sub">
-                      {b.category.replace("_", " ")}
+                      {b.category}
                       {b.product?.spatial_status === "grounded" && b.product.width_mm != null
                         ? ` · ${formatFeetInches(b.product.width_mm)} × ${formatFeetInches(b.product.depth_mm!)}`
                         : " · dimensions unknown"}
                     </div>
-                    {b.product && modelTag(b.product.model_status) && (
+                    {b.product && modelTagFor(snap?.model_jobs?.[b.product.id], b.product.model_status) && (
                       <span className="tag" style={{ marginTop: 4 }} data-testid="model-tag">
-                        {modelTag(b.product.model_status)}
+                        {modelTagFor(snap?.model_jobs?.[b.product.id], b.product.model_status)}
                       </span>
                     )}
                   </div>
-                  <div>{b.product ? dollars(b.product.price_cents * b.quantity) : ""}</div>
+                  <div>{b.product ? formatMoney(b.product.price_cents * b.quantity, b.product.currency) : ""}</div>
                 </div>
               ))}
             </div>

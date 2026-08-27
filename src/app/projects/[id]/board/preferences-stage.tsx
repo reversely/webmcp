@@ -54,7 +54,7 @@ function readSpec(json: unknown): SpecData | null {
   return s.room !== undefined || s.budget !== undefined || s.required_items !== undefined ? s : null;
 }
 
-async function compileWithAgent(projectId: string, boardText: string, swatches: string[]): Promise<SpecData | null> {
+async function compileWithAgent(projectId: string, boardText: string[], swatches: string[]): Promise<SpecData | null> {
   try {
     const res = await fetch(`/api/projects/${projectId}/compile`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ boardText, swatches }) });
     if (!res.ok) return null;
@@ -75,16 +75,25 @@ async function latestSpecArtifact(projectId: string): Promise<SpecData | null> {
   }
 }
 
+/** The agent's room in millimetres (or an older artifact's feet) as feet for the form, or null. */
+function roomFeet(room: SpecData["room"]): { width_ft: number; length_ft: number } | null {
+  if (!room) return null;
+  const width = room.width_mm ? room.width_mm / MM_PER_FT : (room.width_ft ?? 0);
+  const length = room.length_mm ? room.length_mm / MM_PER_FT : (room.length_ft ?? 0);
+  return width > 0 && length > 0 ? { width_ft: Math.round(width * 100) / 100, length_ft: Math.round(length * 100) / 100 } : null;
+}
+
 /**
  * The agent's spec wins on the three fixed fields it states. Items stay in the board's own words;
- * the agent's category ids fill in only when the board named none. Colours come from swatches
+ * the agent's item names fill in only when the board named none. Colours come from swatches
  * alone, and layout sentences from the board alone.
  */
 function mergeSpec(local: CompiledSpec, spec: SpecData): CompiledSpec {
-  const agentItems = (spec.required_items ?? []).map((i) => i.replace(/_/g, " "));
+  const agentItems = (spec.required_items ?? []).map((i) => (typeof i === "string" ? i : i.name)).filter(Boolean);
   return {
     ...local,
-    room: spec.room && spec.room.width_ft > 0 && spec.room.length_ft > 0 ? { width_ft: spec.room.width_ft, length_ft: spec.room.length_ft } : local.room,
+    room: roomFeet(spec.room) ?? local.room,
+    room_name: local.room_name ?? spec.room_name ?? null,
     budget: spec.budget && spec.budget.maximum > 0 ? { maximum: spec.budget.maximum, currency: "USD" } : local.budget,
     required_by: spec.required_by ?? local.required_by,
     required_items: local.required_items.length > 0 ? local.required_items : agentItems
@@ -197,7 +206,7 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
     setCompiling(true);
     const items = collectBoardItems(getSnapshot(editor.store));
     const local = compileBoard(items);
-    const boardText = items.filter((i) => i.kind === "text").map((i) => i.text).join("\n");
+    const boardText = items.filter((i) => i.kind === "text").map((i) => i.text);
     const swatches = items.filter((i) => i.kind === "swatch").map((i) => i.colour);
     try {
       let spec = await compileWithAgent(projectId, boardText, swatches);

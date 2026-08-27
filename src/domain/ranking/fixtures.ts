@@ -19,7 +19,7 @@ export function candidate(
 ): RankableCandidate {
   return {
     id,
-    category: "coffee_table",
+    category: "round coffee table",
     price_cents: 40000,
     delivery_status: "confirmed",
     visual: visual([["pass", 0.9]]),

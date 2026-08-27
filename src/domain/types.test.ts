@@ -7,7 +7,9 @@ import {
   Space,
   feetToMm,
   formatFeetInches,
-  inchesToMm
+  inchesToMm,
+  readLayoutRule,
+  readRequiredItem
 } from "./types";
 
 describe("unit conversion", () => {
@@ -72,12 +74,26 @@ describe("schemas", () => {
     expect(Product.parse({ ...product, spatial_status: "visual_only" }).spatial_status).toBe("visual_only");
   });
 
-  it("limits candidate category and BOM status to the PRD enumerations", () => {
+  it("takes any item phrase as a category but limits kind and BOM status to the enumerations", () => {
     const base = { id: "c1", project_id: "p1", product_id: "x1" };
-    expect(() =>
-      Candidate.parse({ ...base, category: "lamp", hard_constraint_results_json: null, visual_evaluation_json: null, delivery_status: null, delivery_evidence_json: null, ranking_state: "pending", rank: null })
-    ).toThrow();
-    expect(() => BomItem.parse({ ...base, category: "sofa", quantity: 1, status: "draft" })).toThrow();
-    expect(BomItem.parse({ ...base, category: "sofa", quantity: 1, status: "proposed" }).status).toBe("proposed");
+    const candidate = { ...base, category: "reading chair", kind: "seating", hard_constraint_results_json: null, visual_evaluation_json: null, delivery_status: null, delivery_evidence_json: null, ranking_state: "pending", rank: null };
+    expect(Candidate.parse(candidate).category).toBe("reading chair");
+    expect(() => Candidate.parse({ ...candidate, kind: "lamp" })).toThrow();
+    expect(() => Candidate.parse({ ...candidate, category: "" })).toThrow();
+    expect(() => BomItem.parse({ ...base, category: "big rug", kind: "soft_floor", quantity: 1, status: "draft" })).toThrow();
+    expect(BomItem.parse({ ...base, category: "big rug", kind: "soft_floor", quantity: 1, status: "proposed" }).status).toBe("proposed");
+  });
+
+  it("reads a required_item as a bare string or as { name, kind }", () => {
+    expect(readRequiredItem("standing desk")).toEqual({ name: "standing desk", kind: null });
+    expect(readRequiredItem({ name: "big rug", kind: "soft_floor" })).toEqual({ name: "big rug", kind: "soft_floor" });
+    expect(readRequiredItem({ name: "big rug", kind: "carpet" })).toBeNull();
+    expect(readRequiredItem("  ")).toBeNull();
+  });
+
+  it("reads a layout_requirement as a relation or keeps a sentence as text", () => {
+    expect(readLayoutRule({ relation: "under", subject: "big rug", objects: ["sofa"] })).toMatchObject({ relation: "under" });
+    expect(readLayoutRule("keep the walkway open")).toEqual({ relation: "text", text: "keep the walkway open" });
+    expect(readLayoutRule({ relation: "orbiting", subject: "x", objects: [] })).toBeNull();
   });
 });

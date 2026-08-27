@@ -1,18 +1,24 @@
 "use client";
 import { useState } from "react";
 import type { Budget } from "../../../../domain/bom/events";
-import type { Category, Product } from "../../../../domain/types";
+import { readRequiredItem, type Product, type Requirement } from "../../../../domain/types";
 import type { ProjectSnapshot } from "../../../../server/state";
 import { ProductCard } from "./product-card";
 import css from "./stages.module.css";
 
-export const CATEGORIES: { value: Category; label: string }[] = [
-  { value: "sofa", label: "Sofa" },
-  { value: "coffee_table", label: "Coffee table" },
-  { value: "ottoman", label: "Ottoman" },
-  { value: "rug", label: "Rug" },
-  { value: "side_table", label: "Side table" }
-];
+/** The select value that opens the free name field: a product for something the board did not name. */
+export const OTHER = "__other__";
+
+/** The project's agreed items in their own words, in requirement order, one per distinct name. */
+export function requiredItemNames(requirements: Pick<Requirement, "type" | "status" | "value_json">[]): string[] {
+  const names: string[] = [];
+  for (const r of requirements) {
+    if (r.type !== "required_item" || r.status !== "agreed") continue;
+    const item = readRequiredItem(r.value_json);
+    if (item && !names.some((n) => n.toLowerCase() === item.name.toLowerCase())) names.push(item.name);
+  }
+  return names;
+}
 
 type SearchResult = { raw: unknown; normalized: Product | null; seller: { domain: string; name: string } };
 type ShipsTo = { country: string; region?: string; postal_code?: string };
@@ -25,13 +31,17 @@ function remainingDollars(budget: Budget | undefined): string {
 }
 
 /**
- * Live Global Catalog search. The category select drives the query; keywords narrow it. The price
- * cap defaults to the project's remaining budget until the person edits it. "Add to project"
- * posts the raw catalog object with the chosen category, then tells the frame (BOM rail) to refresh.
+ * Live Global Catalog search. The item select lists the project's own items plus "Something else"
+ * with a free name field; the item's inferred query drives the search and keywords narrow it. The
+ * price cap defaults to the project's remaining budget until the person edits it. "Add to project"
+ * posts the raw catalog object with the item's name, then tells the frame (BOM rail) to refresh.
  */
-export function ProductSearch({ projectId, budget, onAdded }: { projectId: string; budget?: Budget; onAdded?: (snapshot: ProjectSnapshot) => void }) {
+export function ProductSearch({ projectId, items, budget, onAdded }: { projectId: string; items: string[]; budget?: Budget; onAdded?: (snapshot: ProjectSnapshot) => void }) {
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<Category>("sofa");
+  const [choice, setChoice] = useState<string>(items[0] ?? OTHER);
+  const [otherName, setOtherName] = useState("");
+  const selected = items.includes(choice) ? choice : OTHER;
+  const itemName = selected === OTHER ? otherName.trim() : selected;
   const [maxPriceEdit, setMaxPriceEdit] = useState<string | null>(null);
   const maxPrice = maxPriceEdit ?? remainingDollars(budget);
   const [shipsTo, setShipsTo] = useState<ShipsTo | null>(null);
@@ -42,13 +52,17 @@ export function ProductSearch({ projectId, budget, onAdded }: { projectId: strin
   const [added, setAdded] = useState<Set<string>>(new Set());
 
   async function search() {
+    if (!itemName && !query.trim()) {
+      setError("Name the item to search for, or type keywords.");
+      return;
+    }
     setSearching(true);
     setError(null);
     try {
       const res = await fetch("/api/shopify/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category, query: query.trim(), project_id: projectId, limit: 24, ...(maxPrice ? { max_cents: Math.round(Number(maxPrice) * 100) } : {}) })
+        body: JSON.stringify({ item: itemName, query: query.trim(), project_id: projectId, limit: 24, ...(maxPrice ? { max_cents: Math.round(Number(maxPrice) * 100) } : {}) })
       });
       const body = (await res.json()) as { products?: SearchResult[]; ships_to?: ShipsTo; error?: string };
       if (!res.ok) throw new Error(body.error ?? `Search failed (${res.status})`);
@@ -64,6 +78,7 @@ export function ProductSearch({ projectId, budget, onAdded }: { projectId: strin
 
   async function add(r: SearchResult) {
     const key = r.normalized?.id ?? JSON.stringify(r.raw).slice(0, 80);
+    const category = itemName || r.normalized?.title || query.trim();
     setAdding(key);
     setError(null);
     try {
@@ -97,13 +112,14 @@ export function ProductSearch({ projectId, budget, onAdded }: { projectId: strin
       >
         <div className={css.row}>
           <div className="field" style={{ flex: 1 }}>
-            <label htmlFor="search-cat">Category</label>
-            <select id="search-cat" className="select" value={category} onChange={(e) => setCategory(e.target.value as Category)}>
-              {CATEGORIES.map((c) => (
-                <option key={c.value} value={c.value}>
-                  {c.label}
+            <label htmlFor="search-cat">Item</label>
+            <select id="search-cat" className="select" value={selected} onChange={(e) => setChoice(e.target.value)}>
+              {items.map((name) => (
+                <option key={name} value={name}>
+                  {name}
                 </option>
               ))}
+              <option value={OTHER}>Something else</option>
             </select>
           </div>
           <div className="field" style={{ width: 120 }}>
@@ -111,6 +127,12 @@ export function ProductSearch({ projectId, budget, onAdded }: { projectId: strin
             <input id="search-max" className="input" type="number" min={0} inputMode="numeric" value={maxPrice} onChange={(e) => setMaxPriceEdit(e.target.value)} />
           </div>
         </div>
+        {selected === OTHER && (
+          <div className="field">
+            <label htmlFor="search-item">What is it? (your words)</label>
+            <input id="search-item" className="input" value={otherName} onChange={(e) => setOtherName(e.target.value)} placeholder="Item name" />
+          </div>
+        )}
         <div className="field">
           <label htmlFor="search-q">Keywords (optional)</label>
           <input id="search-q" className="input" value={query} onChange={(e) => setQuery(e.target.value)} />

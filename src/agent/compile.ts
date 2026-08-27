@@ -4,19 +4,31 @@
  * fallback.
  */
 import { z } from "zod";
+import { Kind, Relation } from "../domain/types";
 import { structuredCall } from "./model";
 
-const RequiredItem = z.enum(["sofa", "coffee_table", "ottoman", "rug", "side_table"]);
+const HEX = z.string().regex(/^#[0-9a-f]{6}$/i).describe("A hex colour, #rrggbb");
 
-/** PRD 16 ProjectSpecSchema, with nulls instead of optionals so strict JSON-schema output accepts it. */
+/**
+ * PRD 16 ProjectSpecSchema, with nulls instead of optionals so strict JSON-schema output accepts
+ * it. Items are the board's own phrases with the kind the agent infers; colours are hex; layout
+ * rules are relations between named items; the room is in millimetres.
+ */
 export const ProjectSpec = z.object({
-  room: z.object({ width_ft: z.number(), length_ft: z.number() }).nullable(),
+  room: z.object({ width_mm: z.number().int(), length_mm: z.number().int() }).nullable(),
   room_name: z.string().nullable(),
   budget: z.object({ maximum: z.number(), currency: z.literal("USD") }).nullable(),
   required_by: z.string().nullable().describe("ISO date YYYY-MM-DD or null"),
-  required_items: z.array(RequiredItem),
-  visual_direction: z.object({ base_colors: z.array(z.string()), accent_colors: z.array(z.string()) }),
-  layout_requirements: z.array(z.object({ type: z.literal("rug_encompasses_group"), items: z.array(RequiredItem) }))
+  required_items: z.array(z.object({ name: z.string().describe("The item in the board's own words, e.g. \"reading chair\""), kind: Kind.nullable() })),
+  visual_direction: z.object({ base: z.array(HEX), accent: z.array(HEX) }),
+  layout_requirements: z.array(
+    z.object({
+      relation: Relation,
+      subject: z.string().describe("The item the rule is about, in the board's words"),
+      objects: z.array(z.string()).describe("The items it relates to, in the board's words; empty for against_wall and clear_around"),
+      distance_mm: z.number().int().nullable()
+    })
+  )
 });
 export type ProjectSpec = z.infer<typeof ProjectSpec>;
 
@@ -33,12 +45,16 @@ export const RoomEstimate = z.object({
 export type RoomEstimate = z.infer<typeof RoomEstimate>;
 
 const COMPILE_INSTRUCTIONS =
-  "Compile whiteboard notes for a living-room project into the specification. Room sizes are in feet " +
-  "(convert metres). Budget is the maximum in dollars. required_by is the delivery deadline as an ISO " +
-  `date; the current year is ${new Date().getUTCFullYear()} and the date is in the future. Colour swatches ` +
-  "are hex or named colours: warm browns, beiges, creams and warm neutrals are base colours; a dark blue " +
-  "or other saturated colour is an accent. Add a rug_encompasses_group requirement over sofa and " +
-  "coffee_table when the notes ask for a rug under the group. Use null for anything the notes do not state.";
+  "Compile whiteboard notes for a room-furnishing project into the specification. Room sizes are in millimetres " +
+  "(a bare \"12 x 18\" is feet; 1 ft = 304.8 mm; convert metres). Budget is the maximum in dollars. required_by is the " +
+  `delivery deadline as an ISO date; the current year is ${new Date().getUTCFullYear()} and the date is in the future. ` +
+  "required_items lists every furniture item the notes name, each in the writer's own words (\"reading chair\", \"big rug\"), " +
+  "with its rendering kind: seating, table, storage, soft_floor (rugs), bed, lighting, decor, or other; null when unsure. " +
+  "A note that only states where an item goes (\"big rug under the desk\") still names its subject as an item. " +
+  "visual_direction takes the swatch hex values only: lighter and warmer ones are base, darker or saturated ones accent; " +
+  "never invent colours from words. layout_requirements turns each spatial sentence into a relation (under, on_top_of, " +
+  "beside, facing, against_wall, clear_around) between the items as named; \"everything\" means every other item. " +
+  "Use null for anything the notes do not state.";
 
 export async function compileSpec(boardText: string[], swatches: string[]): Promise<ProjectSpec | null> {
   const text = `Board text:\n${boardText.map((t) => `- ${t}`).join("\n") || "(none)"}\n\nSwatches:\n${swatches.map((c) => `- ${c}`).join("\n") || "(none)"}`;

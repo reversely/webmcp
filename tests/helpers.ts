@@ -3,9 +3,9 @@ import { expect, type APIRequestContext, type Locator, type Page } from "@playwr
 /** The polyfill flag makes Playwright's Chromium expose document.modelContext (webmcp-provider.tsx). */
 export const POLYFILL = "?webmcp=polyfill";
 
-/** Side table pasted in Scene 10: resolves through the Global Catalog at $345 (PRD 8.4 P_side). */
-export const SIDE_TABLE_URL = "https://floydhome.com/products/bedside-table";
-export const SIDE_TABLE_CENTS = 34500;
+/** The extra product pasted in Scene 10: resolves through the Global Catalog at $345 (PRD 8.4 P_side). */
+export const PASTED_URL = "https://floydhome.com/products/bedside-table";
+export const PASTED_CENTS = 34500;
 export const BUDGET_CENTS = 250000;
 
 /** The rail polls every 4 s; a check on the other person's context allows one poll plus render. */
@@ -18,7 +18,7 @@ export type Snapshot = {
   space: { width_mm: number; length_mm: number } | null;
   requirements: { type: string; status: string; value_json: unknown }[];
   products: { id: string; title: string; price_cents: number; spatial_status: string; model_status: string }[];
-  bom: { id: string; product_id: string; category: string; status: string; product: { title: string; price_cents: number; spatial_status: string } | null }[];
+  bom: { id: string; product_id: string; category: string; kind: string; status: string; product: { title: string; price_cents: number; spatial_status: string } | null }[];
   placements: { bom_item_id: string }[];
   budget: { committed_cents: number; budget_cents: number; state: string; overage_cents: number };
   messages: { id: string; role: string; author: string; text: string; artifact?: { kind: string; id: string; data: unknown } }[];
@@ -37,6 +37,15 @@ export async function getSnapshot(request: APIRequestContext, projectId: string)
 }
 
 export const activeBom = (snap: Snapshot) => snap.bom.filter((b) => b.status !== "removed");
+
+/** The project's agreed items in their own words, as the API stores them ({ name, kind } or a bare string). */
+export const requiredItems = (snap: Snapshot) =>
+  snap.requirements
+    .filter((r) => r.type === "required_item" && r.status === "agreed")
+    .map((r) => (typeof r.value_json === "string" ? r.value_json : (r.value_json as { name: string }).name));
+
+/** The active BOM line for an item named on the board, matched case-insensitively. */
+export const bomLineFor = (snap: Snapshot, item: string) => activeBom(snap).find((b) => b.category.toLowerCase() === item.toLowerCase());
 
 /** Waits until the project snapshot satisfies `predicate`, polling the API. */
 export async function waitForSnapshot(request: APIRequestContext, projectId: string, predicate: (snap: Snapshot) => boolean, timeoutMs = 30_000): Promise<Snapshot> {

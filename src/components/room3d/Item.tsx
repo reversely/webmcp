@@ -5,7 +5,7 @@ import { Component, Suspense, useEffect, useMemo, type ReactNode } from "react";
 import { BoxGeometry, Color, EdgesGeometry, Material, Mesh, type Object3D } from "three";
 
 import { METRES_PER_MM } from "../../domain/three/coordinates";
-import { proxyForCategory, RUG_THICKNESS_MM } from "../../domain/three/proxy";
+import { proxyForKind, SOFT_FLOOR_THICKNESS_MM } from "../../domain/three/proxy";
 import type { Box } from "../../domain/types";
 import { itemRenderMode, itemTransform } from "./transform";
 import type { RoomItem } from "./types";
@@ -25,7 +25,7 @@ const RUG_FIELD_LIFT_M = 0.0005;
  * the product's sampled colour. Both sit in the same group, so placement and selection are shared.
  */
 export function Item({ item, selected, onSelect }: { item: RoomItem; selected: boolean; onSelect?: (id: string | null) => void }) {
-  const colour = useProductColour(item.imageUrl, item.category);
+  const colour = useProductColour(item.imageUrl, item.kind);
   const { position, rotationY } = itemTransform(item);
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
@@ -50,9 +50,9 @@ export function Item({ item, selected, onSelect }: { item: RoomItem; selected: b
 
 function Proxy({ item, colour, selected }: { item: RoomItem; colour: string; selected: boolean }) {
   const { width_mm, depth_mm, height_mm } = item.box;
-  const geometry = useMemo(() => proxyForCategory(item.category, { width_mm, depth_mm, height_mm }), [item.category, width_mm, depth_mm, height_mm]);
+  const geometry = useMemo(() => proxyForKind(item.kind, { width_mm, depth_mm, height_mm }), [item.kind, width_mm, depth_mm, height_mm]);
   useEffect(() => () => geometry.dispose(), [geometry]);
-  if (item.category === "rug") return <RugProxy box={item.box} colour={colour} selected={selected} />;
+  if (item.kind === "soft_floor") return <SoftFloorProxy box={item.box} colour={colour} selected={selected} />;
   return (
     <mesh geometry={geometry} castShadow receiveShadow>
       <meshStandardMaterial color={colour} roughness={PROXY_ROUGHNESS} metalness={0} />
@@ -61,11 +61,11 @@ function Proxy({ item, colour, selected }: { item: RoomItem; colour: string; sel
   );
 }
 
-/** The rug slab in a darker band colour with an inset field on top in the product colour, so a flat plane still reads as a rug. */
-function RugProxy({ box, colour, selected }: { box: Box; colour: string; selected: boolean }) {
+/** A soft-floor slab in a darker band colour with an inset field on top in the product colour, so a flat plane still reads as a rug. */
+function SoftFloorProxy({ box, colour, selected }: { box: Box; colour: string; selected: boolean }) {
   const w = box.width_mm * METRES_PER_MM;
   const d = box.depth_mm * METRES_PER_MM;
-  const thickness = (box.height_mm > 0 ? box.height_mm : RUG_THICKNESS_MM) * METRES_PER_MM;
+  const thickness = (box.height_mm > 0 ? box.height_mm : SOFT_FLOOR_THICKNESS_MM) * METRES_PER_MM;
   const band = Math.min(RUG_BAND_M, Math.min(w, d) * RUG_BAND_MAX_FRACTION);
   // Color.set converts the sRGB hex to linear; the band darkens in linear space and is passed as a Color so it is not converted again.
   const { field, edge } = useMemo(() => {

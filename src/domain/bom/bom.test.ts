@@ -151,7 +151,7 @@ describe("replaceBomItem", () => {
     });
 
     const newItem = store.getBomItem(result.new_item_id);
-    expect(newItem).toMatchObject({ product_id: "cheaper_table", category: "coffee_table", status: "proposed" });
+    expect(newItem).toMatchObject({ product_id: "cheaper_table", category: "coffee_table", kind: "table", status: "proposed" });
     expect(store.getBomItem(table.id).status).toBe("removed");
     expect(store.placements.get("pl_table")?.bom_item_id).toBe(newItem.id);
     expect(store.placements.get("pl_sofa")?.bom_item_id).toBe(itemFor(store, "sofa").id);

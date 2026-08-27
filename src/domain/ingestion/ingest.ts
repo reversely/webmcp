@@ -5,15 +5,18 @@ import type { Budget, DomainEvent } from "../bom";
 import type { ProjectStore } from "../bom";
 import { normalizeCatalogProduct } from "../products/normalize";
 import { normalizeProductUrl } from "../products/url";
-import type { Candidate, Category, Product } from "../types";
-import { inferCategory } from "./category";
-import { CategoryRequiredError, InvalidProductUrlError, ProductNotFoundError } from "./errors";
+import type { Candidate, Category, Kind, Product } from "../types";
+import { InvalidProductUrlError, ProductNotFoundError } from "./errors";
 import { startModelGeneration, startVisualEvaluation } from "./hooks";
 
 export interface IngestProductUrlRequest {
   projectId: string;
   url: string;
+  /** The project's phrase for the item; the product title stands in when the person named none. */
   category?: Category;
+  /** The rendering kind; when absent, `inferKind` (the PlanningAgent) decides, else `other`. */
+  kind?: Kind;
+  inferKind?: (name: string) => Promise<Kind>;
   /** Global Catalog client; the storefront fallback is derived from it with `withEndpoint`. */
   client: CatalogClient;
   merchantFromUrl: (normalizedUrl: string) => string;
@@ -37,7 +40,6 @@ export type ProductAddedEvent = Extract<DomainEvent, { type: "PRODUCT_ADDED" }>;
  * Raises:
  *   InvalidProductUrlError: when the URL has no `/products/{handle}` path.
  *   ProductNotFoundError: when neither the Global Catalog nor the shop's storefront knows it.
- *   CategoryRequiredError: when no category was given and the title matches no keyword.
  */
 export async function ingestProductUrl(store: ProjectStore, request: IngestProductUrlRequest): Promise<IngestProductUrlResult> {
   const url = normalizeProductUrl(request.url);
@@ -45,12 +47,12 @@ export async function ingestProductUrl(store: ProjectStore, request: IngestProdu
 
   const catalogProduct = await lookupByUrl(request.client, url);
   const fresh = normalizeCatalogProduct(catalogProduct, { merchant: request.merchantFromUrl(url), sourceUrl: url });
-  const category = request.category ?? inferCategory(fresh.title);
-  if (!category) throw new CategoryRequiredError(fresh.title);
+  const category = request.category?.trim() || fresh.title;
+  const kind = request.kind ?? (request.inferKind ? await request.inferKind(category) : "other");
 
   const result = store.mutate(() => {
     const product = upsertProduct(store, fresh);
-    const { candidate, created } = ensureCandidate(store, request.projectId, product.id, category);
+    const { candidate, created } = ensureCandidate(store, request.projectId, product.id, category, kind);
     if (created) {
       const event: ProductAddedEvent = {
         type: "PRODUCT_ADDED",
@@ -93,7 +95,8 @@ function ensureCandidate(
   store: ProjectStore,
   projectId: string,
   productId: string,
-  category: Category
+  category: Category,
+  kind: Kind
 ): { candidate: Candidate; created: boolean } {
   for (const candidate of store.candidates.values()) {
     if (candidate.project_id === projectId && candidate.product_id === productId) return { candidate, created: false };
@@ -103,6 +106,7 @@ function ensureCandidate(
     project_id: projectId,
     product_id: productId,
     category,
+    kind,
     hard_constraint_results_json: null,
     visual_evaluation_json: null,
     delivery_status: null,

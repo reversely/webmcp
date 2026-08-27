@@ -30,6 +30,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .page-summary { color: var(--ink-2); line-height: 1.55; max-width: 62ch; margin: 0 0 24px; }
 .eyebrow { font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-3); }
 .surface { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-card); padding: 24px; }
+/* Wide content (tables, plans) scrolls inside its surface; the page body never scrolls sideways. */
+.surface { overflow-x: auto; }
 .surface + .surface { margin-top: 24px; }
 .surface-title { font-size: var(--text-surface-title); font-weight: 500; color: var(--ink); margin: 0 0 12px; }
 .band { display: flex; gap: 12px; align-items: end; padding: 12px 16px; margin: -24px -24px 16px; border-bottom: 1px solid var(--line); }
@@ -82,7 +84,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 
 /* Trace section (PRD 24): a third band under the chat, collapsed to its header until opened. */
 .trace { border-top: 1px solid var(--line); background: var(--card); display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
-.trace.open { height: 52vh; }
+.trace.open { height: auto; }
+/* Open, the trace body is a drawer across the centre column so names, PRD refs, and JSON have
+   room; the rail keeps the BOM and chat. The head stays in the rail as the toggle. */
+.trace.open .trace-body { position: fixed; left: 0; right: 360px; bottom: 0; height: 44vh; z-index: 20; background: var(--card); box-shadow: 0 -8px 24px rgba(23, 23, 26, 0.08); border-top: 1px solid var(--line); }
+.trace.open .trace-body > * { width: 100%; }
+.trace.open .trace-table { min-width: 720px; }
+.side { position: relative; z-index: 1; }
+.trace-table col.c-time { width: 84px; } .trace-table col.c-kind { width: 110px; } .trace-table col.c-ref { width: 120px; } .trace-table col.c-dur { width: 90px; }
 .trace-head { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 20px; border: 0; background: var(--card); cursor: pointer; text-align: left; width: 100%; }
 .trace-head:focus-visible { outline: 2px solid var(--signature); outline-offset: -2px; }
 .trace-caret { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--signature); }
@@ -140,3 +149,20 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .member-chip.away .member-dot { background: var(--ink-3); }
 .member-chip .member-role { font-size: 11px; font-weight: 400; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
 .member-chip.join { background: var(--card); border: 1px dashed var(--line); color: var(--ink-2); }
+
+/* Responsive frame: the rail moves below the centre under 1100px; the top bar wraps under 720px. */
+@media (max-width: 1100px) {
+  .frame { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; height: auto; min-height: calc(100vh - 56px); }
+  .side { border-left: 0; border-top: 1px solid var(--line); grid-template-rows: auto auto auto; }
+  .chat-log { max-height: 40vh; }
+  .centre { padding: 16px; }
+  .trace.open .trace-body { right: 0; height: 50vh; }
+}
+@media (max-width: 720px) {
+  .topbar { height: auto; min-height: 56px; flex-wrap: wrap; gap: 8px 16px; padding: 8px 16px; }
+  .stages { margin: 0; overflow-x: auto; max-width: 100%; }
+  .stage { padding: 0 8px; }
+  .surface { padding: 16px; }
+  .band { margin: -16px -16px 12px; flex-wrap: wrap; }
+  .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}

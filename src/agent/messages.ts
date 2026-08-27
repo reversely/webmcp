@@ -5,6 +5,7 @@
  */
 import { offerReply } from "../domain/agent-run";
 import { inferAddress } from "../domain/delivery";
+import { formatMoney } from "../domain/money";
 import type { DeliveryAddress } from "../domain/types";
 import { appState, pushMessage, setDeliveryAddress, snapshot, type ChatMessage } from "../server/state";
 import { recordIssue, withProject, withSpan } from "../server/trace";
@@ -45,9 +46,9 @@ function summarizeOutcome(outcome: SourcingOutcome): string {
   if (outcome.status === "no_match") return `I could not find a combination inside the budget for ${outcome.categories.join(", ")}.`;
   const picks = Object.entries(outcome.selected).map(([category, productId]) => {
     const product = s.store.products.get(productId!);
-    return `${category.replace("_", " ")}: ${product?.title ?? productId} ($${((product?.price_cents ?? 0) / 100).toFixed(2)})`;
+    return `${category}: ${product?.title ?? productId} (${formatMoney(product?.price_cents ?? 0, product?.currency)})`;
   });
-  return `Selected ${picks.join("; ")}. Subtotal $${(outcome.subtotal_cents / 100).toFixed(2)}.${outcome.layout_checked ? " Layout placed and checked." : ""}`;
+  return `Selected ${picks.join("; ")}. Subtotal ${formatMoney(outcome.subtotal_cents)}.${outcome.layout_checked ? " Layout placed and checked." : ""}`;
 }
 
 /** Handles one message end to end and returns the project's message list. */
@@ -78,7 +79,7 @@ async function routeMessage(projectId: string, author: string, text: string, dep
     const result = await withSpan(projectId, { kind: "domain", name: "approve_replacement", prd_ref: "PRD 8.5", input: { index: approval, author } }, () => approveReplacement(projectId, approval, author));
     const reply =
       result.status === "replaced"
-        ? `Replaced with ${s.store.products.get(result.product_id)?.title ?? result.product_id}. Committed $${(result.result.budget.committed_cents / 100).toFixed(2)} (${result.result.budget.state}).`
+        ? `Replaced with ${s.store.products.get(result.product_id)?.title ?? result.product_id}. Committed ${formatMoney(result.result.budget.committed_cents)} (${result.result.budget.state}).`
         : result.status === "stale_version"
           ? `The project changed while the ranking was open (${result.message}); nothing was replaced.`
           : "There is no ranked replacement to approve.";

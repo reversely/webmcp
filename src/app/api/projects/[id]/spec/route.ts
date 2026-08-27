@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { appState, snapshot } from "../../../../../server/state";
-import type { Requirement, Space } from "../../../../../domain/types";
+import { readRequiredItem, type Requirement, type Space } from "../../../../../domain/types";
 
 type Params = { params: Promise<{ id: string }> };
 
 /**
  * Writes the room (Space) and the agreed requirements (PRD 16). Body:
  * { space?: { width_mm, length_mm, height_mm? }, requirements?: [{ type, value, scope? }], board?: unknown, created_by?: string }
- * `created_by` is the display name of the person approving; it stamps every requirement row.
+ * `created_by` is the display name of the person approving; it stamps every requirement row. A
+ * `required_item` value is stored as { name, kind }; a bare string names the item with no kind yet.
  */
 export async function PUT(request: Request, { params }: Params) {
   const { id } = await params;
@@ -35,12 +36,14 @@ export async function PUT(request: Request, { params }: Params) {
   if (body.requirements) {
     for (const r of [...s.requirements.values()]) if (r.project_id === id) s.requirements.set(r.id, { ...r, status: "superseded" });
     for (const r of body.requirements) {
+      const value = r.type === "required_item" ? readRequiredItem(r.value) : r.value;
+      if (value === null) continue;
       const row: Requirement = {
         id: s.store.newId("req"),
         project_id: id,
         scope: r.scope ?? "project",
         type: r.type,
-        value_json: r.value,
+        value_json: value,
         status: "agreed",
         source: r.source ?? "board",
         created_by: createdBy

@@ -4,7 +4,7 @@
  * 16 (spec), and 20 (room estimate). The renderers read every field leniently because the agent
  * side is built separately.
  */
-import type { Category } from "../../../../domain/types";
+import type { Category, Kind, LayoutRule } from "../../../../domain/types";
 import type { ChatMessage } from "../../../../server/state";
 
 export type SourcingStatus = "searching" | "retrieving details" | "checking dimensions" | "checking visual fit" | "checking delivery" | "selected" | "no match";
@@ -20,6 +20,7 @@ export type SourcingCategory = {
 };
 
 export type SourcingData = {
+  /** Progress per project item, keyed by the item's own phrase. */
   categories: Partial<Record<Category, SourcingCategory>>;
   subtotal_cents?: number;
   window?: { min_cents?: number; max_cents?: number } | null;
@@ -42,7 +43,8 @@ export type RankingRow = {
 };
 
 export type RankingData = {
-  category: Category | string;
+  /** The project's phrase for the item being replaced. */
+  category: Category;
   required_savings_cents: number;
   ceiling_cents: number;
   rows: RankingRow[];
@@ -51,15 +53,15 @@ export type RankingData = {
 
 export type QuestionData = { run_id: string; field: string; question: string };
 
-/** PRD 16 ProjectSpec. */
+/** PRD 16 ProjectSpec as the agent compiles it (src/agent/compile.ts); older artifacts may carry feet and bare item strings. */
 export type SpecData = {
-  room?: { width_ft: number; length_ft: number } | null;
+  room?: { width_mm?: number; length_mm?: number; width_ft?: number; length_ft?: number } | null;
+  room_name?: string | null;
   budget?: { maximum: number; currency: string } | null;
   required_by?: string | null;
-  required_items?: string[];
-  /** The board form writes hex lists as { base, accent }; the agent compiler writes colour names as { base_colors, accent_colors }. */
-  visual_direction?: { base?: string[]; accent?: string[]; base_colors?: string[]; accent_colors?: string[] } | null;
-  layout_requirements?: { type: string; items: string[] }[];
+  required_items?: (string | { name: string; kind: Kind | null })[];
+  visual_direction?: { base?: string[]; accent?: string[] } | null;
+  layout_requirements?: (LayoutRule | { relation: string; subject: string; objects: string[]; distance_mm?: number | null })[];
 };
 
 export type RoomEstimateData = {
@@ -79,16 +81,6 @@ export type Artifact =
   | { kind: "room_estimate"; id: string; data: RoomEstimateData };
 
 export type ArtifactMessage = ChatMessage & { artifact?: Artifact };
-
-export const CATEGORY_LABEL: Record<string, string> = {
-  sofa: "Sofa",
-  coffee_table: "Coffee table",
-  ottoman: "Ottoman",
-  rug: "Rug",
-  side_table: "Side table"
-};
-
-export const dollars = (cents: number) => `${cents < 0 ? "-" : ""}$${(Math.abs(cents) / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
 /** Reads a status-like value that the agent may send as a string or as an object with a status field. */
 export function statusText(v: unknown): string {

@@ -14,11 +14,3 @@ export class ProductNotFoundError extends Error {
     this.name = "ProductNotFoundError";
   }
 }
-
-/** Thrown when no category was given and the title matches no known keyword. */
-export class CategoryRequiredError extends Error {
-  constructor(readonly title: string) {
-    super(`Could not infer a category from "${title}"; pass one of sofa, coffee_table, ottoman, rug, side_table`);
-    this.name = "CategoryRequiredError";
-  }
-}

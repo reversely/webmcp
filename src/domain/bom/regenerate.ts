@@ -27,6 +27,7 @@ export function regenerateBom(store: ProjectStore, projectId: string): Regenerat
         project_id: projectId,
         product_id: candidate.product_id,
         category: candidate.category,
+        kind: candidate.kind,
         quantity: 1,
         status: "proposed"
       };

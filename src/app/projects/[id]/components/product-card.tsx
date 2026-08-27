@@ -1,8 +1,7 @@
 "use client";
 import type { Product } from "../../../../domain/types";
 import { formatFeetInches } from "../../../../domain/types";
-
-export const dollars = (cents: number, currency = "USD") => `${currency === "USD" ? "$" : `${currency} `}${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+import { formatMoney } from "../../../../domain/money";
 
 /** Width × depth × height in feet and inches, or null when the product has no parsed dimensions. */
 export function dimensionText(p: Pick<Product, "width_mm" | "depth_mm" | "height_mm" | "spatial_status">): string | null {
@@ -21,7 +20,7 @@ export function ProductCard({ product, seller, busy, added, onAdd }: { product: 
       <div className="name">{product.title || "Untitled product"}</div>
       <div className="meta">
         <span>{seller}</span>
-        <span>{dollars(product.price_cents, product.currency)}</span>
+        <span>{formatMoney(product.price_cents, product.currency)}</span>
       </div>
       <div className="meta">{dims ? <span>{dims}</span> : <span className="tag yellow">dimensions unknown</span>}</div>
       <button className="btn" type="button" disabled={busy || added} onClick={onAdd}>

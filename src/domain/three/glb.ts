@@ -5,9 +5,9 @@
 import { Document, NodeIO, getBounds, type Scene, type bbox, type vec3 } from "@gltf-transform/core";
 import type { BufferGeometry } from "three";
 
-import type { Box, Category } from "../types";
+import type { Box, Kind } from "../types";
 import { METRES_PER_MM } from "./coordinates";
-import { proxyForCategory } from "./proxy";
+import { proxyForKind } from "./proxy";
 
 export type Bounds = bbox;
 export type RotationY = 0 | 90 | 180 | 270;
@@ -102,10 +102,10 @@ export async function verifyBounds(glb: Uint8Array, box: Box): Promise<Bounds> {
   return bounds;
 }
 
-export async function proxyToGlb(category: Category, box: Box): Promise<Uint8Array> {
-  const geometry = proxyForCategory(category, box);
+export async function proxyToGlb(kind: Kind, box: Box): Promise<Uint8Array> {
+  const geometry = proxyForKind(kind, box);
   try {
-    return await new NodeIO().writeBinary(geometryToDocument(geometry, `${category}-proxy`));
+    return await new NodeIO().writeBinary(geometryToDocument(geometry, `${kind}-proxy`));
   } finally {
     geometry.dispose();
   }

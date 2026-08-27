@@ -1,25 +1,25 @@
 "use client";
 import { useEffect, useState } from "react";
 
-import type { Category } from "../../domain/types";
-import { CATEGORY_COLOURS, fallbackColour, productColourFromImage } from "./colour";
+import type { Kind } from "../../domain/types";
+import { KIND_COLOURS, fallbackColour, productColourFromImage } from "./colour";
 
 /**
  * Loads a product image (CORS anonymous) only to sample its colour; the image is never kept as a
- * texture. The category default shows until the sample lands, and stays when the image cannot
+ * texture. The kind default shows until the sample lands, and stays when the image cannot
  * load or the canvas is tainted.
  */
-export function useProductColour(imageUrl: string | null, category: Category): string {
-  const [colour, setColour] = useState(CATEGORY_COLOURS[category]);
+export function useProductColour(imageUrl: string | null, kind: Kind): string {
+  const [colour, setColour] = useState(KIND_COLOURS[kind]);
 
   useEffect(() => {
-    setColour(CATEGORY_COLOURS[category]);
+    setColour(KIND_COLOURS[kind]);
     if (!imageUrl) return;
     let cancelled = false;
     const image = new Image();
     image.crossOrigin = "anonymous";
     image.onload = () => {
-      if (!cancelled) setColour(fallbackColour(productColourFromImage(image), category));
+      if (!cancelled) setColour(fallbackColour(productColourFromImage(image), kind));
     };
     image.src = imageUrl;
     return () => {
@@ -27,7 +27,7 @@ export function useProductColour(imageUrl: string | null, category: Category): s
       image.onload = null;
       image.src = "";
     };
-  }, [imageUrl, category]);
+  }, [imageUrl, kind]);
 
   return colour;
 }

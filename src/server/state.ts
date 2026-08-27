@@ -8,9 +8,9 @@ import { createInMemoryStore, type AgentRunStore } from "../domain/agent-run";
 import { calculateBudget, regenerateBom, ProjectStore, type Budget, type DomainEvent } from "../domain/bom";
 import { startModelGeneration } from "../domain/ingestion/hooks";
 import { normalizeCatalogProduct } from "../domain/products/normalize";
-import { checkLayout, type LayoutCheck } from "../domain/geometry";
+import { checkLayout, type LayoutCheck, type LayoutItem } from "../domain/geometry";
 import { recordIssue, withSpan } from "./trace";
-import type { Candidate, Category, DeliveryAddress, Member, Placement, Product, Project, Requirement, Space } from "../domain/types";
+import { readLayoutRule, type Candidate, type Category, type DeliveryAddress, type Kind, type LayoutRule, type Member, type Placement, type Product, type Project, type Requirement, type Space } from "../domain/types";
 
 export type ArtifactKind = "sourcing" | "ranking" | "question" | "spec" | "room_estimate";
 
@@ -30,10 +30,17 @@ export type ChatMessage = {
 export type PendingReplacement = {
   artifact_id: string;
   old_item_id: string;
+  /** The project's phrase for the item being replaced. */
   category: Category;
   /** Product ids in rank order; "use the first one" picks index 0. */
   ranked_product_ids: string[];
 };
+
+/** The steps a 3D job passes through, in order; `ready` or `proxy` ends it (#49). */
+export type ModelStageName = "queued" | "image_fetched" | "mesh_generated" | "normalized" | "verified" | "ready" | "proxy";
+
+/** One recorded step of a job: when it happened and, where the step measured something, what. */
+export type ModelStage = { name: ModelStageName; at: string; detail?: string };
 
 /** One 3D generation job (PRD 15.1). Its `cache_key` names the GLB under public/models. */
 export type ModelJob = {
@@ -43,6 +50,10 @@ export type ModelJob = {
   status: Product["model_status"];
   glb_url: string | null;
   error: string | null;
+  /** Every stage reached so far, oldest first; the last one is the current stage. */
+  stages: ModelStage[];
+  /** Milliseconds from the `queued` stage to the latest stage. */
+  elapsed_ms: number;
   created_at: string;
   updated_at: string;
 };
@@ -67,6 +78,8 @@ export type AppState = {
   /** The one run per project that is running or waiting for user input. */
   activeRuns: Map<string, string>;
   pendingReplacements: Map<string, PendingReplacement>;
+  /** Inferred rendering kind and search query per item phrase, keyed by `itemKey` (src/agent/kinds.ts). */
+  kinds: Map<string, { kind: Kind; query: string }>;
 };
 
 declare global {
@@ -131,7 +144,8 @@ export function appState(): AppState {
       client: catalogClient({ onCall: traceCatalogCall }),
       runs: createInMemoryStore(),
       activeRuns: new Map(),
-      pendingReplacements: new Map()
+      pendingReplacements: new Map(),
+      kinds: new Map()
     };
   }
   return globalThis.__plannerState;
@@ -200,10 +214,12 @@ export type ProjectSnapshot = {
   requirements: Requirement[];
   products: Product[];
   candidates: Candidate[];
-  bom: { id: string; product_id: string; category: Category; quantity: number; status: string; product: Product | null }[];
+  bom: { id: string; product_id: string; category: Category; kind: Kind; quantity: number; status: string; product: Product | null }[];
   placements: Placement[];
   budget: Budget;
   messages: ChatMessage[];
+  /** The newest 3D job per product id, for the products in this snapshot (#49). */
+  model_jobs: Record<string, ModelJob>;
 };
 
 export function snapshot(projectId: string): ProjectSnapshot {
@@ -217,6 +233,9 @@ export function snapshot(projectId: string): ProjectSnapshot {
     .map((b) => ({ ...b, product: s.store.products.get(b.product_id) ?? null }));
   const space = [...s.spaces.values()].find((sp) => sp.project_id === projectId) ?? null;
   const placementIds = new Set(bom.map((b) => b.id));
+  // Jobs insert in creation order, so the last one per product is the newest (a retry after proxy).
+  const model_jobs: Record<string, ModelJob> = {};
+  for (const job of s.jobs.values()) if (productIds.has(job.product_id)) model_jobs[job.product_id] = job;
   return {
     project,
     space,
@@ -226,7 +245,8 @@ export function snapshot(projectId: string): ProjectSnapshot {
     bom,
     placements: [...s.store.placements.values()].filter((p) => placementIds.has(p.bom_item_id)),
     budget: calculateBudget(s.store, projectId),
-    messages: s.messages.get(projectId) ?? []
+    messages: s.messages.get(projectId) ?? [],
+    model_jobs
   };
 }
 
@@ -235,7 +255,7 @@ export function snapshot(projectId: string): ProjectSnapshot {
  * global Product row, creates a selected Candidate, and regenerates the BOM. Mirrors the URL
  * ingestion path in src/domain/ingestion for a catalog object instead of a URL.
  */
-export function addCatalogProduct(projectId: string, raw: unknown, category: Category, merchant: string, sourceUrl: string) {
+export function addCatalogProduct(projectId: string, raw: unknown, category: Category, kind: Kind, merchant: string, sourceUrl: string) {
   const s = appState();
   const fresh = normalizeCatalogProduct(raw, { merchant, sourceUrl });
   const added = s.store.mutate(() => {
@@ -249,6 +269,7 @@ export function addCatalogProduct(projectId: string, raw: unknown, category: Cat
         project_id: projectId,
         product_id: product.id,
         category,
+        kind,
         hard_constraint_results_json: null,
         visual_evaluation_json: null,
         delivery_status: null,
@@ -312,28 +333,49 @@ export function updateCandidate(candidateId: string, patch: Partial<Candidate>):
   return next;
 }
 
+/**
+ * Changes the rendering kind of a candidate and of the BOM item that carries its product (PRD 20:
+ * a person edits the kind the agent inferred). Null when the candidate is not in the project.
+ */
+export function setCandidateKind(projectId: string, candidateId: string, kind: Kind): Candidate | null {
+  const s = appState();
+  const candidate = s.store.candidates.get(candidateId);
+  if (!candidate || candidate.project_id !== projectId) return null;
+  const next = updateCandidate(candidateId, { kind });
+  for (const item of s.store.bomItems.values()) {
+    if (item.project_id === projectId && item.product_id === candidate.product_id) s.store.bomItems.set(item.id, { ...item, kind });
+  }
+  s.store.markChanged(projectId);
+  return next;
+}
+
+/** The project's agreed layout rules (PRD 16), in requirement order; unreadable values are skipped. */
+export function layoutRulesFor(projectId: string): LayoutRule[] {
+  return snapshot(projectId)
+    .requirements.filter((r) => r.type === "layout_requirement" && r.status === "agreed")
+    .map((r) => readLayoutRule(r.value_json))
+    .filter((rule): rule is LayoutRule => rule !== null);
+}
+
 export function spaceFor(projectId: string): Space | null {
   return [...appState().spaces.values()].find((sp) => sp.project_id === projectId) ?? null;
 }
 
-/** Geometry check over the project's placed, grounded BOM items (PRD 14); null without a space. */
+/** Geometry check over the project's placed, grounded BOM items and its layout rules (PRD 14); null without a space. */
 export function geometryFor(projectId: string): LayoutCheck | null {
   const snap = snapshot(projectId);
   if (!snap.space) return null;
   const byItem = new Map(snap.placements.map((p) => [p.bom_item_id, p]));
-  const items = snap.bom
+  const items: LayoutItem[] = snap.bom
     .filter((b) => b.status !== "removed" && b.product?.spatial_status === "grounded" && byItem.has(b.id))
     .map((b) => ({
       id: b.id,
+      name: b.category,
+      kind: b.kind,
       box: { width_mm: b.product!.width_mm!, depth_mm: b.product!.depth_mm!, height_mm: b.product!.height_mm! },
       placement: byItem.get(b.id)!
     }));
-  const idFor = (category: Category) => snap.bom.find((b) => b.category === category && items.some((i) => i.id === b.id))?.id;
-  const rug = idFor("rug");
-  const table = idFor("coffee_table");
-  const sofa = idFor("sofa");
-  const all = rug && table && sofa;
-  return checkLayout(snap.space, items, all ? rug : undefined, all ? table : undefined, all ? sofa : undefined);
+  return checkLayout(snap.space, items, layoutRulesFor(projectId));
 }
 
 /** Replaces a job row with the given fields and stamps `updated_at`; returns the new row. */

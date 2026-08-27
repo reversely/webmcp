@@ -6,8 +6,8 @@ import { TOOLS, TOOLS_BY_NAME, TOOL_NAMES, resolveRoute, type ToolName } from ".
 const EXAMPLES: Record<ToolName, { good: Record<string, unknown>; bad: Record<string, unknown> }> = {
   get_project_state: { good: {}, bad: { projectId: "p1" } },
   add_product: {
-    good: { url: "https://shop.example/products/side-table", category: "side_table" },
-    bad: { url: "https://shop.example/products/lamp", category: "lamp" }
+    good: { url: "https://shop.example/products/side-table", category: "side table", kind: "table" },
+    bad: { url: "https://shop.example/products/lamp", category: "reading lamp", kind: "lamp" }
   },
   set_project_requirement: {
     good: { type: "room_dimensions", value: { width_mm: 3658, length_mm: 5486 } },

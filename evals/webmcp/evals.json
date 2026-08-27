@@ -17,10 +17,10 @@
     ]
   },
   {
-    "name": "Ambiguous: add a product and name its category",
+    "name": "Ambiguous: add a product and name it in the user's words",
     "messages": [{ "role": "user", "type": "message", "content": "Zach found a coffee table he likes, https://sabai.design/products/the-essential-table, throw it in" }],
     "expectedCall": [
-      { "functionName": "add_product", "arguments": { "url": { "$contains": "sabai.design/products/the-essential-table" }, "category": "coffee_table" } }
+      { "functionName": "add_product", "arguments": { "url": { "$contains": "sabai.design/products/the-essential-table" }, "category": { "$contains": "coffee table" } } }
     ]
   },
   {
@@ -35,6 +35,20 @@
     "messages": [{ "role": "user", "type": "message", "content": "Everything has to be here before Ben's parents visit on September 15th." }],
     "expectedCall": [
       { "functionName": "set_project_requirement", "arguments": { "type": "delivery_date", "value": { "$contains": "2026-09-15" } } }
+    ]
+  },
+  {
+    "name": "Direct: a required item in the user's own words",
+    "messages": [{ "role": "user", "type": "message", "content": "We also need a reading chair by the window." }],
+    "expectedCall": [
+      { "functionName": "set_project_requirement", "arguments": { "type": "required_item", "value": { "$contains": "reading chair" } } }
+    ]
+  },
+  {
+    "name": "Ambiguous: a layout rule between named items",
+    "messages": [{ "role": "user", "type": "message", "content": "The big rug should go under the sofa and the coffee table." }],
+    "expectedCall": [
+      { "functionName": "set_project_requirement", "arguments": { "type": "layout_requirement", "value": { "$any": true } } }
     ]
   },
   {
@@ -84,7 +98,7 @@
       { "role": "user", "type": "message", "content": "Add https://floydhome.com/products/side-table-oak as a side table, then tell me whether we're still on track for budget and delivery." }
     ],
     "expectedCall": [
-      { "functionName": "add_product", "arguments": { "url": { "$contains": "side-table-oak" }, "category": "side_table" } },
+      { "functionName": "add_product", "arguments": { "url": { "$contains": "side-table-oak" }, "category": { "$contains": "side table" } } },
       {
         "unordered": [
           { "functionName": "evaluate_project", "arguments": {} },

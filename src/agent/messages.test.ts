@@ -5,7 +5,7 @@ import type { RankingArtifact } from "./artifacts";
 import { handleMessage } from "./messages";
 import { approvalIndex, findCheaperReplacement } from "./replacement";
 import { sourceRoom } from "./sourcing";
-import { fakeCatalogProduct, fakeDeps, resetState, seedProject } from "./test-helpers";
+import { EXTRA, fakeCatalogProduct, fakeDeps, resetState, seedProject } from "./test-helpers";
 
 describe("classifyAddressReply routing", () => {
   it("answers on a bare or embedded ZIP and declines otherwise", () => {
@@ -52,33 +52,34 @@ describe("replacement flow", () => {
   beforeEach(resetState);
 
   it("ranks cheaper candidates that fit at the old placement and replaces on approval", async () => {
-    // The side table is known before sourcing, so selection lands in the PRD 8.4 window.
-    const projectId = seedProject({ address: true, sideTable: 29500 });
+    // The end table is known before sourcing, so selection lands in the PRD 8.4 window.
+    const projectId = seedProject({ address: true, extraPrice: 29500 });
     const deps = fakeDeps();
     await sourceRoom(projectId, "Find a set", deps);
     const s = appState();
-    // Push the project over budget the way the pasted side table does (PRD 8.4).
+    // Push the project over budget the way the pasted extra item does (PRD 8.4).
     const { upsertCandidate } = await import("./catalog");
-    const side = upsertCandidate(projectId, fakeCatalogProduct("side_table", 1, 29500), "side_table");
+    const side = upsertCandidate(projectId, fakeCatalogProduct(EXTRA.name, 1, 29500), EXTRA.name, EXTRA.kind);
     s.store.candidates.set(side.candidate.id, { ...side.candidate, ranking_state: "selected" });
     const { regenerateBom } = await import("../domain/bom");
     regenerateBom(s.store, projectId);
     const before = snapshot(projectId);
     expect(before.budget.state).toBe("over");
-    const oldItem = before.bom.find((b) => b.category === "coffee_table")!;
+    const oldItem = before.bom.find((b) => b.category === "round coffee table")!;
     const required = before.budget.committed_cents - 250000;
 
     const cheaper = [
-      fakeCatalogProduct("coffee_table", 11, oldItem.product!.price_cents - required - 5000),
-      fakeCatalogProduct("coffee_table", 12, oldItem.product!.price_cents - required + 1000),
-      fakeCatalogProduct("coffee_table", 13, 9900, { metadata: { tech_specs: '150" W x 100" D x 18" H' } })
+      fakeCatalogProduct("round coffee table", 11, oldItem.product!.price_cents - required - 5000),
+      fakeCatalogProduct("round coffee table", 12, oldItem.product!.price_cents - required + 1000),
+      fakeCatalogProduct("round coffee table", 13, 9900, { metadata: { tech_specs: '150" W x 100" D x 18" H' } })
     ];
-    const outcome = await findCheaperReplacement(projectId, "coffee_table", { ...deps, search: async () => cheaper });
+    // The person's phrase is matched case-insensitively against the BOM item's name.
+    const outcome = await findCheaperReplacement(projectId, "Round Coffee Table", { ...deps, search: async () => cheaper });
     expect(outcome.status).toBe("ranked");
     if (outcome.status !== "ranked") return;
     expect(outcome.required_savings_cents).toBe(required);
     expect(outcome.ceiling_cents).toBe(oldItem.product!.price_cents - required);
-    expect(outcome.ranked.map((r) => r.product_id)).toEqual([cheaper[0].id].map((id) => `coffee-table-shop-11.myshopify.com:${id}`));
+    expect(outcome.ranked.map((r) => r.product_id)).toEqual([cheaper[0].id].map((id) => `round-coffee-table-shop-11.myshopify.com:${id}`));
 
     const artifact = snapshot(projectId).messages.find((m) => m.artifact?.kind === "ranking")!.artifact!.data as RankingArtifact;
     expect(artifact.rows.map((r) => r.status)).toEqual(["selected", "eliminated", "eliminated"]);
@@ -87,11 +88,12 @@ describe("replacement flow", () => {
     expect(s.store.decisions.size).toBe(1);
 
     const messages = await handleMessage(projectId, "zach", "approve", { sourcing: deps });
-    expect(messages.at(-1)?.text).toMatch(/^Replaced with coffee table 11/);
+    expect(messages.at(-1)?.text).toMatch(/^Replaced with round coffee table 11/);
     const after = snapshot(projectId);
     expect(after.budget.state).not.toBe("over");
     expect(after.bom.find((b) => b.id === oldItem.id)?.status).toBe("removed");
-    const newItem = after.bom.find((b) => b.category === "coffee_table" && b.status === "proposed")!;
+    const newItem = after.bom.find((b) => b.category === "round coffee table" && b.status === "proposed")!;
+    expect(newItem.kind).toBe("table");
     expect(after.placements.some((p) => p.bom_item_id === newItem.id)).toBe(true);
     expect([...s.store.decisions.values()].map((d) => d.type)).toEqual(["replacement_ranked", "product_replaced"]);
     expect(s.pendingReplacements.has(projectId)).toBe(false);

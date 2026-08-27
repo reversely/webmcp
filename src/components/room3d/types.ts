@@ -1,10 +1,11 @@
-import type { Box, Category, Product } from "../../domain/types";
+import type { Box, Kind, Product } from "../../domain/types";
 
 export type RoomSpace = { width_mm: number; length_mm: number; height_mm?: number | null };
 
 export type RoomItem = {
   id: string;
-  category: Category;
+  /** The rendering kind that picks the proxy shape (PRD 20). */
+  kind: Kind;
   box: Box;
   placement: { x_mm: number; y_mm: number; rotation_deg: number };
   /** Source of the proxy's colour; never mapped onto the proxy as a texture. */

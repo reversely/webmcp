@@ -26,9 +26,10 @@ export type CategoryProgress = {
 };
 
 export type SourcingArtifact = {
-  categories: Partial<Record<Category, CategoryProgress>>;
+  /** Progress per project item, keyed by the item's own phrase. */
+  categories: Record<Category, CategoryProgress>;
   subtotal_cents?: number;
-  /** Present only when the project names a side table (PRD 8.4). */
+  /** Present only when the project already knows the price of an item outside its required list (PRD 8.4). */
   window?: { min_cents: number; max_cents: number };
   /** Plain sentences about what the run could not use: no window, no address. */
   notes?: string[];
@@ -50,6 +51,7 @@ export type RankingRow = {
 };
 
 export type RankingArtifact = {
+  /** The project's phrase for the item being replaced. */
   category: Category;
   required_savings_cents: number;
   ceiling_cents: number;
@@ -68,7 +70,7 @@ export function writeSourcingArtifact(projectId: string, id: string, data: Sourc
 }
 
 export function writeRankingArtifact(projectId: string, id: string, data: RankingArtifact): void {
-  upsertArtifact(projectId, { kind: "ranking", id, data }, `Cheaper ${data.category.replace("_", " ")} options`);
+  upsertArtifact(projectId, { kind: "ranking", id, data }, `Cheaper ${data.category} options`);
 }
 
 export function writeQuestionArtifact(projectId: string, id: string, data: QuestionArtifact): void {

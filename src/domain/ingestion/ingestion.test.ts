@@ -4,7 +4,7 @@ import globalLookup from "../../commerce/fixtures/global-lookup-floyd-bedside-ta
 import { catalogClient, GLOBAL_CATALOG_ENDPOINT } from "../../commerce";
 import { PRICES, PROJECT_ID, demoStore, rows } from "../bom/fixture";
 import { regenerateBom } from "../bom";
-import { CategoryRequiredError, InvalidProductUrlError, ProductNotFoundError, inferCategory, ingestProductUrl } from "./index";
+import { InvalidProductUrlError, ProductNotFoundError, ingestProductUrl } from "./index";
 
 const BEDSIDE_URL = "https://floydhome.com/products/bedside-table";
 const BEDSIDE_PRICE = 34500;
@@ -48,8 +48,8 @@ function fakeCatalog(responses: Record<string, unknown>) {
 
 const merchantFromUrl = (url: string) => new URL(url).hostname;
 
-function ingest(store: ReturnType<typeof demoStore>["store"], client: ReturnType<typeof catalogClient>, url = BEDSIDE_URL, category?: "sofa" | "side_table") {
-  return ingestProductUrl(store, { projectId: PROJECT_ID, url, category, client, merchantFromUrl });
+function ingest(store: ReturnType<typeof demoStore>["store"], client: ReturnType<typeof catalogClient>, url = BEDSIDE_URL, category?: string, kind?: "table" | "seating") {
+  return ingestProductUrl(store, { projectId: PROJECT_ID, url, category, kind, client, merchantFromUrl });
 }
 
 describe("ingestProductUrl", () => {
@@ -75,13 +75,14 @@ describe("ingestProductUrl", () => {
     expect(result.candidate).toMatchObject({
       project_id: PROJECT_ID,
       product_id: result.product.id,
-      category: "side_table",
+      category: "Bedside Table",
+      kind: "other",
       ranking_state: "selected"
     });
     expect(store.candidates.get(result.candidate.id)).toEqual(result.candidate);
 
     const item = rows(store).bomItems.find((row) => row.product_id === result.product.id);
-    expect(item).toMatchObject({ category: "side_table", status: "proposed", quantity: 1 });
+    expect(item).toMatchObject({ category: "Bedside Table", kind: "other", status: "proposed", quantity: 1 });
     expect(result.budget).toEqual({
       committed_cents: SOURCED_TOTAL + BEDSIDE_PRICE,
       budget_cents: 250000,
@@ -121,7 +122,7 @@ describe("ingestProductUrl", () => {
       source_url: "https://floydhome.com/products/sofa-2-0-frame-cushion-set",
       price_cents: 219000
     });
-    expect(result.candidate.category).toBe("sofa");
+    expect(result.candidate.category).toBe("Sofa 2.0 Three Seater");
   });
 
   it("throws ProductNotFoundError naming both endpoints when neither knows the URL", async () => {
@@ -132,19 +133,17 @@ describe("ingestProductUrl", () => {
     expect(store.candidates.size).toBe(4);
   });
 
-  it("throws CategoryRequiredError when no category is given and the title matches no keyword", async () => {
+  it("takes the given phrase and kind over the title, and asks the kind inferrer when only a phrase is given", async () => {
     const { store } = demoStore();
     const { client } = fakeCatalog({ [GLOBAL_CATALOG_ENDPOINT]: withTitle(globalLookup, "The Modular Table") });
-    await expect(ingest(store, client)).rejects.toBeInstanceOf(CategoryRequiredError);
-    expect(store.products.size).toBe(6);
-    expect(store.candidates.size).toBe(4);
-  });
+    const given = await ingest(store, client, BEDSIDE_URL, "side table", "table");
+    expect(given.candidate).toMatchObject({ category: "side table", kind: "table" });
 
-  it("uses the given category over the inferred one", async () => {
-    const { store } = demoStore();
-    const { client } = fakeCatalog({ [GLOBAL_CATALOG_ENDPOINT]: withTitle(globalLookup, "The Modular Table") });
-    const result = await ingest(store, client, BEDSIDE_URL, "side_table");
-    expect(result.candidate.category).toBe("side_table");
+    const asked: string[] = [];
+    const other = demoStore().store;
+    const inferred = await ingestProductUrl(other, { projectId: PROJECT_ID, url: BEDSIDE_URL, category: "reading lamp", client, merchantFromUrl, inferKind: async (name) => (asked.push(name), "lighting") });
+    expect(asked).toEqual(["reading lamp"]);
+    expect(inferred.candidate).toMatchObject({ category: "reading lamp", kind: "lighting" });
   });
 
   it("rejects a URL without a product handle before calling the catalog", async () => {
@@ -152,24 +151,5 @@ describe("ingestProductUrl", () => {
     const { client, endpoints } = fakeCatalog({});
     await expect(ingest(store, client, "https://floydhome.com/collections/tables")).rejects.toBeInstanceOf(InvalidProductUrlError);
     expect(endpoints).toEqual([]);
-  });
-});
-
-describe("inferCategory", () => {
-  it.each([
-    ["Sofa 2.0 Three Seater", "sofa"],
-    ["The Comfy Couch", "sofa"],
-    ["The Lift Off Coffee Table", "coffee_table"],
-    ["Round Ottoman", "ottoman"],
-    ["Wool Area Rug 8x10", "rug"],
-    ["Walnut Side Table", "side_table"],
-    ["Bedside Table", "side_table"],
-    ["Oak End Table", "side_table"],
-    ["Nightstand", "side_table"],
-    ["Sofa Side Table", "side_table"],
-    ["The Modular Table", null],
-    ["Rugged Sofa Cover", "sofa"]
-  ])("%s → %s", (title, category) => {
-    expect(inferCategory(title)).toBe(category);
   });
 });

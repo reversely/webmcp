@@ -20,7 +20,7 @@ async function main() {
     const res = await page.request.post(`${BASE}/api/projects`, { data: { name: "Inspection", budget_cents: 100000, required_by: null } });
     projectId = ((await res.json()) as { project: { id: string } }).project.id;
     // Items and search need a room; confirm one the way the configurator would.
-    await page.request.put(`${BASE}/api/projects/${projectId}/spec`, { data: { space: { width_mm: 3658, length_mm: 5486, name: "Inspection room" } } });
+    await page.request.put(`${BASE}/api/projects/${projectId}/spec`, { data: { space: { width_mm: 3658, length_mm: 5486, name: "Inspection room" }, requirements: [{ type: "required_item", value: { name: "reading chair", kind: null } }] } });
   }
   const snap = async () => (await (await page.request.get(`${BASE}/api/projects/${projectId}`)).json()) as { budget: { committed_cents: number; budget_cents: number }; bom: unknown[]; messages: { text: string }[] };
 
@@ -87,22 +87,23 @@ async function main() {
     const matches = trace.spans.some((sp) => firstRow.includes(sp.name));
     note(matches, `trace: the first visible row "${firstRow.slice(0, 60)}" names a real span`);
   }
-  const search = page.locator("#search-cat, [data-testid=\"product-search\"] select").first();
+  const search = page.locator("#search-cat");
   if (await search.count()) {
+    await search.selectOption({ label: "reading chair" }).catch(async () => { await search.selectOption({ index: 0 }); });
     await page.getByRole("button", { name: /^Search$/ }).click();
     await page.waitForTimeout(8000);
     const cards = page.locator('[data-testid="product-search"] .card');
     note((await cards.count()) > 0, `search: ${await cards.count()} live product cards rendered`);
     // Semantic: the first card's price equals the catalog price the API returned for it.
-    // Replicate the panel's own parameters: category and the max price it defaulted to (remaining budget).
+    // Replicate the panel's own parameters: the item and the max price it defaulted to (remaining budget).
     const sNow = await snap();
     const maxCents = sNow.budget.budget_cents - sNow.budget.committed_cents;
-    const res = await page.request.post(`${BASE}/api/shopify/search`, { data: { category: await search.inputValue(), project_id: projectId, limit: 3, max_cents: maxCents } });
+    const res = await page.request.post(`${BASE}/api/shopify/search`, { data: { item: await search.inputValue(), project_id: projectId, limit: 3, max_cents: maxCents } });
     const body = (await res.json()) as { products: { normalized: { title: string; price_cents: number } | null }[] };
     const first = body.products.find((p) => p.normalized);
     if (first?.normalized) {
       const cardText = (await cards.first().innerText()).replace(/\s+/g, " ");
-      const apiPrice = `$${(first.normalized.price_cents / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+      const apiPrice = first.normalized.price_cents % 100 === 0 ? `$${(first.normalized.price_cents / 100).toLocaleString("en-US")}` : `$${(first.normalized.price_cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       const rounded = `$${Math.round(first.normalized.price_cents / 100).toLocaleString("en-US")}`;
       const shown = cardText.match(/\$[\d,.]+/)?.[0] ?? "";
       note(shown === apiPrice || shown === rounded, `search: card price "${shown}" vs API ${apiPrice} for "${first.normalized.title.slice(0, 30)}"${shown === rounded && shown !== apiPrice ? " (rounded to whole dollars; see the cents ticket)" : ""}`);

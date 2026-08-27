@@ -137,6 +137,13 @@ export function TracePanel({ projectId }: { projectId: string }) {
           <div className="trace-table-wrap">
             <table className="trace-table">
               <colgroup>
+                <col className="c-time" />
+                <col className="c-kind" />
+                <col />
+                <col className="c-ref" />
+                <col className="c-dur" />
+              </colgroup>
+              <colgroup>
                 <col style={{ width: 70 }} />
                 <col style={{ width: 76 }} />
                 <col />

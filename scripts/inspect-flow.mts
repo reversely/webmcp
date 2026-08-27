@@ -40,11 +40,16 @@ note(rules.some((r) => /rug/.test(r)), `plan: rule rows from the board sentence 
 note((await form.locator("input[type=checkbox]").count()) === 0, "plan: no checkbox on the form");
 const formText = (await form.innerText()).replace(/\s+/g, " ");
 note(!/sofa|coffee table|ottoman/i.test(formText), "plan: form names no item the board did not");
+const trace = (await (await zach.request.get(`${BASE}/api/projects/${projectId}/trace`)).json()) as { spans: { name: string; status: string; error?: string; output?: unknown }[] };
+const compileSpan = trace.spans.filter((sp) => sp.name === "compile_spec").pop();
+note(!!compileSpan && compileSpan.status === "ok" && !compileSpan.error, `compile: model-backed compile span ${compileSpan?.status ?? "missing"} ${compileSpan?.error ?? ""}`);
+const compiled = (compileSpan?.output ?? null) as { required_items?: unknown[] } | null;
+note(!!compiled && Array.isArray(compiled.required_items) && compiled.required_items.length >= 2, `compile: model returned the board's items (${JSON.stringify(compiled?.required_items ?? null)?.slice(0, 120)})`);
 await zach.getByTestId("approve-plan").click();
 await zach.waitForURL(/\/room/, { timeout: 15000 }).catch(() => {});
 const after = (await (await zach.request.get(`${BASE}/api/projects/${projectId}`)).json()) as { requirements: { type: string; value_json: unknown }[]; space: { width_mm: number; length_mm: number } | null; project: { budget_cents: number; required_by: string | null } };
-const reqItems = after.requirements.filter((r) => r.type === "required_item").map((r) => r.value_json);
-note(reqItems.includes("reading chair") && reqItems.includes("standing desk"), `approve: required_item values ${JSON.stringify(reqItems)}`);
+const reqItems = after.requirements.filter((r) => r.type === "required_item").map((r) => (r.value_json as { name: string }).name);
+note(reqItems.includes("reading chair") && reqItems.includes("standing desk"), `approve: required_item names ${JSON.stringify(reqItems)}`);
 const vis = after.requirements.find((r) => r.type === "visual_direction")?.value_json as { base?: string[]; accent?: string[] } | undefined;
 const visAll = [...(vis?.base ?? []), ...(vis?.accent ?? [])].map((h) => h.toLowerCase());
 note(swatches.every((h) => visAll.includes(h)), `approve: visual_direction holds the swatch hexes ${JSON.stringify(vis)}`);

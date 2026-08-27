@@ -5,7 +5,8 @@
  * injected functions so it stays pure and testable on its own.
  */
 import { z } from "zod";
-import { Category, DeliveryStatus as DeliveryStatusSchema } from "../types";
+import type { Category } from "../types";
+import { DeliveryStatus as DeliveryStatusSchema } from "../types";
 
 export type DeliveryStatus = z.infer<typeof DeliveryStatusSchema>;
 
@@ -24,7 +25,7 @@ export const VisualEvaluation = z.object({
 });
 export type VisualEvaluation = z.infer<typeof VisualEvaluation>;
 
-/** A candidate joined with the product fields ranking reads. */
+/** A candidate joined with the product fields ranking reads. `category` is the project item's name. */
 export interface RankableCandidate {
   id: string;
   category: Category;
@@ -80,6 +81,9 @@ export interface RankingOptions {
   secondary?: Comparator;
 }
 
+/** Ranked candidates keyed by the project item's name. */
+export type RankedByItem = Record<Category, RankedCandidate[]>;
+
 export type SelectionResult =
-  | { selected: Partial<Record<Category, RankedCandidate>>; subtotal_cents: number }
+  | { selected: Record<Category, RankedCandidate>; subtotal_cents: number }
   | { no_combination: true; gapCategory: Category; suggestedPriceRange: BudgetWindow };

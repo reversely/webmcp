@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import type { Box, Category } from "../../../../domain/types";
+import type { RuleResult } from "../../../../domain/geometry";
+import { itemKey, type Box, type Category, type Kind } from "../../../../domain/types";
 import { formatFeetInches } from "../../../../domain/types";
 import type { Opening, Wall } from "./room-estimate";
 
@@ -12,7 +13,9 @@ import type { Opening, Wall } from "./room-estimate";
 export type PlanItem = {
   id: string;
   title: string;
+  /** The project's phrase for the item; layout rules name items by it. */
   category: Category;
+  kind: Kind;
   image_url: string | null;
   box: Box;
   placement: { x_mm: number; y_mm: number; rotation_deg: number };
@@ -26,6 +29,8 @@ export type PlanViewProps = {
   items?: PlanItem[];
   selectedId?: string | null;
   clearances?: Record<string, number>;
+  /** Evaluated layout rules: each draws a pass or fail mark between its subject and its objects. */
+  rules?: RuleResult[];
   maxHeight?: number;
   onSelect?: (id: string) => void;
   onMove?: (id: string, x_mm: number, y_mm: number) => void;
@@ -62,7 +67,7 @@ function wallFrame(wall: Wall, W: number, L: number) {
   }
 }
 
-export function PlanView({ space, door, window: win, items = [], selectedId, clearances, maxHeight = 600, onSelect, onMove, onDrop }: PlanViewProps) {
+export function PlanView({ space, door, window: win, items = [], selectedId, clearances, rules = [], maxHeight = 600, onSelect, onMove, onDrop }: PlanViewProps) {
   const { ref, width: containerWidth } = useWidth<HTMLDivElement>(640);
   const W = Math.max(space.width_mm, 1);
   const L = Math.max(space.length_mm, 1);
@@ -127,9 +132,19 @@ export function PlanView({ space, door, window: win, items = [], selectedId, cle
     );
   }
 
-  // Rugs draw first so furniture sits on top of them.
-  const ordered = [...items].sort((a, b) => Number(b.category === "rug") - Number(a.category === "rug"));
+  // Soft floors draw first so furniture sits on top of them.
+  const ordered = [...items].sort((a, b) => Number(b.kind === "soft_floor") - Number(a.kind === "soft_floor"));
   const centreOf = (id: string) => items.find((i) => i.id === id)?.placement;
+  const byName = (name: string) => items.find((i) => itemKey(i.category) === itemKey(name))?.placement;
+  // One mark per evaluated rule: a line from the subject to each object, or a ring at the subject, coloured by its result.
+  const marks = rules.flatMap((r, index) => {
+    if (r.rule.relation === "text" || r.pass === null) return [];
+    const subject = byName(r.rule.subject);
+    if (!subject) return [];
+    const colour = r.pass ? "var(--tag-green-text)" : "var(--tag-red-text)";
+    const targets = r.rule.objects.map(byName).filter((p): p is NonNullable<typeof p> => p !== undefined);
+    return [{ key: `rule-${index}`, colour, subject, targets, pass: r.pass, relation: r.rule.relation }];
+  });
   const labels = hoverId
     ? Object.entries(clearances ?? {})
         .filter(([k]) => k.split("|").includes(hoverId))
@@ -171,12 +186,12 @@ export function PlanView({ space, door, window: win, items = [], selectedId, cle
                 <rect x={-w / 2} y={-d / 2} width={w} height={d} rx={2} />
               </clipPath>
               {item.image_url ? (
-                <image href={item.image_url} x={-w / 2} y={-d / 2} width={w} height={d} preserveAspectRatio="xMidYMid slice" clipPath={`url(#clip-${item.id})`} opacity={item.category === "rug" ? 0.85 : 1} />
+                <image href={item.image_url} x={-w / 2} y={-d / 2} width={w} height={d} preserveAspectRatio="xMidYMid slice" clipPath={`url(#clip-${item.id})`} opacity={item.kind === "soft_floor" ? 0.85 : 1} />
               ) : (
                 <rect x={-w / 2} y={-d / 2} width={w} height={d} fill="var(--steel-1)" />
               )}
               <rect x={-w / 2} y={-d / 2} width={w} height={d} rx={2} fill="none" stroke={stroke} strokeWidth={item.flagged || selected ? 2.5 : 1.25} />
-              {item.category !== "rug" && <line x1={-w / 2} y1={-d / 2} x2={w / 2} y2={-d / 2} stroke={stroke} strokeWidth={3} />}
+              {item.kind !== "soft_floor" && <line x1={-w / 2} y1={-d / 2} x2={w / 2} y2={-d / 2} stroke={stroke} strokeWidth={3} />}
               <title>{item.title}</title>
             </g>
           );
@@ -198,6 +213,17 @@ export function PlanView({ space, door, window: win, items = [], selectedId, cle
             {formatFeetInches(L)}
           </text>
         </g>
+        {marks.map((m) => (
+          <g key={m.key} pointerEvents="none" data-testid="rule-mark" data-relation={m.relation} data-result={m.pass ? "pass" : "fail"}>
+            {m.targets.map((t, i) => (
+              <line key={i} x1={X(m.subject.x_mm)} y1={Y(m.subject.y_mm)} x2={X(t.x_mm)} y2={Y(t.y_mm)} stroke={m.colour} strokeWidth={1.5} strokeDasharray={m.pass ? undefined : "5 3"} />
+            ))}
+            <circle cx={X(m.subject.x_mm)} cy={Y(m.subject.y_mm)} r={7} fill="var(--card)" stroke={m.colour} strokeWidth={1.5} />
+            <text x={X(m.subject.x_mm)} y={Y(m.subject.y_mm) + 3.5} textAnchor="middle" fontSize={9} fontFamily="var(--font-mono)" fill={m.colour} stroke="none">
+              {m.pass ? "✓" : "✗"}
+            </text>
+          </g>
+        ))}
         {labels.map(({ k, mm, pa, pb }) => (
           <g key={k} pointerEvents="none">
             <line x1={X(pa.x_mm)} y1={Y(pa.y_mm)} x2={X(pb.x_mm)} y2={Y(pb.y_mm)} stroke="var(--annotate)" strokeWidth={1} strokeDasharray="4 3" />

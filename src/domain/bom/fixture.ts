@@ -1,9 +1,12 @@
-import type { Candidate, Category, Placement, Product } from "../types";
+import type { Candidate, Category, Kind, Placement, Product } from "../types";
 import type { DomainEvent } from "./events";
 import { ProjectStore } from "./store";
 
 export const PROJECT_ID = "p1";
 export const SPACE_ID = "s1";
+
+/** Test item names in the board's own words, with the kind the agent would infer for each. */
+export const KINDS: Record<string, Kind> = { sofa: "seating", coffee_table: "table", ottoman: "decor", rug: "soft_floor", side_table: "table", cheaper_table: "table" };
 
 /** Demo prices: the four sourced items land in [250000 − P_side, 250000); the side table tips over. */
 export const PRICES = {
@@ -42,13 +45,15 @@ export function candidate(
   id: string,
   productId: string,
   category: Category,
-  ranking_state: Candidate["ranking_state"] = "selected"
+  ranking_state: Candidate["ranking_state"] = "selected",
+  kind: Kind = KINDS[category] ?? "other"
 ): Candidate {
   return {
     id,
     project_id: PROJECT_ID,
     product_id: productId,
     category,
+    kind,
     hard_constraint_results_json: null,
     visual_evaluation_json: null,
     delivery_status: null,

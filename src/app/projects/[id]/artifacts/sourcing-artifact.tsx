@@ -1,9 +1,10 @@
 "use client";
+import { formatMoney } from "../../../../domain/money";
 import type { Product } from "../../../../domain/types";
 
 export type ProductRef = Pick<Product, "id" | "title">;
 import css from "./artifacts.module.css";
-import { CATEGORY_LABEL, dollars, type SourcingData } from "./types";
+import type { SourcingData } from "./types";
 
 /** Status tag colour: selected and no match are the actionable minority; every in-progress state stays gray. */
 function statusClass(status: string) {
@@ -38,13 +39,13 @@ export function SourcingArtifact({ data, products, title = "Finding your living 
     <div className={css.card} data-testid="artifact-sourcing" role="group" aria-label={title}>
       <div className={css.title}>{title}</div>
       <div className={css.rows}>
-        {entries.length === 0 && <div className={css.sub}>No category has started yet.</div>}
+        {entries.length === 0 && <div className={css.sub}>No item has started yet.</div>}
         {entries.map(([category, c]) => {
           if (!c) return null;
           const product = c.selected_product_id ? byId.get(c.selected_product_id) : undefined;
           return (
             <div className={css.row} key={category} data-category={category}>
-              <span className={css.label}>{CATEGORY_LABEL[category] ?? category}</span>
+              <span className={css.label}>{category}</span>
               <span className={`${statusClass(c.status)} ${css.status}`}>{c.status}</span>
               <span className={css.funnel}>{funnel(c)}</span>
               {c.status === "selected" && (
@@ -58,10 +59,10 @@ export function SourcingArtifact({ data, products, title = "Finding your living 
       </div>
       {(typeof data.subtotal_cents === "number" || hasWindow) && (
         <div className={css.foot}>
-          <span>{typeof data.subtotal_cents === "number" ? <>Subtotal <strong>{dollars(data.subtotal_cents)}</strong></> : "Subtotal pending"}</span>
+          <span>{typeof data.subtotal_cents === "number" ? <>Subtotal <strong>{formatMoney(data.subtotal_cents)}</strong></> : "Subtotal pending"}</span>
           {hasWindow && (
             <span>
-              Window {dollars(data.window!.min_cents!)} to {dollars(data.window!.max_cents!)}
+              Window {formatMoney(data.window!.min_cents!)} to {formatMoney(data.window!.max_cents!)}
             </span>
           )}
         </div>

@@ -1,18 +1,46 @@
 "use client";
 import { useMemo, useState } from "react";
-import type { Candidate, Product } from "../../../../domain/types";
-import { dimensionText, dollars } from "../components/product-card";
+import { KINDS, type Candidate, type Kind, type Product } from "../../../../domain/types";
+import { formatMoney } from "../../../../domain/money";
+import { dimensionText } from "../components/product-card";
 import css from "../components/stages.module.css";
 
 type Filter = "all" | "grounded" | "visual_only";
 const MODEL_TAG: Record<Product["model_status"], string> = { no_model: "", queued: "blue", generating: "blue", ready: "green", proxy: "", failed: "red" };
 const DELIVERY_TAG: Record<NonNullable<Candidate["delivery_status"]>, string> = { confirmed: "green", likely: "", unknown: "", fail: "red" };
 
-/** Stage 4 (PRD 20): the working table over the project's Product rows (tables.md). */
-export function CatalogTable({ products, candidates }: { products: Product[]; candidates: Candidate[] }) {
+const KIND_LABEL: Record<Kind, string> = { seating: "seating", table: "table", storage: "storage", soft_floor: "soft floor", bed: "bed", lighting: "lighting", decor: "decor", other: "other" };
+
+/**
+ * Stage 4 (PRD 20): the working table over the project's Product rows (tables.md). Each row shows
+ * the item the product answers to in the project's own words and its rendering kind; the kind is
+ * editable and saves through PUT /candidates/:id.
+ */
+export function CatalogTable({ projectId, products, candidates: initial }: { projectId: string; products: Product[]; candidates: Candidate[] }) {
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [candidates, setCandidates] = useState(initial);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const byProduct = useMemo(() => new Map(candidates.map((c) => [c.product_id, c])), [candidates]);
+
+  async function changeKind(candidate: Candidate, kind: Kind) {
+    setSaving(candidate.id);
+    setError(null);
+    setCandidates((prev) => prev.map((c) => (c.id === candidate.id ? { ...c, kind } : c)));
+    try {
+      const res = await fetch(`/api/projects/${projectId}/candidates/${candidate.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind }) });
+      if (!res.ok) throw new Error(`Saving the kind failed (${res.status}).`);
+      const snap = (await res.json()) as { candidates: Candidate[] };
+      setCandidates(snap.candidates);
+      window.dispatchEvent(new Event("project:changed"));
+    } catch (e) {
+      setError((e as Error).message);
+      setCandidates((prev) => prev.map((c) => (c.id === candidate.id ? { ...c, kind: candidate.kind } : c)));
+    } finally {
+      setSaving(null);
+    }
+  }
   const rows = products.filter((p) => (filter === "all" || p.spatial_status === filter) && (!q.trim() || `${p.title} ${p.merchant}`.toLowerCase().includes(q.trim().toLowerCase())));
   const counts = { all: products.length, grounded: products.filter((p) => p.spatial_status === "grounded").length, visual_only: products.filter((p) => p.spatial_status === "visual_only").length };
 
@@ -34,6 +62,11 @@ export function CatalogTable({ products, candidates }: { products: Product[]; ca
           </div>
         </div>
       </div>
+      {error && (
+        <p className={css.error} role="alert">
+          {error}
+        </p>
+      )}
       {products.length === 0 ? (
         <div className="empty">No products yet. A product appears here after it is added to a project, from the search panel on the Items stage or a product URL in chat.</div>
       ) : rows.length === 0 ? (
@@ -45,7 +78,8 @@ export function CatalogTable({ products, candidates }: { products: Product[]; ca
               <tr>
                 <th aria-label="Image" />
                 <th>Product</th>
-                <th>Category</th>
+                <th>Item</th>
+                <th>Kind</th>
                 <th>Seller</th>
                 <th className="num">Price</th>
                 <th>W × D × H</th>
@@ -68,9 +102,22 @@ export function CatalogTable({ products, candidates }: { products: Product[]; ca
                         {p.title || "Untitled product"}
                       </div>
                     </td>
-                    <td>{c ? <span className="tag">{c.category.replace("_", " ")}</span> : <span className="tag">none</span>}</td>
+                    <td>{c ? <span className={css.clip} title={c.category}>{c.category}</span> : <span className="tag">none</span>}</td>
+                    <td>
+                      {c ? (
+                        <select className="select" aria-label={`Kind of ${c.category}`} data-testid="kind-select" value={c.kind} disabled={saving === c.id} onChange={(e) => changeKind(c, e.target.value as Kind)}>
+                          {KINDS.map((k) => (
+                            <option key={k} value={k}>
+                              {KIND_LABEL[k]}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="tag">none</span>
+                      )}
+                    </td>
                     <td>{p.merchant}</td>
-                    <td className="num">{dollars(p.price_cents, p.currency)}</td>
+                    <td className="num">{formatMoney(p.price_cents, p.currency)}</td>
                     <td>{dims ?? <span className="tag">unknown</span>}</td>
                     <td>{p.dimension_source ? <span className={`mono ${css.clip}`} title={p.dimension_source.text} style={{ display: "block" }}>{p.dimension_source.text}</span> : <span className="tag">not stated</span>}</td>
                     <td>
