@@ -46,7 +46,10 @@ export function normalizeCatalogProduct(raw: unknown, source: ProductSource): Pr
   const variant = variants.find((candidate) => candidate.availability?.available) ?? variants[0] ?? null;
   const description = descriptionText(catalog.description);
   const productUrl = catalog.url ?? source.sourceUrl;
-  const dimensions = parseDimensions(catalog.metadata?.tech_specs ?? "") ?? parseDimensions(description);
+  const title = catalog.title ?? catalog.name ?? "";
+  // One text, tech specs first, so the first dimension chain still comes from the specs while a
+  // height the title or description labels (a lamp's `63"H`) can correct it.
+  const dimensions = parseDimensions([catalog.metadata?.tech_specs ?? "", title, description].join("\n"));
   const externalId = externalProductId(catalog, source.sourceUrl);
 
   return Product.parse({
@@ -54,7 +57,7 @@ export function normalizeCatalogProduct(raw: unknown, source: ProductSource): Pr
     merchant: source.merchant,
     source_url: source.sourceUrl,
     external_product_id: externalId,
-    title: catalog.title ?? catalog.name ?? "",
+    title,
     description,
     primary_image_url: primaryImageUrl(catalog, variant),
     price_cents: Math.round(Number(variant?.price?.amount ?? 0)),

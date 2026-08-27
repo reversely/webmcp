@@ -7,6 +7,10 @@
  *   W x D x H, or W x L for a two-item chain (a rug), where L maps to depth.
  * - A two-item match has no written height. Height comes from a separate "pile" measurement when
  *   the text carries one, else a nominal 10 mm, and `height_assumed` is true.
+ * - A height the text labels anywhere (`63"H`, `height: 53"`, `63 in tall`) beats a height read by
+ *   position, and the largest labelled height wins: merchants list a shade, a base or a seat under
+ *   a height label of its own, and the item stands as tall as its tallest figure. A pile height
+ *   is never the item's height.
  */
 import { MM_PER_FOOT, MM_PER_INCH } from "../types";
 
@@ -40,13 +44,14 @@ const AXIS_BY_LABEL: Record<string, Axis> = {
   depth: "depth",
   h: "height",
   height: "height",
+  tall: "height",
   l: "length",
   length: "length"
 };
 
 const NUMBER = String.raw`(?:\d+\s+\d+/\d+|\d+/\d+|\d+(?:\.\d+)?)`;
 const UNIT = String.raw`(?:"|'|(?:inches|inch|in|feet|foot|ft|cm|mm)\.?(?![a-z]))`;
-const LABEL = String.raw`(?:width|depth|height|length|w|d|h|l)`;
+const LABEL = String.raw`(?:width|depth|height|length|tall|w|d|h|l)`;
 const PRE_LABEL = String.raw`(?:(?<![a-z])(?<pre>${LABEL})(?![a-z])\s*[:=]?\s*)?`;
 // A trailing label stays on its own line and is not the pre-label of the next measurement.
 const POST_LABEL = String.raw`(?: *(?<post>${LABEL})(?![a-z])(?!\s*[:=]?\s*\d))?`;
@@ -69,11 +74,36 @@ interface Measurement {
   unit: DimensionUnit | null;
   axis: Axis | null;
   text: string;
+  /** The label follows the word "pile": a rug's pile, not the item's height. */
+  pile: boolean;
 }
 
 export function parseDimensions(text: string): ParsedDimensions | null {
   const normalized = normalizeGlyphs(text);
-  return parseChain(normalized) ?? parseLabelled(normalized);
+  const parsed = parseChain(normalized) ?? parseLabelled(normalized);
+  return parsed ? withStatedHeight(parsed, normalized) : null;
+}
+
+/**
+ * Replaces a positional or assumed height with the largest height the text labels, and raises a
+ * labelled height to the largest one when the text carries several. A lamp's tech specs read
+ * `10.25 x 7 x 1 in` (its head) while its title says `63"H`; the item is 63 inches tall.
+ */
+function withStatedHeight(parsed: ParsedDimensions, text: string): ParsedDimensions {
+  const stated = readMeasurements(text)
+    .filter((item) => item.axis === "height" && !item.pile)
+    .map((item) => ({ item, mm: toMm(item, parsed.unit) }))
+    .sort((a, b) => b.mm - a.mm)[0];
+  if (!stated) return parsed;
+  const positional = parsed.height_assumed || !readMeasurements(parsed.matchedText).some((item) => item.axis === "height");
+  const replace = positional ? stated.mm !== parsed.height_mm || parsed.height_assumed : stated.mm > parsed.height_mm;
+  if (!replace) return parsed;
+  return {
+    ...parsed,
+    height_mm: stated.mm,
+    height_assumed: false,
+    matchedText: `${parsed.matchedText}; ${stated.item.text.trim()}`
+  };
 }
 
 /** Maps typographic quotes and the multiplication sign onto the ASCII forms the patterns expect. */
@@ -122,7 +152,8 @@ function readMeasurements(span: string): Measurement[] {
       value,
       unit: groups.feet ? "ft" : toUnit(groups.unit),
       axis: label ? AXIS_BY_LABEL[label.toLowerCase()] : null,
-      text: match[0]
+      text: match[0],
+      pile: /pile\s*$/i.test(span.slice(0, match.index))
     });
   }
   return items;
