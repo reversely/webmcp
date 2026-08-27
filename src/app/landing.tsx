@@ -62,7 +62,7 @@ export function Landing({ missingId, initialCode, initialProjectId }: { missingI
   }, [initialProjectId]);
   const [created, setCreated] = useState<Created | null>(null);
   const [name, setName] = useState("");
-  const [budget, setBudget] = useState("2500");
+  const [budget, setBudget] = useState("");
   const [date, setDate] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);

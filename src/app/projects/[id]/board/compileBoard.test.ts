@@ -175,3 +175,13 @@ describe("roomNameFrom", () => {
     expect(compileBoard([{ kind: "text", text: "12 x 18" }] as never, { today: "2026-08-28" }).room_name).toBeNull();
   });
 });
+
+describe("item dedupe by phrase", () => {
+  it("keeps the note's fuller phrase when a rule names its short form", () => {
+    const spec = compileBoard(
+      [{ kind: "text", text: "reading chair" }, { kind: "text", text: "floor lamp" }, { kind: "text", text: "lamp next to the chair" }] as never,
+      { today: "2026-08-28" }
+    );
+    expect(spec.required_items).toEqual(["reading chair", "floor lamp"]);
+  });
+});

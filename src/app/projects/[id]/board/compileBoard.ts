@@ -266,13 +266,16 @@ export function tagSwatches(hexes: string[]): Swatch[] {
   return hexes.map((hex) => ({ hex, tag: hexes.length === 1 || luminance(hex) >= median ? "base" : "accent" }));
 }
 
+/**
+ * Drops exact repeats and any phrase that is a word-suffix of a longer one ("lamp" beside
+ * "floor lamp"): a rule's short subject refers to the note's fuller phrase, never a second item.
+ */
 function dedupe(list: string[]): string[] {
-  const seen = new Set<string>();
-  return list.filter((item) => {
-    const key = item.toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
+  const keys = list.map((item) => item.toLowerCase().trim());
+  return list.filter((item, i) => {
+    const key = keys[i];
+    if (keys.indexOf(key) !== i) return false;
+    return !keys.some((other, j) => j !== i && other !== key && other.endsWith(" " + key));
   });
 }
 
