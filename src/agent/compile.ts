@@ -21,6 +21,9 @@ export const ProjectSpec = z.object({
   required_by: z.string().nullable().describe("ISO date YYYY-MM-DD or null"),
   required_items: z.array(z.object({ name: z.string().describe("The item in the board's own words, e.g. \"reading chair\""), kind: Kind.nullable() })),
   visual_direction: z.object({ base: z.array(HEX), accent: z.array(HEX) }),
+  suggested_colours: z
+    .array(z.object({ hex: HEX, from_text: z.string().describe("The note phrase the colour came from") }))
+    .describe("Colours the notes name in words, each as a representative hex; a person keeps or drops them as swatches"),
   layout_requirements: z.array(
     z.object({
       relation: Relation,
@@ -48,11 +51,14 @@ const COMPILE_INSTRUCTIONS =
   "Compile whiteboard notes for a room-furnishing project into the specification. Room sizes are in millimetres " +
   "(a bare \"12 x 18\" is feet; 1 ft = 304.8 mm; convert metres). Budget is the maximum in dollars. required_by is the " +
   `delivery deadline as an ISO date; the current year is ${new Date().getUTCFullYear()} and the date is in the future. ` +
-  "required_items lists every furniture item the notes name, each in the writer's own words (\"reading chair\", \"big rug\"), " +
+  "required_items lists every furniture item the notes name, each in the writer's own words with its qualifiers kept " +
+  "(\"reading chair\", \"Coffee Table for 4\", \"big rug\"); a comma or 'and' list in one note is several items. " +
+  "A note that names only colours (\"Dark blue, grey white\") is never an item: put each colour into suggested_colours " +
+  "with a representative hex and the phrase it came from. " +
   "with its rendering kind: seating, table, storage, soft_floor (rugs), bed, lighting, decor, or other; null when unsure. " +
   "A note that only states where an item goes (\"big rug under the desk\") still names its subject as an item. " +
   "visual_direction takes the swatch hex values only: lighter and warmer ones are base, darker or saturated ones accent; " +
-  "never invent colours from words. layout_requirements turns each spatial sentence into a relation (under, on_top_of, " +
+  "never put colour words into visual_direction; they belong in suggested_colours. layout_requirements turns each spatial sentence into a relation (under, on_top_of, " +
   "beside, facing, against_wall, clear_around) between the items as named; \"everything\" means every other item. " +
   "Use null for anything the notes do not state.";
 
