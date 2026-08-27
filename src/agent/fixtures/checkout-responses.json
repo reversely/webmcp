@@ -1,0 +1,158 @@
+{
+  "modway": {
+    "status": "requires_escalation",
+    "fulfillment": {
+      "methods": [
+        {
+          "type": "shipping",
+          "groups": [
+            {
+              "options": [
+                {
+                  "id": "opt_1",
+                  "title": "Standard (3 to 12 business days via Standard)",
+                  "description": "Standard (3 to 12 business days via Standard)",
+                  "totals": [
+                    {
+                      "type": "total",
+                      "amount": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "links": [
+      {
+        "type": "shipping_policy",
+        "url": "https://modway-dev.myshopify.com/policies/shipping-policy"
+      }
+    ],
+    "messages": [
+      {
+        "code": "extension_interaction_required"
+      }
+    ],
+    "continue_url": "https://modway-dev.myshopify.com/checkouts/example"
+  },
+  "english_elm": {
+    "status": "requires_escalation",
+    "fulfillment": {
+      "methods": [
+        {
+          "type": "shipping",
+          "groups": [
+            {
+              "options": [
+                {
+                  "id": "opt_1",
+                  "title": "Free Shipping",
+                  "description": "Free Shipping",
+                  "totals": [
+                    {
+                      "type": "total",
+                      "amount": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "links": [
+      {
+        "type": "shipping_policy",
+        "url": "https://english-elm.myshopify.com/policies/shipping-policy"
+      }
+    ],
+    "messages": [
+      {
+        "code": "extension_interaction_required"
+      }
+    ],
+    "continue_url": "https://english-elm.myshopify.com/checkouts/example"
+  },
+  "tresings": {
+    "status": "requires_escalation",
+    "fulfillment": {
+      "methods": [
+        {
+          "type": "shipping",
+          "groups": [
+            {
+              "options": [
+                {
+                  "id": "opt_1",
+                  "title": "Standard (Tuesday, September 1\u2013Wednesday, September 2 via Standard)",
+                  "description": "Standard (Tuesday, September 1\u2013Wednesday, September 2 via Standard)",
+                  "totals": [
+                    {
+                      "type": "total",
+                      "amount": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "links": [
+      {
+        "type": "shipping_policy",
+        "url": "https://tresings.myshopify.com/policies/shipping-policy"
+      }
+    ],
+    "messages": [
+      {
+        "code": "extension_interaction_required"
+      }
+    ],
+    "continue_url": "https://tresings.myshopify.com/checkouts/example"
+  },
+  "nathan_home": {
+    "status": "requires_escalation",
+    "fulfillment": {
+      "methods": [
+        {
+          "type": "shipping",
+          "groups": [
+            {
+              "options": [
+                {
+                  "id": "opt_1",
+                  "title": "Delivered in 8 to 11 days",
+                  "description": "Delivered in 8 to 11 days",
+                  "totals": [
+                    {
+                      "type": "total",
+                      "amount": 0
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "links": [
+      {
+        "type": "shipping_policy",
+        "url": "https://nathan-home.myshopify.com/policies/shipping-policy"
+      }
+    ],
+    "messages": [
+      {
+        "code": "extension_interaction_required"
+      }
+    ],
+    "continue_url": "https://nathan-home.myshopify.com/checkouts/example"
+  }
+}
