@@ -1,0 +1,1537 @@
+[
+  {
+    "domain": "westwing-main-stage.myshopify.com",
+    "name": "[Staging] Westwing",
+    "categories": [
+      "sofa",
+      "coffee_table",
+      "ottoman",
+      "side_table"
+    ],
+    "products": 36,
+    "with_dims": 4,
+    "public_host": "westwing-main-stage.myshopify.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required",
+      "delivery_no_delivery_available_for_merchandise_line"
+    ]
+  },
+  {
+    "domain": "daalshome.myshopify.com",
+    "name": "daals.com",
+    "categories": [
+      "sofa",
+      "coffee_table",
+      "side_table"
+    ],
+    "products": 8,
+    "with_dims": 7,
+    "public_host": "www.daals.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Standard Delivery (3 to 8 business days via USA-MULTIBOX) $19.99"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "ornate-furniture.myshopify.com",
+    "name": "Ornate Furniture",
+    "categories": [
+      "sofa",
+      "coffee_table",
+      "ottoman"
+    ],
+    "products": 8,
+    "with_dims": 7,
+    "public_host": "ornatehome.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "thuma-bed.myshopify.com",
+    "name": "Thuma",
+    "categories": [
+      "coffee_table",
+      "ottoman",
+      "side_table"
+    ],
+    "products": 5,
+    "with_dims": 0,
+    "public_host": "checkout.thuma.co",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "burrow-prod.myshopify.com",
+    "name": "Burrow",
+    "categories": [
+      "sofa",
+      "coffee_table",
+      "ottoman"
+    ],
+    "products": 4,
+    "with_dims": 0,
+    "public_host": "checkout.burrow.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "mygarvee.myshopify.com",
+    "name": "GARVEE",
+    "categories": [
+      "sofa",
+      "rug"
+    ],
+    "products": 51,
+    "with_dims": 42,
+    "public_host": "www.garvee.com",
+    "webmcp_adapter": false,
+    "model_context_ref": false,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Delivered in 3-5 business days $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "lulu-and-georgia.myshopify.com",
+    "name": "Lulu and Georgia",
+    "categories": [
+      "coffee_table",
+      "side_table"
+    ],
+    "products": 22,
+    "with_dims": 1,
+    "public_host": "lulu-and-georgia.myshopify.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "tresings.myshopify.com",
+    "name": "Tribesigns",
+    "categories": [
+      "coffee_table",
+      "side_table"
+    ],
+    "products": 6,
+    "with_dims": 2,
+    "public_host": "tribesigns.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Standard (Tuesday, September 1–Wednesday, September 2 via Standard) $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "7th-avenue-home.myshopify.com",
+    "name": "7th Avenue",
+    "categories": [
+      "sofa",
+      "ottoman"
+    ],
+    "products": 5,
+    "with_dims": 0,
+    "public_host": "7thavenue.co",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "rovelab-us.myshopify.com",
+    "name": "Rove Lab™",
+    "categories": [
+      "sofa",
+      "ottoman"
+    ],
+    "products": 5,
+    "with_dims": 0,
+    "public_host": "rovelab.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "bellaria-homestore.myshopify.com",
+    "name": "Luna Furniture",
+    "categories": [
+      "coffee_table",
+      "ottoman"
+    ],
+    "products": 5,
+    "with_dims": 4,
+    "public_host": "www.lunafurn.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "2ddf06-7b.myshopify.com",
+    "name": "Blu Dot",
+    "categories": [
+      "coffee_table",
+      "side_table"
+    ],
+    "products": 4,
+    "with_dims": 2,
+    "public_host": "www.bludot.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "modway-dev.myshopify.com",
+    "name": "Modway",
+    "categories": [
+      "ottoman",
+      "side_table"
+    ],
+    "products": 4,
+    "with_dims": 2,
+    "public_host": "modway.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Standard (3 to 12 business days via Standard) $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "gumps-official.myshopify.com",
+    "name": "Gump's",
+    "categories": [
+      "ottoman",
+      "side_table"
+    ],
+    "products": 2,
+    "with_dims": 1,
+    "public_host": "gumps-official.myshopify.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "linsy-home.myshopify.com",
+    "name": "LINSY HOME",
+    "categories": [
+      "sofa"
+    ],
+    "products": 5,
+    "with_dims": 3,
+    "public_host": "www.linsyhome.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "plankbeam.myshopify.com",
+    "name": "Plank+Beam",
+    "categories": [
+      "coffee_table"
+    ],
+    "products": 4,
+    "with_dims": 1,
+    "public_host": "plankandbeam.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "exco-dev-coley.myshopify.com",
+    "name": "Coley Home",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 4,
+    "with_dims": 0,
+    "public_host": "www.coleyhome.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "chitaliving.myshopify.com",
+    "name": "CHITA LIVING",
+    "categories": [
+      "sofa"
+    ],
+    "products": 3,
+    "with_dims": 1,
+    "public_host": "chitaliving.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "albany-park.myshopify.com",
+    "name": "Albany Park",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 3,
+    "with_dims": 3,
+    "public_host": "www.albanypark.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Ground Delivery $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "polywood-production.myshopify.com",
+    "name": "POLYWOOD",
+    "categories": [
+      "side_table"
+    ],
+    "products": 3,
+    "with_dims": 0,
+    "public_host": "www.polywood.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "xng158-df.myshopify.com",
+    "name": "Westwing",
+    "categories": [
+      "sofa"
+    ],
+    "products": 2,
+    "with_dims": 1,
+    "public_host": "westwingoutlet.de",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Standard $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "redirect_to_checkout_required"
+    ]
+  },
+  {
+    "domain": "loomandloft2.myshopify.com",
+    "name": "Anabei",
+    "categories": [
+      "sofa"
+    ],
+    "products": 2,
+    "with_dims": 0,
+    "public_host": "anabei.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Anabei Preferred Delivery $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "nathan-home.myshopify.com",
+    "name": "Nathan James",
+    "categories": [
+      "coffee_table"
+    ],
+    "products": 2,
+    "with_dims": 0,
+    "public_host": "nathanjames.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Delivered in 8 to 11 days $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "nestig.myshopify.com",
+    "name": "Nestig",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 2,
+    "with_dims": 0,
+    "public_host": "www.nestig.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "denver-modern.myshopify.com",
+    "name": "Denver Modern",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 2,
+    "with_dims": 0,
+    "public_host": "denvermodern.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Standard Threshold Shipping: Delivered outside your home or at the nearest accessible point. Freight shipments require signature $99.00",
+      "In-Home Delivery: Delivered by appointment where available and brought in your home with assembly and packaging disposal. $349.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "koala-usa.myshopify.com",
+    "name": "Koala ",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 2,
+    "with_dims": 0,
+    "public_host": "us.koala.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "87a1b5-d6.myshopify.com",
+    "name": "Levin Furniture",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 2,
+    "with_dims": 2,
+    "public_host": "levinfurniture.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "poly-bark.myshopify.com",
+    "name": "Poly & Bark",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 2,
+    "with_dims": 2,
+    "public_host": "checkout.polyandbark.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Free Ground Shipping - UPS or Fedex $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "noo-ma.myshopify.com",
+    "name": "noo.ma",
+    "categories": [
+      "side_table"
+    ],
+    "products": 2,
+    "with_dims": 0,
+    "public_host": "noo.ma",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "FedEx Standard $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required",
+      "redirect_to_checkout_required"
+    ]
+  },
+  {
+    "domain": "yamazakihome.myshopify.com",
+    "name": "Yamazaki Home",
+    "categories": [
+      "side_table"
+    ],
+    "products": 2,
+    "with_dims": 1,
+    "public_host": "theyamazakihome.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "b9pa0i-62.myshopify.com",
+    "name": "BuyCura",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "buycura.co",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Standard (3 to 5 business days via Standard) $19.99"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "ohwillofficial.myshopify.com",
+    "name": "Ohwill.com - Online Furniture Store",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "www.ohwill.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Standard (Wednesday, September 2–Thursday, September 3 via Standard) $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "acanva-home.myshopify.com",
+    "name": "Acanva Home",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.acanva.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Standard Curbside Delivery $0.00",
+      "Doorstep Delivery $100.00",
+      "Room of Choice Delivery $200.00",
+      "White Glove Delivery $299.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "b96296.myshopify.com",
+    "name": "nectar",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.nectar-us.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Economy (5 to 8 business days via Economy) $0.00",
+      "Standard (3 to 4 business days via Standard) $6.90"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "arhausllc.myshopify.com",
+    "name": "Arhaus",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.arhaus.com",
+    "webmcp_adapter": false,
+    "model_context_ref": false,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "americanhomefurniture.myshopify.com",
+    "name": "American Home Furniture",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "americanhomefurniture.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "mopioinc.myshopify.com",
+    "name": "Mopio",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "mopio.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Standard $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "urbannatural.myshopify.com",
+    "name": "Urban Natural Home",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.urbannatural.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "rubeza.myshopify.com",
+    "name": "RUBEZA ",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.rubeza.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Palletized Delivery $4155.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "redirect_to_checkout_required"
+    ]
+  },
+  {
+    "domain": "casagear.myshopify.com",
+    "name": "Casagear",
+    "categories": [
+      "sofa"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "casagear.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "rowsin.myshopify.com",
+    "name": "POOTOO",
+    "categories": [
+      "coffee_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "pootoo.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Standard Shipping $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "redirect_to_checkout_required"
+    ]
+  },
+  {
+    "domain": "the-roost-uk.myshopify.com",
+    "name": "The Roost ",
+    "categories": [
+      "coffee_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "theroost.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "incomplete",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "delivery_no_delivery_available"
+    ]
+  },
+  {
+    "domain": "nc-furniture-gallery-nc.myshopify.com",
+    "name": "US Furniture Direct (NC)",
+    "categories": [
+      "coffee_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "usfurnituredirect.com",
+    "webmcp_adapter": false,
+    "model_context_ref": false,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "incomplete",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "delivery_no_delivery_available"
+    ]
+  },
+  {
+    "domain": "sundays-company-production.myshopify.com",
+    "name": "Sundays Company",
+    "categories": [
+      "coffee_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.sundays-company.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Free Premium Delivery $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "tov-furnitures.myshopify.com",
+    "name": "TOV Furniture",
+    "categories": [
+      "coffee_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "tovfurniture.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "nuggetcomfort-com.myshopify.com",
+    "name": "Nugget",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "nuggetcomfort.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "omhu-na.myshopify.com",
+    "name": "OMHU",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "ca.omhucph.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "cassaro-kids.myshopify.com",
+    "name": "Cassarohome",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "cassarohome.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Ground Shipping $68.00",
+      "Express shipping $88.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "paynes-gray.myshopify.com",
+    "name": "Paynes Gray",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "www.paynesgray.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Curbside (curbside) $0.00",
+      "Threshold (threshold) $50.00",
+      "White Glove (white glove) $150.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "rachel-interior-design.myshopify.com",
+    "name": "Rachel Donath",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "racheldonath.com.au",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Curbside $200.00",
+      "White Glove (White_Glove) $399.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "diamond-furniture-alabama.myshopify.com",
+    "name": "Diamond Furniture Alabama",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "diamondfurniture.shop",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Ground Advantage (3 business days via GroundAdvantage) $5.48",
+      "Priority Mail (2 business days via Priority) $11.50",
+      "Priority Mail Express (1 business day via PriorityExpress) $38.18"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "www-lets-playground-shopify-com.myshopify.com",
+    "name": "Gathre",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "gathre.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "mor-furniture.myshopify.com",
+    "name": "Mor Furniture",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.morfurniture.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "valencia-theater-seating-usa.myshopify.com",
+    "name": "Valencia Theater Seating USA",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "us.valenciatheaterseating.com",
+    "webmcp_adapter": false,
+    "model_context_ref": false,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "luxe-furniture-local.myshopify.com",
+    "name": "luxe-furniture-for-less",
+    "categories": [
+      "ottoman"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.luxefurnitureforless.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "incomplete",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "delivery_no_delivery_available_for_merchandise_line"
+    ]
+  },
+  {
+    "domain": "ns80wi-dj.myshopify.com",
+    "name": "Dining Rug",
+    "categories": [
+      "rug"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "dnr-store.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "incomplete",
+    "shipping_options": [
+      "Economy (Friday, September 4–Thursday, September 10 via Economy) $7.90"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "delivery_address2_required"
+    ]
+  },
+  {
+    "domain": "stoneandtile.myshopify.com",
+    "name": "Stone & Tile Shoppe, Inc.",
+    "categories": [
+      "rug"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "stoneandtileshoppe.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "veradektest.myshopify.com",
+    "name": "Veradek US",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "veradek.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Standard Fast Shipping (Ships in 1 business day via Standard Fast Shipping) $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "magnoliamom.myshopify.com",
+    "name": "Magnolia",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "magnolia.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "createroom.myshopify.com",
+    "name": "Create Room",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "www.ca.createroom.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "kinetic-oasis-llc.myshopify.com",
+    "name": "Oasis",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "grounded.so",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Free Shipping $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "ecg6vx-8y.myshopify.com",
+    "name": "Keelan Scott",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "keelanscott.co",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Free Shipping $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "daa4a2.myshopify.com",
+    "name": "unfnshed",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "unfnshed.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "kayu-home.myshopify.com",
+    "name": "Kayu Home",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "kayuhome.co.uk",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "jl-living-com.myshopify.com",
+    "name": "jl-living.com",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "www.jl-living.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Standardversand $49.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "redirect_to_checkout_required"
+    ]
+  },
+  {
+    "domain": "632fc8-3.myshopify.com",
+    "name": "Studio Furnis",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "studiofurnis.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "bunnywilliams.myshopify.com",
+    "name": "Bunny Williams Home",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.bunnywilliamshome.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "112dfd-3.myshopify.com",
+    "name": "HomeinFun",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "homeinfun.ca",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "美国 $0.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "redirect_to_checkout_required"
+    ]
+  },
+  {
+    "domain": "buzr8t-s7.myshopify.com",
+    "name": "Rouse Home",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.rousehome.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "ready_for_complete",
+    "shipping_options": [
+      "Doorstep Delivery (doorstep delivery) $0.00",
+      "In Home Delivery (in home delivery) $49.00",
+      "White Glove Delivery (white glove delivery) $149.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": []
+  },
+  {
+    "domain": "hudson-and-vine.myshopify.com",
+    "name": "Hudson & Vine",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "hudsonandvine.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [
+      "Ground Shipping $10.00"
+    ],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "mystic-barrels.myshopify.com",
+    "name": "Mystic Barrels",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.mysticbarrels.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "2modern3.myshopify.com",
+    "name": "2Modern Furniture & Lighting",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 0,
+    "public_host": "www.2modern.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  },
+  {
+    "domain": "jonathanadler-com.myshopify.com",
+    "name": "Jonathan Adler",
+    "categories": [
+      "side_table"
+    ],
+    "products": 1,
+    "with_dims": 1,
+    "public_host": "jonathanadler.com",
+    "webmcp_adapter": false,
+    "model_context_ref": true,
+    "products_json": true,
+    "ucp_tools": 13,
+    "checkout_status": "requires_escalation",
+    "shipping_options": [],
+    "date_fields": [],
+    "checkout_messages": [
+      "extension_interaction_required"
+    ]
+  }
+]

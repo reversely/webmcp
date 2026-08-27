@@ -64,7 +64,7 @@ The `continue_url` checkout HTML (338 KB) renders "Enter your shipping address t
 shipping methods" server-side and includes captcha and challenge scripts; the estimated-delivery line,
 where a merchant configures one, renders client-side after address entry.
 
-## What this means for PRD Section 10
+## What this meant for PRD Section 10 after seven hand-picked merchants (superseded by step 8)
 
 1. No Shopify API path returned a delivery date for any of the seven merchants. UCP checkout returns
    shipping options and cost; the option title sometimes encodes the service level ("White Glove",
@@ -83,3 +83,29 @@ where a merchant configures one, renders client-side after address entry.
   Storefront token from its page bundle).
 - Step 6: Playwright run through a hosted checkout to the shipping step.
 - Step 7: weekly adapter probe.
+
+## Step 8 (2026-08-28): merchants discovered through Global Catalog, no hard-coded list
+
+`discover.ts` runs `search_catalog` for the five demo categories (limit 50, `ships_to` US/NY/10003,
+in stock), collects every seller domain, then probes each storefront and runs `create_checkout` on
+one available variant with the demo address. Full table in `discovered.md`, raw in `discovered.json`.
+
+| Measure | Result |
+| --- | --- |
+| Sellers returned across the five searches | 73 |
+| Sellers answering `/api/ucp/mcp` with 13 tools | 73 of 73 |
+| Sellers loading the storefront WebMCP adapter | 0 of 73 |
+| Products returned | 250, of which 103 have dimensions parseable from `tech_specs` or `description.plain` |
+| Sellers covering 3+ demo categories | westwing-main-stage (4), daalshome, ornate-furniture, thuma-bed, burrow-prod |
+| `create_checkout` returning shipping options | 31 sellers |
+| Options whose title carries a delivery window or duration | 14, on 11 sellers |
+
+Delivery text seen in option titles, all parseable by `normalizeDeliveryEvidence`:
+`Standard (Wednesday, September 2–Thursday, September 3 via Standard)`,
+`Economy (Friday, September 4–Thursday, September 10 via Economy)`, `Delivered in 8 to 11 days`,
+`Standard (3 to 5 business days via Standard)`, `Ground Advantage (3 business days via
+GroundAdvantage)`, `Standard Fast Shipping (Ships in 1 business day via Standard Fast Shipping)`.
+
+Consequence for PRD Section 10: the checkout tool on `/api/ucp/mcp` returns the same option text a
+shopper sees, with no browser session and no captcha, for the merchants that configured delivery
+expectations. It is the primary evidence source; the hosted checkout page adds nothing beyond it.
