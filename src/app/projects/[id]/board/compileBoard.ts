@@ -7,17 +7,27 @@
 
 export type BoardItem = { kind: "text"; text: string } | { kind: "swatch"; colour: string };
 
-export type RequiredItem = "sofa" | "coffee_table" | "ottoman" | "rug" | "side_table";
+export type SwatchTag = "base" | "accent";
+
+/** A colour read off the board as a hex string; the tag is a first guess the person can flip. */
+export type Swatch = { hex: string; tag: SwatchTag };
 
 export type CompiledSpec = {
   room: { width_ft: number; length_ft: number } | null;
   room_name: string | null;
   budget: { maximum: number; currency: "USD" } | null;
   required_by: string | null;
-  required_items: RequiredItem[];
-  visual_direction: { base_colors: string[]; accent_colors: string[] };
-  layout_requirements: { type: "rug_encompasses_group"; items: RequiredItem[] }[];
+  /** The board's own words for each item, in board order. */
+  required_items: string[];
+  swatches: Swatch[];
+  /** Board lines that state a spatial relation, verbatim; parseLayoutRule turns one into a requirement value. */
+  layout_rules: string[];
 };
+
+export type Relation = "under" | "on_top_of" | "beside" | "facing" | "against_wall" | "clear_around";
+
+/** A layout_requirement value: a recognised relation between items, or the sentence as written. */
+export type LayoutRule = { relation: Relation; subject: string; objects: string[] } | { relation: "text"; text: string };
 
 const FT_PER_M = 1 / 0.3048;
 
@@ -122,91 +132,152 @@ export function parseRequiredDate(text: string, today: string): string | null {
   return null;
 }
 
-const ITEMS: [RequiredItem, string][] = [
-  ["sofa", String.raw`(?:sofa|couch|sectional|settee|loveseat)s?`],
-  ["coffee_table", String.raw`coffee\s*tables?`],
-  ["ottoman", String.raw`ottomans?|footstools?|pouf?fes?`],
-  ["rug", String.raw`(?:rug|carpet)s?`],
-  ["side_table", String.raw`(?:side|end|accent)\s*tables?`]
-];
-const NEGATED = String.raw`\b(?:no|without|skip|not|don'?t\s+(?:need|want))\s+(?:a\s+|an\s+|the\s+|any\s+)?(?:\w+\s+){0,2}?`;
+/* ---- Required items: the board's own noun phrases ---- */
 
-export function parseItems(text: string): RequiredItem[] {
-  const found: RequiredItem[] = [];
-  for (const [item, pattern] of ITEMS) {
-    if (!new RegExp(String.raw`\b(?:${pattern})\b`, "i").test(text)) continue;
-    if (new RegExp(`${NEGATED}(?:${pattern})\\b`, "i").test(text)) continue;
-    found.push(item);
-  }
-  return found;
+const NEGATED = /^(?:no|without|skip|not|never|don'?t\s+(?:need|want)|nothing)\b/i;
+const LEAD = /^(?:(?:we|i)\s+)?(?:need|needs|want|wants|get|buy|add|find|must\s+have|also|plus|maybe|probably|definitely|a|an|the|one|two|some|new|another|\d+x?)\b\s*/i;
+/** A trailing clause that describes where or how the item goes, not what it is. */
+const TAIL = /\s+(?:under(?:neath)?|beneath|below|on top of|next to|beside|for|with|that|which|in|on|by|near|to|from|so|because)\b.*$/i;
+const SPLIT = /\s*(?:,|;|\n|\band\b|&|\+|\/)\s*/i;
+const MAX_ITEM_WORDS = 4;
+
+/** Whether a line states a fact the fixed fields carry (size, money, date) rather than an item. */
+function isStructured(text: string, today: string): boolean {
+  return parseDimensions(text) !== null || parseBudget(text) !== null || parseRequiredDate(text, today) !== null;
 }
 
-const RUG_GROUP = /\b(?:under(?:neath)?|beneath|below|encompass\w*|everything|all the|whole group|seating group)\b/i;
-
-const BASE_COLOURS: [string, RegExp][] = [
-  ["warm brown", /\b(?:warm\s+brown|brown|walnut|oak|wood(?:en)?|caramel|tan)\b/i],
-  ["neutral", /\bneutrals?\b/i],
-  ["beige", /\bbeige\b/i],
-  ["cream", /\b(?:cream|ivory|off-?white)\b/i],
-  ["grey", /\b(?:grey|gray)\b/i],
-  ["white", /\bwhite\b/i]
-];
-const ACCENT_COLOURS: [string, RegExp][] = [
-  ["dark blue", /\bdark\s+blue\b/i],
-  ["navy", /\b(?:dark\s+)?navy\b/i],
-  ["blue", /\blight-blue\b|\bblue\b/i],
-  ["green", /\b(?:green|light-green|olive|sage|forest)\b/i],
-  ["teal", /\bteal\b/i],
-  ["mustard", /\b(?:mustard|yellow|ochre)\b/i],
-  ["rust", /\b(?:rust|terracotta|orange)\b/i],
-  ["red", /\b(?:red|light-red|burgundy|wine)\b/i],
-  ["violet", /\b(?:violet|light-violet|purple)\b/i],
-  ["black", /\bblack\b/i]
-];
-
-/** Returns the colour names a phrase mentions; multiword names consume their words first. */
-export function parseColours(text: string): { base: string[]; accent: string[] } {
-  const base: string[] = [];
-  const accent: string[] = [];
-  let rest = text;
-  for (const [name, re] of BASE_COLOURS) {
-    if (re.test(rest)) {
-      base.push(name);
-      rest = rest.replace(new RegExp(re.source, "gi"), " ");
+/**
+ * Reads the items a line names, in the writer's words: "Need sofa" gives "sofa", "big rug underneath
+ * everything" gives "big rug", "a couch and an end table, no ottoman" gives "couch" and "end table".
+ */
+export function parseItems(text: string, today = new Date().toISOString().slice(0, 10)): string[] {
+  if (isStructured(text, today)) return [];
+  const items: string[] = [];
+  for (const segment of text.split(SPLIT)) {
+    let phrase = segment.trim();
+    if (!phrase || NEGATED.test(phrase)) continue;
+    let previous = "";
+    while (previous !== phrase) {
+      previous = phrase;
+      phrase = phrase.replace(LEAD, "");
     }
+    phrase = phrase.replace(TAIL, "").replace(/[.!?:]+$/, "").trim();
+    const words = phrase.split(/\s+/).filter(Boolean);
+    if (words.length === 0 || words.length > MAX_ITEM_WORDS) continue;
+    items.push(phrase);
   }
-  for (const [name, re] of ACCENT_COLOURS) {
-    if (re.test(rest)) {
-      accent.push(name);
-      rest = rest.replace(new RegExp(re.source, "gi"), " ");
-    }
-  }
-  return { base, accent };
+  return items;
 }
 
-function unique<T>(list: T[]): T[] {
-  return [...new Set(list)];
+/* ---- Layout rules: relations the board states between items ---- */
+
+const RELATIONS: [Relation, RegExp][] = [
+  ["under", /\b(?:under(?:neath)?|beneath|below)\b/i],
+  ["on_top_of", /\b(?:on top of|atop)\b/i],
+  ["beside", /\b(?:beside|next to|alongside)\b/i],
+  ["facing", /\b(?:facing|faces|face|across from|opposite)\b/i],
+  ["against_wall", /\bagainst\s+(?:the\s+|a\s+)?(?:\w+\s+)?walls?\b/i],
+  ["clear_around", /\b(?:clear(?:ance)?\s+around|space\s+around|room\s+around|walkway\s+around)\b/i]
+];
+const EVERYTHING = /^(?:everything|all(?:\s+of\s+(?:it|them))?|the\s+rest|the\s+others?|all\s+the\s+(?:other\s+)?items|the\s+(?:whole\s+)?(?:group|set))$/i;
+
+export function isLayoutRule(text: string): boolean {
+  return RELATIONS.some(([, re]) => re.test(text));
+}
+
+function cleanPhrase(text: string): string {
+  let phrase = text.trim();
+  let previous = "";
+  while (previous !== phrase) {
+    previous = phrase;
+    phrase = phrase.replace(LEAD, "");
+  }
+  return phrase.replace(/[.!?:]+$/, "").trim();
+}
+
+/**
+ * Reads one layout sentence into a requirement value. "big rug underneath everything" with items
+ * sofa, coffee table, rug gives { relation: "under", subject: "big rug", objects: [sofa, coffee table] }.
+ * A sentence with no recognisable relation, or no item on either side, is kept as text.
+ */
+/**
+ * Maps a phrase from a rule sentence onto the item it refers to: "desk" resolves to "standing desk"
+ * and "the chair" to "reading chair" when those are the project's items. Unmatched phrases stay as
+ * written so the form shows what the board said.
+ */
+export function resolveItem(phrase: string, items: string[]): string {
+  const words = phrase.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return phrase;
+  const exact = items.find((i) => i.toLowerCase() === phrase.toLowerCase());
+  if (exact) return exact;
+  const last = words[words.length - 1];
+  const candidates = items.filter((i) => i.toLowerCase().split(/\s+/).includes(last));
+  if (candidates.length === 1) return candidates[0];
+  const byAll = candidates.find((i) => words.every((w) => i.toLowerCase().includes(w)));
+  return byAll ?? (candidates[0] ?? phrase);
+}
+
+export function parseLayoutRule(sentence: string, items: string[] = []): LayoutRule {
+  const text = sentence.trim();
+  for (const [relation, re] of RELATIONS) {
+    const m = re.exec(text);
+    if (!m) continue;
+    const before = cleanPhrase(text.slice(0, m.index));
+    const after = cleanPhrase(text.slice(m.index + m[0].length));
+    // "clear around X" names its item after the relation; the words before it are the distance.
+    const subject = relation === "clear_around" ? after || before : before || after;
+    if (!subject) break;
+    const rest = before && relation !== "clear_around" ? after : "";
+    const objects = rest
+      .split(SPLIT)
+      .map(cleanPhrase)
+      .filter(Boolean)
+      .flatMap((o) => (EVERYTHING.test(o) ? items.filter((i) => i.toLowerCase() !== subject.toLowerCase()) : [o]));
+    return { relation, subject: resolveItem(subject, items), objects: dedupe(objects.map((o) => resolveItem(o, items))) };
+  }
+  return { relation: "text", text };
+}
+
+/* ---- Colours: swatch fills, never colour words ---- */
+
+const HEX = /#(?:[0-9a-f]{6}|[0-9a-f]{3})\b/i;
+
+/** Relative luminance of a hex colour, 0 (black) to 1 (white); enough to guess base against accent. */
+export function luminance(hex: string): number {
+  const full = hex.length === 4 ? `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}` : hex;
+  const channel = (i: number) => parseInt(full.slice(i, i + 2), 16) / 255;
+  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+}
+
+/** Lighter swatches read as base colours, darker ones as accents; a person flips any tag in the form. */
+export function tagSwatches(hexes: string[]): Swatch[] {
+  if (hexes.length === 0) return [];
+  const sorted = hexes.map(luminance).sort((a, b) => a - b);
+  const median = sorted[Math.ceil((sorted.length - 1) / 2)];
+  return hexes.map((hex) => ({ hex, tag: hexes.length === 1 || luminance(hex) >= median ? "base" : "accent" }));
+}
+
+function dedupe(list: string[]): string[] {
+  const seen = new Set<string>();
+  return list.filter((item) => {
+    const key = item.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 export function compileBoard(items: BoardItem[], options: { today?: string } = {}): CompiledSpec {
   const today = options.today ?? new Date().toISOString().slice(0, 10);
-  const spec: CompiledSpec = {
-    room: null,
-    room_name: null,
-    budget: null,
-    required_by: null,
-    required_items: [],
-    visual_direction: { base_colors: [], accent_colors: [] },
-    layout_requirements: []
-  };
-  let rugGroup = false;
+  const spec: CompiledSpec = { room: null, room_name: null, budget: null, required_by: null, required_items: [], swatches: [], layout_rules: [] };
+  const hexes: string[] = [];
   for (const item of items) {
-    const text = item.kind === "text" ? item.text : item.colour;
-    const colours = parseColours(text);
-    spec.visual_direction.base_colors.push(...colours.base);
-    spec.visual_direction.accent_colors.push(...colours.accent);
-    if (item.kind === "swatch") continue;
-
+    if (item.kind === "swatch") {
+      const hex = HEX.exec(item.colour)?.[0].toLowerCase();
+      if (hex) hexes.push(hex);
+      continue;
+    }
+    const text = item.text;
     if (!spec.room) spec.room = parseDimensions(text);
     if (!spec.room_name) {
       const name = ROOM_NAME.exec(text);
@@ -217,14 +288,19 @@ export function compileBoard(items: BoardItem[], options: { today?: string } = {
       if (maximum != null) spec.budget = { maximum, currency: "USD" };
     }
     if (!spec.required_by) spec.required_by = parseRequiredDate(text, today);
-    const found = parseItems(text);
-    spec.required_items.push(...found);
-    if (found.includes("rug") && RUG_GROUP.test(text)) rugGroup = true;
+    if (!isStructured(text, today) && isLayoutRule(text)) {
+      // A rule sentence names its subject as an item ("big rug under…" adds the rug) but its
+      // objects refer to items named elsewhere, so they never become items of their own.
+      spec.layout_rules.push(text);
+      const rule = parseLayoutRule(text);
+      if (rule.relation !== "text" && rule.subject) spec.required_items.push(rule.subject);
+    } else {
+      spec.required_items.push(...parseItems(text, today));
+    }
   }
-  spec.required_items = unique(spec.required_items);
-  spec.visual_direction.base_colors = unique(spec.visual_direction.base_colors);
-  spec.visual_direction.accent_colors = unique(spec.visual_direction.accent_colors);
-  if (rugGroup) spec.layout_requirements.push({ type: "rug_encompasses_group", items: ["sofa", "coffee_table"] });
+  spec.required_items = dedupe(spec.required_items);
+  spec.swatches = tagSwatches(dedupe(hexes));
+  spec.layout_rules = dedupe(spec.layout_rules);
   return spec;
 }
 
@@ -250,10 +326,27 @@ type ShapeRecord = {
   props?: { richText?: unknown; text?: string; fill?: string; color?: string };
 };
 
+/** tldraw's default light-theme palette, by style colour name. */
+export const TLDRAW_HEX: Record<string, string> = {
+  black: "#1d1d1d",
+  grey: "#9fa8b2",
+  "light-violet": "#e085f4",
+  violet: "#ae3ec9",
+  blue: "#4263eb",
+  "light-blue": "#4dabf7",
+  yellow: "#ffc034",
+  orange: "#f76707",
+  green: "#099268",
+  "light-green": "#40c057",
+  "light-red": "#ff8787",
+  red: "#e03131",
+  white: "#ffffff"
+};
+
 /**
  * Reads the board items from a tldraw editor or store snapshot: note and text shapes become text
- * items; filled geo shapes become swatches named by their label, or by their tldraw colour when
- * the label is empty.
+ * items; filled geo shapes become swatches carrying a hex colour, taken from a hex typed into the
+ * shape's label when there is one, otherwise from the shape's tldraw fill colour.
  */
 export function collectBoardItems(snapshot: unknown): BoardItem[] {
   if (!snapshot || typeof snapshot !== "object") return [];
@@ -266,7 +359,8 @@ export function collectBoardItems(snapshot: unknown): BoardItem[] {
     if (record.type === "note" || record.type === "text") {
       if (label) items.push({ kind: "text", text: label });
     } else if (record.type === "geo" && record.props.fill && record.props.fill !== "none") {
-      items.push({ kind: "swatch", colour: label || record.props.color || "" });
+      const hex = HEX.exec(label)?.[0].toLowerCase() ?? TLDRAW_HEX[record.props.color ?? ""];
+      if (hex) items.push({ kind: "swatch", colour: hex });
     }
   }
   return items;

@@ -4,31 +4,28 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Editor, TLEditorSnapshot } from "tldraw";
 import { getSnapshot } from "tldraw";
-import { collectBoardItems, compileBoard, type CompiledSpec, type RequiredItem } from "./compileBoard";
+import { collectBoardItems, compileBoard, parseLayoutRule, type CompiledSpec, type Swatch } from "./compileBoard";
 import { latestArtifact, type ArtifactMessage } from "../artifacts";
 import type { SpecData } from "../artifacts/types";
+import { ANONYMOUS, useIdentity } from "../../../identity";
 import styles from "./board.module.css";
 
 // tldraw reads window at import time, so the canvas is loaded on the client only.
 const BoardCanvas = dynamic(() => import("./board-canvas"), { ssr: false, loading: () => <div className={styles.placeholder}>Loading the board.</div> });
 
-const ITEM_LABELS: [RequiredItem, string][] = [
-  ["sofa", "Sofa"],
-  ["coffee_table", "Coffee table"],
-  ["ottoman", "Ottoman"],
-  ["rug", "Rug"],
-  ["side_table", "Side table"]
-];
-
+/**
+ * The plan form: the three fixed fields (room, budget, date) and, below them, whatever the board
+ * named, in the board's words: items, colour swatches, and layout sentences. Each list is edited
+ * in place and sent as written.
+ */
 type Form = {
   width_ft: string;
   length_ft: string;
   budget: string;
   required_by: string;
-  items: RequiredItem[];
-  base_colors: string;
-  accent_colors: string;
-  rug_group: boolean;
+  items: string[];
+  swatches: Swatch[];
+  rules: string[];
   room_name: string | null;
 };
 
@@ -39,16 +36,13 @@ function toForm(spec: CompiledSpec): Form {
     budget: spec.budget ? String(spec.budget.maximum) : "",
     required_by: spec.required_by ?? "",
     items: spec.required_items,
-    base_colors: spec.visual_direction.base_colors.join(", "),
-    accent_colors: spec.visual_direction.accent_colors.join(", "),
-    rug_group: spec.layout_requirements.length > 0,
+    swatches: spec.swatches,
+    rules: spec.layout_rules,
     room_name: spec.room_name
   };
 }
 
-const splitList = (s: string) => s.split(",").map((c) => c.trim()).filter(Boolean);
 const MM_PER_FT = 304.8;
-const KNOWN_ITEMS = new Set<string>(ITEM_LABELS.map(([item]) => item));
 
 /** Reads a PRD 16 ProjectSpec from the compile response, which may wrap it as { spec } or return it bare. */
 function readSpec(json: unknown): SpecData | null {
@@ -81,28 +75,86 @@ async function latestSpecArtifact(projectId: string): Promise<SpecData | null> {
   }
 }
 
-/** The agent's spec wins on every field it states; the rule-based result fills the rest. */
+/**
+ * The agent's spec wins on the three fixed fields it states. Items stay in the board's own words;
+ * the agent's category ids fill in only when the board named none. Colours come from swatches
+ * alone, and layout sentences from the board alone.
+ */
 function mergeSpec(local: CompiledSpec, spec: SpecData): CompiledSpec {
-  const items = (spec.required_items ?? []).filter((i): i is RequiredItem => KNOWN_ITEMS.has(i));
+  const agentItems = (spec.required_items ?? []).map((i) => i.replace(/_/g, " "));
   return {
+    ...local,
     room: spec.room && spec.room.width_ft > 0 && spec.room.length_ft > 0 ? { width_ft: spec.room.width_ft, length_ft: spec.room.length_ft } : local.room,
-    room_name: local.room_name,
     budget: spec.budget && spec.budget.maximum > 0 ? { maximum: spec.budget.maximum, currency: "USD" } : local.budget,
     required_by: spec.required_by ?? local.required_by,
-    required_items: spec.required_items ? items : local.required_items,
-    visual_direction: spec.visual_direction
-      ? { base_colors: spec.visual_direction.base_colors ?? [], accent_colors: spec.visual_direction.accent_colors ?? [] }
-      : local.visual_direction,
-    layout_requirements: spec.layout_requirements
-      ? spec.layout_requirements
-          .filter((l) => l.type === "rug_encompasses_group")
-          .map((l) => ({ type: "rug_encompasses_group" as const, items: l.items.filter((i): i is RequiredItem => KNOWN_ITEMS.has(i)) }))
-      : local.layout_requirements
+    required_items: local.required_items.length > 0 ? local.required_items : agentItems
   };
+}
+
+/** One editable text row per entry, a remove control per row, and an add row. */
+function EditableList({ id, values, placeholder, addLabel, onChange }: { id: string; values: string[]; placeholder: string; addLabel: string; onChange: (next: string[]) => void }) {
+  return (
+    <div className={styles.list} data-testid={`${id}-list`}>
+      {values.map((value, i) => (
+        <div className={styles.row} key={i}>
+          <input
+            className="input"
+            value={value}
+            aria-label={`${placeholder} ${i + 1}`}
+            data-testid={`${id}-row`}
+            onChange={(e) => onChange(values.map((v, j) => (j === i ? e.target.value : v)))}
+          />
+          <button className="btn" type="button" aria-label={`Remove ${value || placeholder}`} onClick={() => onChange(values.filter((_, j) => j !== i))}>
+            Remove
+          </button>
+        </div>
+      ))}
+      <div className={styles.add}>
+        <button className="btn" type="button" onClick={() => onChange([...values, ""])} data-testid={`${id}-add`}>
+          {addLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Colour swatches read off the board: a colour input edits each, the tag flips on click, and a colour input adds one. */
+function SwatchList({ swatches, onChange }: { swatches: Swatch[]; onChange: (next: Swatch[]) => void }) {
+  const [draft, setDraft] = useState("#888888");
+  return (
+    <div className={styles.list} data-testid="swatch-list">
+      {swatches.map((sw, i) => (
+        <div className={styles.swatchRow} key={i} data-testid="swatch-row">
+          <input className={styles.colour} type="color" value={sw.hex} aria-label={`Colour ${i + 1}`} onChange={(e) => onChange(swatches.map((v, j) => (j === i ? { ...v, hex: e.target.value } : v)))} />
+          <span className={styles.hex}>{sw.hex}</span>
+          <button
+            type="button"
+            className={`tag ${sw.tag === "base" ? "blue" : "yellow"} ${styles.tagButton}`}
+            data-testid="swatch-tag"
+            data-tag={sw.tag}
+            title="Click to switch between base and accent"
+            onClick={() => onChange(swatches.map((v, j) => (j === i ? { ...v, tag: v.tag === "base" ? "accent" : "base" } : v)))}
+          >
+            {sw.tag === "base" ? "Base" : "Accent"}
+          </button>
+          <button className={styles.remove} type="button" aria-label={`Remove colour ${sw.hex}`} onClick={() => onChange(swatches.filter((_, j) => j !== i))}>
+            ×
+          </button>
+        </div>
+      ))}
+      <div className={styles.add}>
+        <input className={styles.colour} type="color" value={draft} aria-label="New colour" onChange={(e) => setDraft(e.target.value)} />
+        <button className="btn" type="button" onClick={() => onChange([...swatches, { hex: draft, tag: swatches.length === 0 ? "base" : "accent" }])} data-testid="swatch-add">
+          Add colour
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function PreferencesStage({ projectId }: { projectId: string }) {
   const router = useRouter();
+  const identity = useIdentity(projectId);
   const editorRef = useRef<Editor | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [board, setBoard] = useState<{ loaded: boolean; snapshot: TLEditorSnapshot | null }>({ loaded: false, snapshot: null });
@@ -166,15 +218,18 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
   async function approve() {
     if (!form || !canApprove) return;
     setApproving(true);
+    const items = form.items.map((i) => i.trim()).filter(Boolean);
+    const rules = form.rules.map((r) => r.trim()).filter(Boolean);
     const requirements: { type: string; value: unknown }[] = [
-      ...form.items.map((value) => ({ type: "required_item", value })),
-      { type: "visual_direction", value: { base_colors: splitList(form.base_colors), accent_colors: splitList(form.accent_colors) } },
-      ...(form.rug_group ? [{ type: "layout_requirement", value: { type: "rug_encompasses_group", items: ["sofa", "coffee_table"] } }] : [])
+      ...items.map((value) => ({ type: "required_item", value })),
+      { type: "visual_direction", value: { base: form.swatches.filter((s) => s.tag === "base").map((s) => s.hex), accent: form.swatches.filter((s) => s.tag === "accent").map((s) => s.hex) } },
+      ...rules.map((sentence) => ({ type: "layout_requirement", value: parseLayoutRule(sentence, items) }))
     ];
+    const createdBy = identity?.display_name ?? ANONYMOUS;
     const spec = fetch(`/api/projects/${projectId}/spec`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ space: { width_mm: width * MM_PER_FT, length_mm: length * MM_PER_FT, ...(form.room_name ? { name: form.room_name } : {}) }, requirements })
+      body: JSON.stringify({ space: { width_mm: width * MM_PER_FT, length_mm: length * MM_PER_FT, ...(form.room_name ? { name: form.room_name } : {}) }, requirements, created_by: createdBy })
     });
     const project = fetch(`/api/projects/${projectId}`, {
       method: "PATCH",
@@ -195,7 +250,7 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
   return (
     <>
       <h1 className="page-title">Preferences</h1>
-      <p className="page-summary">Put room size, budget, date, required items, and colour swatches on the board, then create the plan from it.</p>
+      <p className="page-summary">Put the room size, budget, date, each item you need, colour swatches, and any layout rules on the board, then create the plan from it.</p>
       <div className={styles.stage}>
         <section className={styles.canvasSurface} aria-label="Whiteboard">
           <div className={styles.canvasHeader}>
@@ -221,7 +276,7 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
           <div className="eyebrow">Plan from board</div>
           {!form && (
             <>
-              <p>The plan reads the board's notes and swatches for room size, budget, date, required items, and colours. You can edit it before approving.</p>
+              <p>The plan reads the board's notes for room size, budget, and date, then lists every item, colour swatch, and layout sentence the board names, in your words. Edit any of it before approving.</p>
               <button className="btn primary focal" type="button" onClick={compile} disabled={!board.loaded || compiling} data-testid="create-plan">
                 {compiling ? "Reading the board" : "Create plan from board"}
               </button>
@@ -258,32 +313,17 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
                 </div>
               </div>
               <div className="field">
-                <label>Required items</label>
-                <div className={styles.checks}>
-                  {ITEM_LABELS.map(([item, label]) => (
-                    <label key={item} className={styles.check}>
-                      <input
-                        type="checkbox"
-                        checked={form.items.includes(item)}
-                        onChange={(e) => setForm({ ...form, items: e.target.checked ? [...form.items, item] : form.items.filter((i) => i !== item) })}
-                      />
-                      {label}
-                    </label>
-                  ))}
-                </div>
+                <label>Items the board names</label>
+                <EditableList id="item" values={form.items} placeholder="Item" addLabel="Add item" onChange={(items) => setForm({ ...form, items })} />
               </div>
               <div className="field">
-                <label htmlFor="base">Base colours</label>
-                <input id="base" className="input" value={form.base_colors} onChange={(e) => setForm({ ...form, base_colors: e.target.value })} />
+                <label>Colours from the swatches</label>
+                <SwatchList swatches={form.swatches} onChange={(swatches) => setForm({ ...form, swatches })} />
               </div>
               <div className="field">
-                <label htmlFor="accent">Accent colours</label>
-                <input id="accent" className="input" value={form.accent_colors} onChange={(e) => setForm({ ...form, accent_colors: e.target.value })} />
+                <label>Layout rules the board states</label>
+                <EditableList id="rule" values={form.rules} placeholder="Rule" addLabel="Add rule" onChange={(rules) => setForm({ ...form, rules })} />
               </div>
-              <label className={styles.check}>
-                <input type="checkbox" checked={form.rug_group} onChange={(e) => setForm({ ...form, rug_group: e.target.checked })} />
-                The rug sits under the sofa and coffee table
-              </label>
               <div className={styles.actions}>
                 <button className="btn primary focal" type="submit" disabled={!canApprove} data-testid="approve-plan">
                   Approve

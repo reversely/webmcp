@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectBoardItems, compileBoard, parseBudget, parseDimensions, parseRequiredDate, richTextToPlain, type BoardItem } from "./compileBoard";
+import { collectBoardItems, compileBoard, parseBudget, parseDimensions, parseItems, parseLayoutRule, parseRequiredDate, richTextToPlain, type BoardItem } from "./compileBoard";
 
 const TODAY = "2026-08-27";
 const text = (t: string): BoardItem => ({ kind: "text", text: t });
@@ -54,6 +54,23 @@ describe("parseRequiredDate", () => {
   });
 });
 
+describe("parseItems", () => {
+  it("keeps the board's own noun phrases and drops the lead-in and the tail", () => {
+    expect(parseItems("Need sofa", TODAY)).toEqual(["sofa"]);
+    expect(parseItems("big rug underneath everything", TODAY)).toEqual(["big rug"]);
+    expect(parseItems("a couch and an end table, no ottoman", TODAY)).toEqual(["couch", "end table"]);
+    expect(parseItems("reading chair", TODAY)).toEqual(["reading chair"]);
+    expect(parseItems("2 standing desks", TODAY)).toEqual(["standing desks"]);
+  });
+
+  it("skips lines the fixed fields carry and long sentences", () => {
+    expect(parseItems("12 × 18 living room", TODAY)).toEqual([]);
+    expect(parseItems("$2500 max", TODAY)).toEqual([]);
+    expect(parseItems("Need Sept 15", TODAY)).toEqual([]);
+    expect(parseItems("we should probably keep the walls as they are today", TODAY)).toEqual([]);
+  });
+});
+
 describe("compileBoard", () => {
   const demo: BoardItem[] = [
     text("12 × 18 living room"),
@@ -63,8 +80,8 @@ describe("compileBoard", () => {
     text("big rug underneath everything"),
     text("$2500 max"),
     text("Need Sept 15"),
-    { kind: "swatch", colour: "warm brown" },
-    { kind: "swatch", colour: "dark navy" }
+    { kind: "swatch", colour: "#f76707" },
+    { kind: "swatch", colour: "#4263eb" }
   ];
 
   it("compiles the PRD 16 demo board", () => {
@@ -73,17 +90,29 @@ describe("compileBoard", () => {
       room_name: "Living room",
       budget: { maximum: 2500, currency: "USD" },
       required_by: "2026-09-15",
-      required_items: ["sofa", "coffee_table", "ottoman", "rug"],
-      visual_direction: { base_colors: ["warm brown"], accent_colors: ["navy"] },
-      layout_requirements: [{ type: "rug_encompasses_group", items: ["sofa", "coffee_table"] }]
+      required_items: ["sofa", "Coffee table", "Ottoman", "big rug"],
+      swatches: [
+        { hex: "#f76707", tag: "base" },
+        { hex: "#4263eb", tag: "accent" }
+      ],
+      layout_rules: ["big rug underneath everything"]
     });
   });
 
-  it("recognises item synonyms, negation, and colour words in text", () => {
-    const spec = compileBoard([text("a couch and an end table, no ottoman"), text("beige and cream base, dark blue accents"), text("neutral walls")], { today: TODAY });
-    expect(spec.required_items).toEqual(["sofa", "side_table"]);
-    expect(spec.visual_direction).toEqual({ base_colors: ["beige", "cream", "neutral"], accent_colors: ["dark blue"] });
-    expect(spec.layout_requirements).toEqual([]);
+  it("reads a layout sentence into a relation between the board's items", () => {
+    const items = ["sofa", "Coffee table", "Ottoman", "big rug"];
+    expect(parseLayoutRule("big rug underneath everything", items)).toEqual({ relation: "under", subject: "big rug", objects: ["sofa", "Coffee table", "Ottoman"] });
+    expect(parseLayoutRule("the sofa against the long wall", items)).toEqual({ relation: "against_wall", subject: "sofa", objects: [] });
+    expect(parseLayoutRule("keep 3 ft clear around the coffee table", items)).toEqual({ relation: "clear_around", subject: "Coffee table", objects: [] });
+    expect(parseLayoutRule("sofa facing the window and the fireplace", items)).toEqual({ relation: "facing", subject: "sofa", objects: ["window", "fireplace"] });
+    expect(parseLayoutRule("keep it cosy", items)).toEqual({ relation: "text", text: "keep it cosy" });
+  });
+
+  it("takes colours from swatches only and dedupes items case-insensitively", () => {
+    const spec = compileBoard([text("Sofa"), text("sofa"), text("beige and cream base, dark blue accents"), { kind: "swatch", colour: "#ffffff" }], { today: TODAY });
+    expect(spec.required_items).toEqual(["Sofa", "beige", "cream base", "dark blue accents"]);
+    expect(spec.swatches).toEqual([{ hex: "#ffffff", tag: "base" }]);
+    expect(spec.layout_rules).toEqual([]);
   });
 
   it("returns nulls for anything the board does not say", () => {
@@ -91,6 +120,7 @@ describe("compileBoard", () => {
     expect(spec.room).toBeNull();
     expect(spec.budget).toBeNull();
     expect(spec.required_by).toBeNull();
+    expect(spec.swatches).toEqual([]);
   });
 });
 
@@ -101,13 +131,13 @@ describe("collectBoardItems", () => {
     expect(richTextToPlain({ type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "a" }] }, { type: "paragraph", content: [{ type: "text", text: "b" }] }] })).toBe("a\nb");
   });
 
-  it("reads notes, text, and filled geo shapes from an editor snapshot", () => {
+  it("reads notes, text, and filled geo shapes as hex swatches from an editor snapshot", () => {
     const snapshot = {
       document: {
         store: {
           "shape:1": { typeName: "shape", type: "note", props: { richText: para("Need sofa") } },
           "shape:2": { typeName: "shape", type: "text", props: { richText: para("$2500 max") } },
-          "shape:3": { typeName: "shape", type: "geo", props: { fill: "solid", color: "blue", richText: para("dark navy") } },
+          "shape:3": { typeName: "shape", type: "geo", props: { fill: "solid", color: "blue", richText: para("#1F2F4F") } },
           "shape:4": { typeName: "shape", type: "geo", props: { fill: "solid", color: "grey", richText: para("") } },
           "shape:5": { typeName: "shape", type: "geo", props: { fill: "none", color: "red", richText: para("") } },
           "page:1": { typeName: "page" }
@@ -117,8 +147,23 @@ describe("collectBoardItems", () => {
     expect(collectBoardItems(snapshot)).toEqual([
       { kind: "text", text: "Need sofa" },
       { kind: "text", text: "$2500 max" },
-      { kind: "swatch", colour: "dark navy" },
-      { kind: "swatch", colour: "grey" }
+      { kind: "swatch", colour: "#1f2f4f" },
+      { kind: "swatch", colour: "#9fa8b2" }
     ]);
+  });
+});
+
+describe("rule sentences and item resolution", () => {
+  it("adds only the rule's subject as an item and resolves objects to the named items", () => {
+    const spec = compileBoard(
+      [
+        { kind: "text", text: "reading chair" },
+        { kind: "text", text: "standing desk" },
+        { kind: "text", text: "big rug under the desk and the chair" }
+      ] as never,
+      { today: "2026-08-28" }
+    );
+    expect(spec.required_items).toEqual(["reading chair", "standing desk", "big rug"]);
+    expect(parseLayoutRule("big rug under the desk and the chair", spec.required_items)).toEqual({ relation: "under", subject: "big rug", objects: ["standing desk", "reading chair"] });
   });
 });
