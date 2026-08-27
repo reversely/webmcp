@@ -1,6 +1,9 @@
 // Discovers furniture merchants the way the planner will: Global Catalog search_catalog per
 // required category, then surveys every seller the catalog returns. No merchant list is hard-coded.
-// Run: npx tsx spikes/storefront-survey/discover.ts  → spikes/storefront-survey/discovered.json + .md
+// Run: PAGES=3 npx tsx spikes/storefront-survey/discover.ts  → spikes/storefront-survey/discovered.json + .md
+// Each category query matches roughly 370 to 400 products (catalog total_count); PAGES pages of 50
+// are fetched per category (default 1). Every discovered seller then gets a storefront probe and a
+// create_checkout call, so depth multiplies runtime.
 import { writeFileSync } from "node:fs";
 import { catalogClient, storefrontEndpoint } from "../../src/commerce";
 import { parseDimensions } from "../../src/domain/products/dimensions";
@@ -15,6 +18,7 @@ const CATEGORIES: Record<string, string> = {
 const SHIPS_TO = { country: "US", region: "NY", postal_code: "10003" };
 const CONTEXT = { address_country: "US", address_region: "NY", postal_code: "10003", currency: "USD" };
 const PROFILE = "https://shopify.dev/ucp/agent-profiles/2026-04-08/valid-with-capabilities.json";
+const PAGES = Math.max(1, Number(process.env.PAGES ?? "1"));
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 Chrome/128 Safari/537.36";
 
 type Seller = { domain: string; name: string; categories: Set<string>; products: number; withDims: number; sampleVariantId?: string; sampleTitle?: string };
@@ -23,8 +27,18 @@ async function discover() {
   const client = catalogClient();
   const sellers = new Map<string, Seller>();
   for (const [category, query] of Object.entries(CATEGORIES)) {
-    const result = await client.searchCatalog({ query, filters: { ships_to: SHIPS_TO, availability: "in_stock" } as never, context: CONTEXT as never, pagination: { limit: 50 } });
-    for (const product of result.products ?? []) {
+    let cursor: string | undefined;
+    let fetched = 0;
+    const products: NonNullable<Awaited<ReturnType<typeof client.searchCatalog>>["products"]> = [];
+    for (let page = 0; page < PAGES; page++) {
+      const result = await client.searchCatalog({ query, filters: { ships_to: SHIPS_TO, available: true } as never, context: CONTEXT as never, pagination: { limit: 50, cursor } });
+      products.push(...(result.products ?? []));
+      fetched++;
+      const pg = result.pagination as { has_next_page?: boolean; cursor?: string; next_cursor?: string } | undefined;
+      cursor = pg?.next_cursor ?? pg?.cursor;
+      if (!pg?.has_next_page || !cursor) break;
+    }
+    for (const product of products) {
       const variant = (product.variants ?? []).find((v) => v.availability?.available) ?? product.variants?.[0];
       const domain = variant?.seller?.domain;
       if (!domain) continue;
@@ -37,7 +51,7 @@ async function discover() {
       if (!seller.sampleVariantId && variant?.id) { seller.sampleVariantId = variant.id; seller.sampleTitle = product.title; }
       sellers.set(domain, seller);
     }
-    console.log(`${category}: ${result.products?.length ?? 0} products, ${sellers.size} sellers so far`);
+    console.log(`${category}: ${products.length} products over ${fetched} page(s), ${sellers.size} sellers so far`);
   }
   return [...sellers.values()].sort((a, b) => b.categories.size - a.categories.size || b.products - a.products);
 }
