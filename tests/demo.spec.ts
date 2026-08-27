@@ -8,7 +8,8 @@
  * sync look for the element first and mark themselves `fixme` when it is absent, so the suite runs
  * before those land and tightens as they do. When the agent has not sourced a BOM, Scene 7 sources
  * one through the search panel so the layout scenes still run; Scene 10 falls back to the
- * `add_product` WebMCP tool when the chat does not ingest the pasted URL.
+ * `add_product` WebMCP tool when the chat does not ingest the pasted URL. Scene 10b (#50) asks the
+ * agent to record Ben's new item and its relation, and falls back to the board when it does not.
  *
  * Videos: one per context under tests/videos (zach-*.webm, ben-*.webm).
  */
@@ -30,6 +31,7 @@ import {
   PASTED_URL,
   POLL_MS,
   requiredItems,
+  requirementName,
   sendChat,
   waitForSnapshot,
   waitForTools,
@@ -98,6 +100,12 @@ const BOARD_ITEMS = ["big rug", ...ZACH_ITEMS, ...BEN_ITEMS];
 const REPLACED_ITEM = "Round coffee table";
 /** The phrase Zach gives the pasted product in Scene 10. */
 const PASTED_ITEM = "side table";
+/** The item Ben adds in Scene 10b, in his words; the item it goes beside is read from the BOM. */
+const BEN_NEW_ITEM = "floor lamp";
+/** How long a real image-to-3D generation may take before the scene gives up (15 to 70 s observed). */
+const MODEL_WAIT_MS = 180_000;
+/** The gap Scene 10b leaves between the new item and its neighbour; under the engine's 600 mm `beside` limit. */
+const BESIDE_GAP_MM = 200;
 
 test("Scene 1: Zach creates the project from the landing page and the values persist after reload", async ({ request }) => {
   const created = await createThroughLanding(zach, { name: "Zach + Ben Living Room", budgetUsd: 2500, requiredBy: "2026-09-15" }, "Zach", "Zach");
@@ -160,7 +168,8 @@ test("Scene 2b: each person sees the other in the top bar within 10 s", async ()
 test("Scene 3: create plan from board; both approve; the structured plan appears", async ({ request }) => {
   await zach.getByTestId("create-plan").click();
   const form = zach.getByTestId("spec-form");
-  await expect(form).toBeVisible();
+  // "Create plan from board" waits on the model-backed compile route, which can run past 10 s.
+  await expect(form).toBeVisible({ timeout: AGENT_WAIT_MS });
   await expect(form.locator("#width")).toHaveValue("12");
   await expect(form.locator("#length")).toHaveValue("18");
   await expect(form.locator("#budget")).toHaveValue("2500");
@@ -176,7 +185,7 @@ test("Scene 3: create plan from board; both approve; the structured plan appears
   await zach.waitForURL(/\/room/);
 
   await ben.getByTestId("create-plan").click();
-  await expect(ben.getByTestId("spec-form")).toBeVisible();
+  await expect(ben.getByTestId("spec-form")).toBeVisible({ timeout: AGENT_WAIT_MS });
   await ben.getByTestId("approve-plan").click();
   await ben.waitForURL(/\/room/);
 
@@ -332,6 +341,168 @@ test("Scene 10: Zach pastes a product URL; the product ingests under his phrase 
   await expect(ben.getByTestId("bom-rail")).toContainText(side.product!.title, { timeout: POLL_MS });
 });
 
+test("Scene 10b: Ben adds a floor lamp beside the sofa and watches its model generate", async ({ request }) => {
+  test.setTimeout(600_000);
+  const before = await getSnapshot(request, projectId);
+  // The neighbour is the first seating line the board produced, by the board's own phrase.
+  const seating = activeBom(before).find((l) => l.kind === "seating" && before.placements.some((p) => p.bom_item_id === l.id)) ?? activeBom(before).find((l) => before.placements.some((p) => p.bom_item_id === l.id));
+  expect(seating, "a placed item to put the lamp beside").toBeTruthy();
+  const target = seating!.category;
+  const lower = (s: string) => s.trim().toLowerCase();
+  const itemRequirement = (s: Snapshot) => s.requirements.find((r) => r.type === "required_item" && r.status === "agreed" && lower(requirementName(r.value_json)) === BEN_NEW_ITEM);
+  const besideRule = (s: Snapshot) =>
+    s.requirements.find((r) => {
+      if (r.type !== "layout_requirement" || r.status !== "agreed") return false;
+      const v = r.value_json as { relation: string; subject?: string; objects?: string[] };
+      const names = [v.subject ?? "", ...(v.objects ?? [])].map(lower);
+      return v.relation === "beside" && names.includes(BEN_NEW_ITEM) && names.includes(lower(target));
+    });
+  const recorded = (s: Snapshot) => itemRequirement(s) !== undefined && besideRule(s) !== undefined;
+
+  // Ben states the item and its relation in chat; the agent records both as requirements.
+  await sendChat(ben, `Add one more thing to what we agreed: a ${BEN_NEW_ITEM} beside the ${target}.`);
+  let viaAgent = true;
+  try {
+    await waitForSnapshot(request, projectId, recorded, AGENT_WAIT_MS);
+  } catch {
+    viaAgent = false;
+  }
+  if (!viaAgent) {
+    // The board is the other place Ben can say it: a note, then the plan recompiled and approved.
+    note("pending", `PlanningAgent did not record "${BEN_NEW_ITEM} beside ${target}" from chat; Ben added it on the board instead`);
+    await openStage(ben, projectId, "board");
+    await addBoardNotesByEditor(ben, [{ text: `${BEN_NEW_ITEM} beside the ${target}`, x: 0, y: 480, color: "light-green" }]);
+    await ben.waitForTimeout(1500); // the board save debounces 800 ms
+    await ben.getByTestId("create-plan").click();
+    const form = ben.getByTestId("spec-form");
+    await expect(form).toBeVisible({ timeout: AGENT_WAIT_MS });
+    const values = await form.getByTestId("item-row").evaluateAll((els) => els.map((el) => (el as HTMLInputElement).value.trim().toLowerCase()));
+    expect(values).toContain(BEN_NEW_ITEM);
+    await expect(form.getByTestId("rule-row")).toHaveCount(2);
+    await ben.getByTestId("approve-plan").click();
+    await ben.waitForURL(/\/room/);
+    await waitForSnapshot(request, projectId, recorded, 10_000);
+  }
+  const withRule = await getSnapshot(request, projectId);
+  const itemName = requirementName(itemRequirement(withRule)!.value_json);
+  const rule = besideRule(withRule)!.value_json as { relation: string; subject: string; objects: string[]; distance_mm?: number };
+  expect(rule).toMatchObject({ relation: "beside" });
+  note("requirement", `${viaAgent ? "agent" : "board"}: ${itemName}; rule ${JSON.stringify(rule)}`);
+  // Every earlier item survives the addition.
+  for (const item of BOARD_ITEMS) expect(requiredItems(withRule).map(lower)).toContain(lower(item));
+
+  // Ben sources it through the search panel, scoped to his phrase; the cheapest dimensioned card
+  // with an image keeps the budget damage small and gives the 3D pipeline an input. A product
+  // whose model is already cached lands at ready with no stages to watch, so such a pick is
+  // removed and the next cheapest tried (PRD 15.1: the cache is production behaviour).
+  await openStage(ben, projectId, "place");
+  await waitForTools(ben);
+  const panel = ben.getByTestId("product-search");
+  const known = new Set(activeBom(withRule).map((l) => l.id));
+  const newLine = (s: Snapshot) => activeBom(s).find((l) => !known.has(l.id) && lower(l.category) === lower(itemName));
+  const tried = new Set<string>();
+  let line: Snapshot["bom"][number] | undefined;
+  let cached = false;
+  for (let pick = 1; pick <= 3; pick++) {
+    await addFromSearch(panel, request, projectId, itemName, 300, () => true, { cheapest: true, requireImage: true, skipTitles: tried });
+    const snap = await waitForSnapshot(request, projectId, (s) => newLine(s) !== undefined, 30_000);
+    line = newLine(snap)!;
+    tried.add(line.product!.title);
+    // The job row appears with the add; a cached GLB ends it at ready inside the same tick.
+    const withJob = await waitForSnapshot(request, projectId, (s) => s.model_jobs?.[line!.product_id] !== undefined, 15_000).catch(() => snap);
+    const job = withJob.model_jobs?.[line.product_id];
+    cached = job?.status === "ready" && job.stages[job.stages.length - 1]?.detail === "cached";
+    if (!cached) break;
+    if (pick === 3) {
+      note("pending", "every tried product had a cached model; the scene watches the cached job instead of a generation");
+      break;
+    }
+    note("cached", `pick ${pick} "${line.product!.title}" had a cached model; removed it to watch a real generation`);
+    const removed = await request.put(`/api/projects/${projectId}/bom`, { data: { bomItemId: line.id, action: "remove" } });
+    expect(removed.ok()).toBeTruthy();
+  }
+  const lamp = line!;
+  expect(lower(lamp.category)).toBe(lower(itemName));
+  expect(lamp.product?.price_cents).toBeGreaterThan(0);
+  note("sourced", `${lamp.product!.title} at ${lamp.product!.price_cents} cents (${lamp.kind})`);
+  await expect(ben.getByTestId("bom-rail")).toContainText(lamp.product!.title);
+
+  // The UI stage strip is watched from here: the tray shows it as soon as the line exists.
+  const stagesSeen = new Set<string>();
+  let watching = true;
+  const watcher = (async () => {
+    while (watching) {
+      try {
+        for (const v of await ben.locator('[data-testid="model-stages"]').evaluateAll((els) => els.map((el) => el.getAttribute("data-stage") ?? ""))) if (v) stagesSeen.add(v);
+      } catch {
+        // Ben's page is mid-navigation; the next pass reads it again.
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  })();
+
+  // Place it beside the neighbour through the place_product WebMCP tool: the first side of the
+  // neighbour where the lamp stays inside the room and clear of every other placed item.
+  const snapNow = await getSnapshot(request, projectId);
+  const product = snapNow.products.find((p) => p.id === lamp.product_id)!;
+  expect(product.width_mm, "the lamp has a footprint").not.toBeNull();
+  const space = snapNow.space!;
+  const half = (w: number, d: number, rot: number) => (rot % 180 !== 0 ? { x: d / 2, y: w / 2 } : { x: w / 2, y: d / 2 });
+  const boxes = new Map(snapNow.bom.filter((b) => b.product).map((b) => [b.id, snapNow.products.find((p) => p.id === b.product_id)!]));
+  const others = snapNow.placements.filter((p) => p.bom_item_id !== lamp.id && boxes.get(p.bom_item_id)?.width_mm != null).map((p) => ({ ...p, h: half(boxes.get(p.bom_item_id)!.width_mm!, boxes.get(p.bom_item_id)!.depth_mm!, p.rotation_deg), kind: snapNow.bom.find((b) => b.id === p.bom_item_id)!.kind }));
+  const neighbour = others.find((p) => p.bom_item_id === seating!.id)!;
+  const lampHalf = half(product.width_mm!, product.depth_mm!, 0);
+  const candidates = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 }
+  ].map((side) => ({ x: Math.round(neighbour.x_mm + side.x * (neighbour.h.x + BESIDE_GAP_MM + lampHalf.x)), y: Math.round(neighbour.y_mm + side.y * (neighbour.h.y + BESIDE_GAP_MM + lampHalf.y)) }));
+  const inside = (c: { x: number; y: number }) => c.x - lampHalf.x >= 0 && c.x + lampHalf.x <= space.width_mm && c.y - lampHalf.y >= 0 && c.y + lampHalf.y <= space.length_mm;
+  const clear = (c: { x: number; y: number }) => others.every((o) => o.kind === "soft_floor" || Math.abs(o.x_mm - c.x) >= o.h.x + lampHalf.x || Math.abs(o.y_mm - c.y) >= o.h.y + lampHalf.y);
+  const spot = candidates.find((c) => inside(c) && clear(c)) ?? { x: Math.round(space.width_mm / 2), y: Math.round(space.length_mm / 2) };
+  const placed = await executeTool(ben, "place_product", { bomItemId: lamp.id, xMm: spot.x, yMm: spot.y, rotationDeg: 0 });
+  expect(placed.isError, placed.text).toBe(false);
+  const afterPlace = await waitForSnapshot(request, projectId, (s) => s.placements.some((p) => p.bom_item_id === lamp.id), 10_000);
+  expect(afterPlace.placements.find((p) => p.bom_item_id === lamp.id)).toMatchObject({ x_mm: spot.x, y_mm: spot.y });
+  const geometry = (await (await request.get(`/api/projects/${projectId}/placements`)).json()) as { geometry: { rules: { rule: { relation: string; subject: string }; pass: boolean | null; detail: string }[] } };
+  const evaluated = geometry.geometry.rules.find((r) => r.rule.relation === "beside")!;
+  expect(evaluated, "the beside rule is evaluated").toBeTruthy();
+  expect([true, false]).toContain(evaluated.pass);
+  expect(evaluated.detail.length).toBeGreaterThan(0);
+  note("beside rule", `${evaluated.pass ? "pass" : "fail"} at (${spot.x}, ${spot.y}): ${evaluated.detail}`);
+
+  // Ben's plan shows the rule's row and, with the lamp selected, its stage strip.
+  await openStage(ben, projectId, "place");
+  const row = ben.locator('[data-testid="rule-result"][data-relation="beside"]');
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText(new RegExp(`${itemName} beside`, "i"));
+  await expect(row).toHaveAttribute("data-result", evaluated.pass ? "pass" : "fail");
+  expect((await row.getAttribute("title"))?.length).toBeGreaterThan(0);
+  await ben.getByTestId("plan-view").locator(`svg g[aria-label="${lamp.product!.title.replace(/"/g, '\\"')}"]`).focus();
+
+  // The model job runs to ready or proxy while the strip advances through its stages.
+  const jobOf = (s: Snapshot) => s.model_jobs?.[lamp.product_id];
+  const done = await waitForSnapshot(request, projectId, (s) => ["ready", "proxy"].includes(jobOf(s)?.status ?? ""), MODEL_WAIT_MS);
+  const job = jobOf(done)!;
+  await expect(ben.locator(`[data-testid="model-stages"][data-stage="${job.status}"]`).first()).toBeVisible({ timeout: 15_000 });
+  watching = false;
+  await watcher;
+  const apiStages = job.stages.map((s) => s.name);
+  note("model job", `${job.status} after ${job.elapsed_ms} ms; stages ${apiStages.join(" > ")}; UI showed ${[...stagesSeen].join(", ")}${job.error ? `; error ${job.error}` : ""}`);
+  if (!cached) {
+    expect(apiStages).toContain("image_fetched");
+    expect([...stagesSeen].some((s) => ["image_fetched", "mesh_generated", "normalized", "verified"].includes(s)), `UI strip stages seen: ${[...stagesSeen].join(", ")}`).toBe(true);
+  }
+  expect(done.products.find((p) => p.id === lamp.product_id)!.model_status).toBe(job.status);
+  if (job.status === "ready") expect(job.glb_url).toMatch(/\.glb$/);
+
+  // The 3D view shows the generated model (or its proxy) in place for the recording.
+  await ben.getByTestId("view-toggle-3d").click();
+  await expect(ben.locator("main canvas")).toBeVisible({ timeout: 20_000 });
+  await ben.waitForTimeout(4000);
+});
+
 test("Scene 11: Zach asks for a cheaper coffee table; the replacement artifact appears under the board's phrase", async () => {
   await sendChat(zach, `Find a cheaper ${REPLACED_ITEM.toLowerCase()} that still matches everything we agreed on.`);
   const ranking = zach.getByTestId("artifact-ranking");
@@ -396,10 +567,13 @@ async function sourceThroughSearchPanel(page: Page, request: APIRequestContext, 
 
 /**
  * Runs one item's search and adds the priciest dimensioned card that `accept`s, or the priciest
- * under the cap. Fast Refresh from a concurrent source edit resets the panel mid-flow, so each
- * attempt re-runs the search and the add is confirmed against the API rather than the card.
+ * under the cap; `pick` flips the order to cheapest first, demands a product image, or skips
+ * titles already tried. Fast Refresh from a concurrent source edit resets the panel mid-flow, so
+ * each attempt re-runs the search and the add is confirmed against the API rather than the card.
  */
-async function addFromSearch(panel: Locator, request: APIRequestContext, projectId: string, category: string, maxUsd: number, accept: (cents: number) => boolean) {
+type SearchPick = { cheapest?: boolean; requireImage?: boolean; skipTitles?: Set<string> };
+
+async function addFromSearch(panel: Locator, request: APIRequestContext, projectId: string, category: string, maxUsd: number, accept: (cents: number) => boolean, pick: SearchPick = {}) {
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       await panel.locator("#search-cat").selectOption({ label: category });
@@ -407,14 +581,14 @@ async function addFromSearch(panel: Locator, request: APIRequestContext, project
       await panel.getByRole("button", { name: "Search" }).click();
       const cards = panel.locator(".card").filter({ hasNot: panel.page().locator(".tag", { hasText: "dimensions unknown" }) });
       await expect(cards.first()).toBeVisible({ timeout: 60_000 });
-      const texts = await cards.evaluateAll((els) => els.map((el) => el.querySelector(".meta")?.textContent ?? ""));
-      const priced = texts
-        .map((text, index) => ({ index, cents: Math.round(Number((text.match(/\$([\d,]+(?:\.\d+)?)/)?.[1] ?? "0").replace(/,/g, "")) * 100) }))
-        .filter((p) => p.cents > 0 && p.cents <= maxUsd * 100)
-        .sort((a, b) => b.cents - a.cents);
+      const read = await cards.evaluateAll((els) => els.map((el) => ({ meta: el.querySelector(".meta")?.textContent ?? "", title: el.querySelector(".name")?.textContent ?? "", image: el.querySelector("img") !== null })));
+      const priced = read
+        .map((card, index) => ({ index, title: card.title, image: card.image, cents: Math.round(Number((card.meta.match(/\$([\d,]+(?:\.\d+)?)/)?.[1] ?? "0").replace(/,/g, "")) * 100) }))
+        .filter((p) => p.cents > 0 && p.cents <= maxUsd * 100 && (!pick.requireImage || p.image) && !pick.skipTitles?.has(p.title))
+        .sort((a, b) => (pick.cheapest ? a.cents - b.cents : b.cents - a.cents));
       expect(priced.length, `no dimensioned ${category} under $${maxUsd}`).toBeGreaterThan(0);
-      const pick = priced.find((p) => accept(p.cents)) ?? priced[0];
-      await cards.nth(pick.index).getByRole("button", { name: "Add to project" }).click({ timeout: 10_000 });
+      const chosen = priced.find((p) => accept(p.cents)) ?? priced[0];
+      await cards.nth(chosen.index).getByRole("button", { name: "Add to project" }).click({ timeout: 10_000 });
       await waitForSnapshot(request, projectId, (s) => bomLineFor(s, category) !== undefined, 30_000);
       return;
     } catch (e) {

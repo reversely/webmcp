@@ -17,9 +17,11 @@ export type Snapshot = {
   project: { id: string; name: string; budget_cents: number; required_by: string | null; delivery_address_json: { postal_code?: string; city?: string; region?: string } | null; version: number };
   space: { width_mm: number; length_mm: number } | null;
   requirements: { type: string; status: string; value_json: unknown }[];
-  products: { id: string; title: string; price_cents: number; spatial_status: string; model_status: string }[];
+  products: { id: string; title: string; price_cents: number; spatial_status: string; model_status: string; primary_image_url: string | null; width_mm: number | null; depth_mm: number | null; height_mm: number | null; glb_url: string | null }[];
   bom: { id: string; product_id: string; category: string; kind: string; status: string; product: { title: string; price_cents: number; spatial_status: string } | null }[];
-  placements: { bom_item_id: string }[];
+  placements: { bom_item_id: string; x_mm: number; y_mm: number; rotation_deg: number }[];
+  /** One 3D job per product that has one, keyed by product id; `stages` is oldest first (#49). */
+  model_jobs?: Record<string, { status: string; glb_url: string | null; error: string | null; elapsed_ms: number; stages: { name: string; at: string; detail?: string }[] }>;
   budget: { committed_cents: number; budget_cents: number; state: string; overage_cents: number };
   messages: { id: string; role: string; author: string; text: string; artifact?: { kind: string; id: string; data: unknown } }[];
 };
@@ -38,11 +40,14 @@ export async function getSnapshot(request: APIRequestContext, projectId: string)
 
 export const activeBom = (snap: Snapshot) => snap.bom.filter((b) => b.status !== "removed");
 
+/** The name inside a `required_item` value, whichever of the two stored shapes it takes. */
+export const requirementName = (value: unknown) => (typeof value === "string" ? value : (value as { name: string }).name);
+
 /** The project's agreed items in their own words, as the API stores them ({ name, kind } or a bare string). */
 export const requiredItems = (snap: Snapshot) =>
   snap.requirements
     .filter((r) => r.type === "required_item" && r.status === "agreed")
-    .map((r) => (typeof r.value_json === "string" ? r.value_json : (r.value_json as { name: string }).name));
+    .map((r) => requirementName(r.value_json));
 
 /** The active BOM line for an item named on the board, matched case-insensitively. */
 export const bomLineFor = (snap: Snapshot, item: string) => activeBom(snap).find((b) => b.category.toLowerCase() === item.toLowerCase());
@@ -126,10 +131,15 @@ export async function waitForTools(page: Page) {
   await expect(page.getByTestId("webmcp-status")).toHaveAttribute("data-status", "ready", { timeout: 20_000 });
 }
 
+/**
+ * Sends a chat message and waits for it to show in the log. The log is not optimistic: the text
+ * appears once the POST returns or the 4 s poll reads it back, and a dev-server route compile on
+ * the first hit can hold the POST past the default expect timeout.
+ */
 export async function sendChat(page: Page, text: string) {
   await page.getByTestId("chat-input").fill(text);
   await page.getByTestId("chat-send").click();
-  await expect(page.getByTestId("chat-log")).toContainText(text);
+  await expect(page.getByTestId("chat-log")).toContainText(text, { timeout: 30_000 });
 }
 
 /** Executes a registered WebMCP tool through the page's document.modelContext. */
