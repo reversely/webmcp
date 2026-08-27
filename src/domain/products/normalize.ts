@@ -30,7 +30,7 @@ const CatalogProduct = z.looseObject({
   title: z.string().optional(),
   name: z.string().optional(),
   url: z.string().optional(),
-  description: z.union([z.string(), z.looseObject({ html: z.string().optional(), text: z.string().optional() })]).optional(),
+  description: z.union([z.string(), z.looseObject({ html: z.string().optional(), text: z.string().optional(), plain: z.string().optional() })]).optional(),
   media: z.array(Media).optional(),
   images: z.array(Media).optional(),
   metadata: z.looseObject({ tech_specs: z.string().optional() }).optional(),
@@ -84,7 +84,7 @@ function primaryImageUrl(catalog: CatalogProduct, variant: z.infer<typeof Catalo
 function descriptionText(description: CatalogProduct["description"]): string {
   if (!description) return "";
   if (typeof description === "string") return stripHtml(description);
-  return description.text ?? stripHtml(description.html ?? "");
+  return description.text ?? description.plain ?? stripHtml(description.html ?? "");
 }
 
 const ENTITIES: Record<string, string> = {

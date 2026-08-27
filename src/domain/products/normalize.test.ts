@@ -109,3 +109,18 @@ describe("stripHtml", () => {
     );
   });
 });
+
+describe("Global Catalog description shape", () => {
+  it("reads a {plain} description as the Global endpoint returns it", () => {
+    const raw = {
+      id: "gid://shopify/p/abc",
+      title: "Campbell 3 Seater Sofa",
+      description: { plain: "A three seater.\nDimensions: 197 x 134 x 90 cm" },
+      variants: [{ id: "gid://shopify/ProductVariant/1", price: { amount: 37499, currency: "USD" }, availability: { available: true } }]
+    };
+    const product = normalizeCatalogProduct(raw, { merchant: "daalshome.myshopify.com", sourceUrl: "https://daalshome.myshopify.com/products/campbell" });
+    expect(product.description).toContain("A three seater.");
+    expect(product.width_mm).toBe(1970);
+    expect(product.spatial_status).toBe("grounded");
+  });
+});

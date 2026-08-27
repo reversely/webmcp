@@ -25,12 +25,7 @@ export interface IngestProductUrlResult {
   budget: Budget;
 }
 
-export type ProductAddedEvent = {
-  type: "PRODUCT_ADDED";
-  project_id: string;
-  product_id: string;
-  candidate_id: string;
-};
+export type ProductAddedEvent = Extract<DomainEvent, { type: "PRODUCT_ADDED" }>;
 
 /**
  * Adds a pasted Shopify product URL to a project: looks it up, upserts the global Product row,
@@ -63,9 +58,7 @@ export async function ingestProductUrl(store: ProjectStore, request: IngestProdu
         product_id: product.id,
         candidate_id: candidate.id
       };
-      // PRODUCT_ADDED is not yet a member of the bom DomainEvent union; the store's sink is the
-      // same for both, so it is emitted through the same buffered channel to keep event order.
-      store.emit(event as unknown as DomainEvent);
+      store.emit(event);
     }
     const { budget } = regenerateBom(store, request.projectId);
     return { product, candidate, budget, created };

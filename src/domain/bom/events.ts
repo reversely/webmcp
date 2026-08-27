@@ -9,6 +9,7 @@ export type Budget = {
 };
 
 export type DomainEvent =
+  | { type: "PRODUCT_ADDED"; project_id: string; product_id: string; candidate_id: string }
   | { type: "BOM_REGENERATED"; project_id: string; inserted_item_ids: string[]; budget: Budget }
   | { type: "BUDGET_VIOLATED"; project_id: string; budget: Budget }
   | {
