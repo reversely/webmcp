@@ -10,6 +10,13 @@ type Snapshot = Omit<ProjectSnapshot, "messages"> & { messages: ArtifactMessage[
 
 const dollars = (c: number) => `$${(c / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
+/** Rail tag for a product's 3D state: only the states a person may wait on or wonder about (PRD 15.1); ready shows nothing. */
+function modelTag(status: ProjectSnapshot["products"][number]["model_status"]): string | null {
+  if (status === "queued" || status === "generating") return "3D generating";
+  if (status === "proxy") return "3D proxy";
+  return null;
+}
+
 /**
  * Right column from stage 2 onward: the BOM and budget rail, then the project chat. Polls the
  * snapshot every few seconds until realtime (#18) replaces it. Messages carry optional artifacts
@@ -105,6 +112,11 @@ export function SidePanel({ projectId, children }: { projectId: string; children
                         ? ` · ${formatFeetInches(b.product.width_mm)} × ${formatFeetInches(b.product.depth_mm!)}`
                         : " · dimensions unknown"}
                     </div>
+                    {b.product && modelTag(b.product.model_status) && (
+                      <span className="tag" style={{ marginTop: 4 }} data-testid="model-tag">
+                        {modelTag(b.product.model_status)}
+                      </span>
+                    )}
                   </div>
                   <div>{b.product ? dollars(b.product.price_cents * b.quantity) : ""}</div>
                 </div>

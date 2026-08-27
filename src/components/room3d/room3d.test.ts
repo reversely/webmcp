@@ -1,14 +1,26 @@
-import { Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 
-import { DEMO_BOXES } from "../../domain/three/demo-boxes";
-import { proxyForCategory } from "../../domain/three/proxy";
-import type { Box, Category } from "../../domain/types";
-import { CATEGORY_COLOURS, averageColourFromImage, averagePixelColour, fallbackColour, type CanvasLike } from "./colour";
-import { PLAIN_GROUP, TEXTURED_GROUP, classifyFace, withFaceGroups } from "./faces";
-import { GRID_STEP_M, cameraPose, gridSegments, itemTransform, roomMetres } from "./transform";
+import { CATEGORY_COLOURS, averageColourFromImage, averagePixelColour, fallbackColour, productColourFromImage, productPixelColour, type CanvasLike } from "./colour";
+import { GRID_STEP_M, cameraPose, gridSegments, itemRenderMode, itemTransform, roomMetres } from "./transform";
 
-const boxFor = (category: Category): Box => DEMO_BOXES.find(([c]) => c === category)![1];
+/** A 32 × 32 RGBA buffer: white studio background with a coloured block over the centre `inner` × `inner` pixels. */
+function productImage(inner: number, rgb: [number, number, number], size = 32): Uint8ClampedArray {
+  const data = new Uint8ClampedArray(size * size * 4);
+  const start = (size - inner) / 2;
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const centre = x >= start && x < start + inner && y >= start && y < start + inner;
+      data.set(centre ? [...rgb, 255] : [255, 255, 255, 255], (y * size + x) * 4);
+    }
+  }
+  return data;
+}
+
+const canvasReturning = (data: ArrayLike<number>): CanvasLike => ({
+  width: 0,
+  height: 0,
+  getContext: () => ({ drawImage: () => {}, getImageData: () => ({ data }) })
+});
 
 describe("itemTransform", () => {
   it("maps project (x, y) to three (x, 0, -y) in metres and rotation_deg to radians about +Y", () => {
@@ -96,59 +108,41 @@ describe("average-colour fallback", () => {
   });
 });
 
-describe("texture-to-face mapping", () => {
-  it.each(DEMO_BOXES)("%s groups cover every triangle, textured first", (category, box) => {
-    const { geometry, texturedTriangles, plainTriangles } = withFaceGroups(category, box, proxyForCategory(category, box));
-    const total = geometry.getIndex()!.count / 3;
-    expect(texturedTriangles + plainTriangles).toBe(total);
-    expect(texturedTriangles).toBeGreaterThan(0);
-    expect(geometry.groups).toEqual([
-      { start: 0, count: texturedTriangles * 3, materialIndex: TEXTURED_GROUP },
-      { start: texturedTriangles * 3, count: plainTriangles * 3, materialIndex: PLAIN_GROUP }
-    ]);
-    geometry.dispose();
+describe("product colour sampler", () => {
+  it("returns the centre colour of a product on a white background, not a white-tinted average", () => {
+    const data = productImage(12, [40, 80, 120]);
+    expect(productPixelColour(data, 32, 32)).toBe("#285078");
+    expect(averagePixelColour(data)).not.toBe("#285078");
+    expect(productColourFromImage({}, () => canvasReturning(data))).toBe("#285078");
   });
 
-  it("sofa: seat top and back front are textured, the sides and rear are plain", () => {
-    const box = boxFor("sofa");
-    const h = box.height_mm / 1000;
-    const d = box.depth_mm / 1000;
-    const up = new Vector3(0, 1, 0);
-    expect(classifyFace("sofa", box, up, new Vector3(0, h * 0.45, -d * 0.2))).toBe("textured");
-    expect(classifyFace("sofa", box, new Vector3(0, 0, -1), new Vector3(0, h * 0.8, d / 2 - d * 0.25))).toBe("textured");
-    expect(classifyFace("sofa", box, new Vector3(1, 0, 0), new Vector3(box.width_mm / 2000, h * 0.2, 0))).toBe("plain");
-    expect(classifyFace("sofa", box, new Vector3(0, 0, 1), new Vector3(0, h / 2, d / 2))).toBe("plain");
+  it("takes the median inside the central crop, so an off-centre highlight does not tint it", () => {
+    const data = productImage(20, [200, 30, 30]);
+    // A bright stripe through the crop's top rows: a minority of the crop, so the median holds.
+    for (let x = 8; x < 24; x++) data.set([30, 200, 30, 255], (8 * 32 + x) * 4);
+    expect(productPixelColour(data, 32, 32)).toBe("#c81e1e");
   });
 
-  it("table: only the top slab is textured, never a leg", () => {
-    for (const category of ["coffee_table", "side_table"] as const) {
-      const box = boxFor(category);
-      const { geometry, texturedTriangles } = withFaceGroups(category, box, proxyForCategory(category, box));
-      const h = box.height_mm / 1000;
-      const slabBottom = h - Math.min(0.04, h / 4) - 1e-4;
-      const position = geometry.getAttribute("position");
-      const index = geometry.getIndex()!;
-      for (let i = 0; i < texturedTriangles * 3; i++) {
-        expect(position.getY(index.getX(i))).toBeGreaterThanOrEqual(slabBottom);
-      }
-      const topFace = classifyFace(category, box, new Vector3(0, 1, 0), new Vector3(0, h, 0));
-      expect(topFace).toBe("textured");
-      expect(classifyFace(category, box, new Vector3(1, 0, 0), new Vector3(0.2, h / 2, 0))).toBe("plain");
-      geometry.dispose();
+  it("ignores pixels outside the central 50% crop", () => {
+    const data = productImage(32, [255, 255, 255]);
+    for (let y = 0; y < 32; y++) for (let x = 0; x < 4; x++) data.set([0, 0, 0, 255], (y * 32 + x) * 4);
+    expect(productPixelColour(data, 32, 32)).toBeNull();
+  });
+
+  it("falls back to the average when the crop is all background, then to the category colour", () => {
+    const white = productImage(0, [0, 0, 0]);
+    expect(productPixelColour(white, 32, 32)).toBeNull();
+    expect(productColourFromImage({}, () => canvasReturning(white))).toBe("#ffffff");
+    expect(fallbackColour(productColourFromImage({}, () => ({ width: 0, height: 0, getContext: () => null })), "rug")).toBe(CATEGORY_COLOURS.rug);
+  });
+});
+
+describe("itemRenderMode", () => {
+  it("renders the GLB only when the job is ready and the URL is set", () => {
+    expect(itemRenderMode({ modelStatus: "ready", glbUrl: "/models/abc.glb" })).toBe("glb");
+    expect(itemRenderMode({ modelStatus: "ready", glbUrl: null })).toBe("proxy");
+    for (const modelStatus of ["no_model", "queued", "generating", "proxy", "failed"] as const) {
+      expect(itemRenderMode({ modelStatus, glbUrl: "/models/abc.glb" })).toBe("proxy");
     }
-  });
-
-  it("ottoman: the sides are textured and the top is plain", () => {
-    const box = boxFor("ottoman");
-    expect(classifyFace("ottoman", box, new Vector3(0, 0, -1), new Vector3(0, 0.2, -0.3))).toBe("textured");
-    expect(classifyFace("ottoman", box, new Vector3(0, 1, 0), new Vector3(0, 0.43, 0))).toBe("plain");
-  });
-
-  it("rug: the upward plane is textured and the edges are plain", () => {
-    const box = boxFor("rug");
-    expect(classifyFace("rug", box, new Vector3(0, 1, 0), new Vector3(0, 0.01, 0))).toBe("textured");
-    expect(classifyFace("rug", box, new Vector3(0, 0, -1), new Vector3(0, 0.005, -1.5))).toBe("plain");
-    const { texturedTriangles } = withFaceGroups("rug", box, proxyForCategory("rug", box));
-    expect(texturedTriangles).toBe(2);
   });
 });

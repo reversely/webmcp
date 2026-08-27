@@ -7,6 +7,7 @@
 import { checkpoint, complete, failRecoverable, requestInput, startRun } from "../domain/agent-run";
 import { regenerateBom } from "../domain/bom";
 import { rankDeliveryConfidence } from "../domain/delivery";
+import { startModelGeneration } from "../domain/ingestion/hooks";
 import { candidateFits, type FloorPlacement } from "../domain/geometry";
 import {
   budgetWindow,
@@ -280,13 +281,15 @@ async function finish(projectId: string, run: AgentRun, cp: SourcingCheckpoint, 
     s.activeRuns.delete(projectId);
     return { status: "no_match", categories: missing.length > 0 ? missing : ["coffee_table"], artifact_id: cp.artifact_id };
   }
-  // Step 13, 3D generation, is a stub in this build (request_3d_model returns not_available).
   const layoutChecked = writeLayout(projectId);
   complete(s.runs, run.id);
   s.activeRuns.delete(projectId);
   const selected: Partial<Record<Category, string>> = {};
   for (const [category, pick] of Object.entries(recorded.selected) as [Category, RankedCandidate][]) {
-    selected[category] = s.store.candidates.get(pick.id)!.product_id;
+    const productId = s.store.candidates.get(pick.id)!.product_id;
+    selected[category] = productId;
+    // Step 13: 3D generation for each selected product, detached (PRD 15.1 never blocks the BOM).
+    startModelGeneration(s.store.getProduct(productId));
   }
   return { status: "complete", subtotal_cents: recorded.subtotal_cents, selected, artifact_id: cp.artifact_id, layout_checked: layoutChecked };
 }

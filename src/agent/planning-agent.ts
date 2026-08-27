@@ -5,11 +5,12 @@
  */
 import { Agent, run, tool, type AgentInputItem } from "@openai/agents";
 import { z } from "zod";
-import { addToBom, calculateBudget } from "../domain/bom";
+import { addToBom, calculateBudget, NotFoundError } from "../domain/bom";
 import { candidateFits } from "../domain/geometry";
 import { ingestProductUrl } from "../domain/ingestion";
 import { Category, type Requirement } from "../domain/types";
 import { appState, geometryFor, snapshot, spaceFor, type ChatMessage } from "../server/state";
+import { requestModel } from "../server/three-d";
 import { boxOf, isAvailable, searchCategory, sellerOf, shipsToFor, upsertCandidate } from "./catalog";
 import { evaluateDelivery } from "./delivery";
 import { MODEL } from "./model";
@@ -209,9 +210,16 @@ function makeTools(ctx: AgentContext) {
     }),
     tool({
       name: "request_3d_model",
-      description: "Enqueues 3D generation for a product. Not available in this build.",
+      description: "Starts 3D generation for a product, or returns the job that already covers it. Returns the job row: status queued, generating, ready (with glb_url), or proxy (with the error).",
       parameters: z.object({ product_id: z.string() }),
-      execute: async () => ({ status: "not_available" })
+      execute: async ({ product_id }) => {
+        try {
+          return await requestModel(product_id);
+        } catch (e) {
+          if (e instanceof NotFoundError) return { error: e.message };
+          throw e;
+        }
+      }
     }),
     tool({
       name: "source_room",

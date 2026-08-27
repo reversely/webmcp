@@ -6,6 +6,7 @@
 import { catalogClient, type CatalogClient } from "../commerce";
 import { createInMemoryStore, type AgentRunStore } from "../domain/agent-run";
 import { calculateBudget, regenerateBom, ProjectStore, type Budget, type DomainEvent } from "../domain/bom";
+import { startModelGeneration } from "../domain/ingestion/hooks";
 import { normalizeCatalogProduct } from "../domain/products/normalize";
 import { checkLayout, type LayoutCheck } from "../domain/geometry";
 import type { Candidate, Category, DeliveryAddress, Placement, Product, Requirement, Space } from "../domain/types";
@@ -130,7 +131,7 @@ export function snapshot(projectId: string): ProjectSnapshot {
 export function addCatalogProduct(projectId: string, raw: unknown, category: Category, merchant: string, sourceUrl: string) {
   const s = appState();
   const fresh = normalizeCatalogProduct(raw, { merchant, sourceUrl });
-  return s.store.mutate(() => {
+  const added = s.store.mutate(() => {
     const existing = s.store.products.get(fresh.id);
     const product: Product = existing ? { ...fresh, glb_url: existing.glb_url, model_status: existing.model_status } : fresh;
     s.store.products.set(product.id, product);
@@ -154,6 +155,8 @@ export function addCatalogProduct(projectId: string, raw: unknown, category: Cat
     const { budget } = regenerateBom(s.store, projectId);
     return { product, candidate, budget };
   });
+  startModelGeneration(added.product);
+  return added;
 }
 
 export function pushMessage(projectId: string, message: Omit<ChatMessage, "id" | "at">): ChatMessage {

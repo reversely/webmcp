@@ -4,7 +4,7 @@ import { useState } from "react";
 import { demoItems, DEMO_SPACE } from "./demo-layout";
 import { Room3D } from "./Room3D";
 
-/** Standalone check of the room with the demo layout; pass product image URLs to texture the proxies. */
+/** Standalone check of the room with the demo layout; pass product image URLs to colour the proxies. */
 export function Room3DPreview({ imageUrls = [] }: { imageUrls?: string[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const items = demoItems(imageUrls);

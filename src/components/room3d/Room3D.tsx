@@ -1,23 +1,17 @@
 "use client";
-import { Edges, OrbitControls } from "@react-three/drei";
-import { Canvas, useThree, type ThreeEvent } from "@react-three/fiber";
+import { OrbitControls } from "@react-three/drei";
+import { Canvas, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useState } from "react";
 import { BufferAttribute, BufferGeometry, Object3D, PCFShadowMap } from "three";
 
-import { proxyForCategory } from "../../domain/three/proxy";
-import { withFaceGroups } from "./faces";
-import { cameraPose, gridSegments, itemTransform, roomMetres, type RoomMetres } from "./transform";
-import type { CameraPreset, Room3DProps, RoomItem } from "./types";
-import { useProductMaterial } from "./useProductMaterial";
+import { Item, SIGNATURE } from "./Item";
+import { cameraPose, gridSegments, roomMetres, type RoomMetres } from "./transform";
+import type { CameraPreset, Room3DProps } from "./types";
 
-/** The light-enterprise-ui signature colour (src/app/tokens.css --signature). */
-const SIGNATURE = "#35576B";
 const FLOOR = "#d6ccbf";
 const WALL = "#eef0f2";
 const GRID = "#a9b6bf";
 const PAPER = "#f2f4f5";
-const TEXTURE_ROUGHNESS = 0.75;
-const PLAIN_ROUGHNESS = 0.85;
 
 export function Room3D({ space, items, selectedId = null, onSelect, className }: Room3DProps) {
   const room = useMemo(() => roomMetres(space), [space]);
@@ -141,27 +135,5 @@ function Shell({ room }: { room: RoomMetres }) {
         <lineBasicMaterial color={GRID} />
       </lineSegments>
     </group>
-  );
-}
-
-function Item({ item, selected, onSelect }: { item: RoomItem; selected: boolean; onSelect?: (id: string | null) => void }) {
-  const { width_mm, depth_mm, height_mm } = item.box;
-  const geometry = useMemo(
-    () => withFaceGroups(item.category, { width_mm, depth_mm, height_mm }, proxyForCategory(item.category, { width_mm, depth_mm, height_mm })).geometry,
-    [item.category, width_mm, depth_mm, height_mm]
-  );
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  const { map, colour } = useProductMaterial(item.imageUrl, item.category);
-  const { position, rotationY } = itemTransform(item);
-  const handleClick = (e: ThreeEvent<MouseEvent>) => {
-    e.stopPropagation();
-    onSelect?.(item.id);
-  };
-  return (
-    <mesh geometry={geometry} position={position} rotation-y={rotationY} castShadow receiveShadow onClick={handleClick} name={item.id}>
-      <meshStandardMaterial key={map ? map.uuid : "plain"} attach="material-0" map={map} color={map ? "#ffffff" : colour} roughness={TEXTURE_ROUGHNESS} metalness={0} />
-      <meshStandardMaterial attach="material-1" color={colour} roughness={PLAIN_ROUGHNESS} metalness={0} />
-      {selected && <Edges color={SIGNATURE} threshold={20} lineWidth={1.5} />}
-    </mesh>
   );
 }

@@ -6,7 +6,7 @@ import { formatFeetInches } from "../../../../domain/types";
 import type { ProjectSnapshot } from "../../../../server/state";
 import { PlanView, type PlanItem } from "../components/plan-view";
 import { ProductSearch } from "../components/product-search";
-import { Room3DView } from "../components/room3d-view";
+import { Room3DView, type RoomItem } from "../components/room3d-view";
 import css from "../components/stages.module.css";
 
 type Pos = { x_mm: number; y_mm: number; rotation_deg: number };
@@ -14,6 +14,7 @@ type BomLine = ProjectSnapshot["bom"][number];
 
 const hasBox = (b: BomLine) => b.product?.spatial_status === "grounded" && b.product.width_mm != null && b.product.depth_mm != null;
 const label = (category: string) => category.replace("_", " ");
+const MODEL_POLL_MS = 4000;
 
 /**
  * Stage 3 (PRD 20): the 2D plan with the BOM's placed items, a tray for unplaced ones, and the
@@ -47,6 +48,17 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
     return () => window.removeEventListener("project:changed", onChange);
   }, [refresh]);
 
+  // Polls the snapshot alone (positions stay local, so a drag in progress is not reset) so a
+  // proxy swaps for its generated model when the job lands at ready (PRD 15.1).
+  useEffect(() => {
+    const poll = async () => {
+      const res = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
+      if (res.ok) setSnap((await res.json()) as ProjectSnapshot);
+    };
+    const t = setInterval(poll, MODEL_POLL_MS);
+    return () => clearInterval(t);
+  }, [projectId]);
+
   const lines = useMemo(() => snap.bom.filter((b) => b.status !== "removed"), [snap]);
   const placed: PlanItem[] = lines
     .filter((b) => hasBox(b) && positions[b.id])
@@ -61,6 +73,13 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
     }));
   const tray = lines.filter((b) => !positions[b.id]);
   const selected = placed.find((p) => p.id === selectedId) ?? null;
+  const productOf = new Map(lines.map((b) => [b.id, b.product!]));
+  const roomItems: RoomItem[] = placed.map((p) => {
+    const product = productOf.get(p.id)!;
+    return { id: p.id, category: p.category, title: p.title, imageUrl: p.image_url, glbUrl: product.glb_url, modelStatus: product.model_status, box: p.box, placement: p.placement };
+  });
+  const generated = roomItems.filter((i) => i.modelStatus === "ready").length;
+  const proxies = roomItems.length - generated;
 
   async function save(next: Record<string, Pos>) {
     setError(null);
@@ -124,6 +143,11 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
               <h2 className="surface-title" style={{ margin: 0 }}>
                 {space.name}, {formatFeetInches(space.width_mm)} × {formatFeetInches(space.length_mm)}
               </h2>
+              {roomItems.length > 0 && (
+                <div className={css.note} data-testid="model-caption">
+                  3D: {generated} generated, {proxies} {proxies === 1 ? "proxy" : "proxies"}
+                </div>
+              )}
             </div>
             <div className={css.segmented} role="group" aria-label="View">
               <button type="button" aria-pressed={view === "2d"} onClick={() => setView("2d")}>
@@ -156,7 +180,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
             {view === "2d" ? (
               <PlanView space={space} items={placed} selectedId={selectedId} clearances={geometry?.clearances} maxHeight={520} onSelect={setSelectedId} onMove={move} onDrop={() => save(positions)} />
             ) : (
-              <Room3DView space={space} items={placed.map((p) => ({ id: p.id, category: p.category, title: p.title, imageUrl: p.image_url, box: p.box, placement: p.placement }))} selectedId={selectedId} onSelect={setSelectedId} />
+              <Room3DView space={space} items={roomItems} selectedId={selectedId} onSelect={setSelectedId} />
             )}
           </div>
           <div className={css.status} style={{ marginTop: 12 }} aria-label="Geometry">

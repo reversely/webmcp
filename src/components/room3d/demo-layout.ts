@@ -6,7 +6,7 @@ import type { RoomItem, RoomSpace } from "./types";
 
 export const DEMO_SPACE: RoomSpace = { width_mm: 3658, length_mm: 5486, height_mm: null };
 
-type DemoItem = Omit<RoomItem, "imageUrl">;
+type DemoItem = Omit<RoomItem, "imageUrl" | "glbUrl" | "modelStatus">;
 
 export const DEMO_ITEMS: DemoItem[] = [
   { id: "sofa", category: "sofa", title: "Sofa", box: { width_mm: 2134, depth_mm: 914, height_mm: 838 }, placement: { x_mm: 1829, y_mm: 700, rotation_deg: 0 } },
@@ -16,7 +16,12 @@ export const DEMO_ITEMS: DemoItem[] = [
   { id: "side", category: "side_table", title: "Side table", box: { width_mm: 508, depth_mm: 508, height_mm: 610 }, placement: { x_mm: 3200, y_mm: 700, rotation_deg: 0 } }
 ];
 
-/** Pairs each demo item with an image URL, cycling through the list; no URLs means no textures. */
+/** Pairs each demo item with an image URL for its proxy colour, cycling through the list; no URLs means category colours. */
 export function demoItems(imageUrls: string[] = []): RoomItem[] {
-  return DEMO_ITEMS.map((item, i) => ({ ...item, imageUrl: imageUrls.length ? imageUrls[i % imageUrls.length] : null }));
+  return DEMO_ITEMS.map((item, i) => ({
+    ...item,
+    imageUrl: imageUrls.length ? imageUrls[i % imageUrls.length] : null,
+    glbUrl: null,
+    modelStatus: "proxy"
+  }));
 }
