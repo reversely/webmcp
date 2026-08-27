@@ -43,18 +43,22 @@ afterEach(async () => {
 });
 
 const jobFor = (productId: string) => [...appState().jobs.values()].find((j) => j.product_id === productId);
+const image = async () => ({ bytes: 1024, content_type: "image/webp" });
 
 describe("startModelGeneration", () => {
-  it("records a job at once and returns without waiting for it", () => {
-    const deps: ThreeDDeps = { modelsDir, fetchGlb: () => new Promise(() => {}) };
-    expect(startModelGeneration(product, deps)).toBeUndefined();
+  it("resolves with the job at once without waiting for the outcome", async () => {
+    const deps: ThreeDDeps = { modelsDir, fetchImage: image, fetchGlb: () => new Promise(() => {}) };
+    const returned = await startModelGeneration(product, deps);
     const job = jobFor(product.id);
-    expect(job?.status).toBe("queued");
-    expect(appState().store.getProduct(product.id).model_status).toBe("queued");
+    expect(returned?.id).toBe(job?.id);
+    expect(returned?.status).toBe("queued");
+    // The detached run may already have moved the row on before this reads it.
+    expect(["queued", "generating"]).toContain(job?.status);
+    expect(["queued", "generating"]).toContain(appState().store.getProduct(product.id).model_status);
   });
 
   it("does not throw when generation fails; the product lands at proxy", async () => {
-    const deps: ThreeDDeps = { modelsDir, fetchGlb: async () => { throw new Error("endpoint down"); } };
+    const deps: ThreeDDeps = { modelsDir, fetchImage: image, fetchGlb: async () => { throw new Error("endpoint down"); } };
     expect(() => startModelGeneration(product, deps)).not.toThrow();
     await vi.waitFor(() => expect(jobFor(product.id)?.status).toBe("proxy"));
     expect(jobFor(product.id)?.error).toBe("endpoint down");
@@ -63,7 +67,7 @@ describe("startModelGeneration", () => {
 
   it("does not throw for a product that is not in the store", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(() => startModelGeneration({ ...product, id: "prod_missing" }, { modelsDir, fetchGlb: async () => new Uint8Array() })).not.toThrow();
+    expect(() => startModelGeneration({ ...product, id: "prod_missing" }, { modelsDir, fetchImage: image, fetchGlb: async () => ({ glb: new Uint8Array() }) })).not.toThrow();
     await vi.waitFor(() => expect(warn).toHaveBeenCalled());
     warn.mockRestore();
   });
