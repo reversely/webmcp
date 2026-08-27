@@ -1,0 +1,96 @@
+[
+  {
+    "name": "Direct: read the project",
+    "messages": [{ "role": "user", "type": "message", "content": "What's in our living room project right now?" }],
+    "expectedCall": [{ "functionName": "get_project_state", "arguments": {} }]
+  },
+  {
+    "name": "Ambiguous: budget question implies reading state",
+    "messages": [{ "role": "user", "type": "message", "content": "Are we still under budget?" }],
+    "expectedCall": [{ "functionName": "get_project_state", "arguments": {} }]
+  },
+  {
+    "name": "Direct: add a pasted product URL",
+    "messages": [{ "role": "user", "type": "message", "content": "Add this to our project: https://floydhome.com/products/side-table-oak" }],
+    "expectedCall": [
+      { "functionName": "add_product", "arguments": { "url": { "$contains": "floydhome.com/products/side-table-oak" } } }
+    ]
+  },
+  {
+    "name": "Ambiguous: add a product and name its category",
+    "messages": [{ "role": "user", "type": "message", "content": "Zach found a coffee table he likes, https://sabai.design/products/the-essential-table, throw it in" }],
+    "expectedCall": [
+      { "functionName": "add_product", "arguments": { "url": { "$contains": "sabai.design/products/the-essential-table" }, "category": "coffee_table" } }
+    ]
+  },
+  {
+    "name": "Direct: set the budget",
+    "messages": [{ "role": "user", "type": "message", "content": "Set our budget to $2,500." }],
+    "expectedCall": [
+      { "functionName": "set_project_requirement", "arguments": { "type": "budget", "value": { "$any": true } } }
+    ]
+  },
+  {
+    "name": "Ambiguous: a deadline stated in prose",
+    "messages": [{ "role": "user", "type": "message", "content": "Everything has to be here before Ben's parents visit on September 15th." }],
+    "expectedCall": [
+      { "functionName": "set_project_requirement", "arguments": { "type": "delivery_date", "value": { "$contains": "2026-09-15" } } }
+    ]
+  },
+  {
+    "name": "Ambiguous: a palette stated in prose",
+    "messages": [{ "role": "user", "type": "message", "content": "We want warm browns and neutrals, with a little dark blue as an accent." }],
+    "expectedCall": [
+      { "functionName": "set_project_requirement", "arguments": { "type": "visual_direction", "value": { "$any": true } } }
+    ]
+  },
+  {
+    "name": "Direct: approve a BOM line",
+    "messages": [{ "role": "user", "type": "message", "content": "Approve the sofa, BOM line bom_sofa_1." }],
+    "expectedCall": [
+      { "functionName": "update_bom", "arguments": { "bomItemId": "bom_sofa_1", "action": "approve" } }
+    ]
+  },
+  {
+    "name": "Ambiguous: remove requires reading state first",
+    "messages": [{ "role": "user", "type": "message", "content": "Actually, drop the ottoman." }],
+    "expectedCall": [
+      { "functionName": "get_project_state", "arguments": {} },
+      { "functionName": "update_bom", "arguments": { "bomItemId": { "$type": "string" }, "action": "remove" } }
+    ]
+  },
+  {
+    "name": "Direct: replace a BOM item with a known product",
+    "messages": [{ "role": "user", "type": "message", "content": "Swap BOM line bom_table_1 for product floydhome.com:8457432072354." }],
+    "expectedCall": [
+      { "functionName": "replace_bom_item", "arguments": { "existingBomItemId": "bom_table_1", "replacementProductId": "floydhome.com:8457432072354" } }
+    ]
+  },
+  {
+    "name": "Direct: place a product",
+    "messages": [{ "role": "user", "type": "message", "content": "Put BOM line bom_sofa_1 at x 1829 mm, y 457 mm, facing into the room (rotation 0)." }],
+    "expectedCall": [
+      { "functionName": "place_product", "arguments": { "bomItemId": "bom_sofa_1", "xMm": 1829, "yMm": 457, "rotationDeg": 0 } }
+    ]
+  },
+  {
+    "name": "Ambiguous: fit and conflicts imply evaluate_project",
+    "messages": [{ "role": "user", "type": "message", "content": "Does this layout meet what we agreed on?" }],
+    "expectedCall": [{ "functionName": "evaluate_project", "arguments": {} }]
+  },
+  {
+    "name": "Journey: side table pushes over budget, then evaluate",
+    "messages": [
+      { "role": "user", "type": "message", "content": "Add https://floydhome.com/products/side-table-oak as a side table, then tell me whether we're still on track for budget and delivery." }
+    ],
+    "expectedCall": [
+      { "functionName": "add_product", "arguments": { "url": { "$contains": "side-table-oak" }, "category": "side_table" } },
+      {
+        "unordered": [
+          { "functionName": "evaluate_project", "arguments": {} },
+          { "functionName": "get_project_state", "arguments": {} }
+        ]
+      }
+    ]
+  }
+]
