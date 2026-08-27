@@ -52,10 +52,12 @@ const COMPILE_INSTRUCTIONS =
   "(a bare \"12 x 18\" is feet; 1 ft = 304.8 mm; convert metres). Budget is the maximum in dollars. required_by is the " +
   `delivery deadline as an ISO date; the current year is ${new Date().getUTCFullYear()} and the date is in the future. ` +
   "required_items lists every furniture item the notes name, each in the writer's own words with its qualifiers kept " +
-  "(\"reading chair\", \"Coffee Table for 4\", \"big rug\"); a comma or 'and' list in one note is several items. " +
+  "(\"reading chair\", \"Coffee Table for 4\", \"big rug\") and its rendering kind: seating, table, storage, soft_floor (rugs), " +
+  "bed, lighting, decor, or other; null when unsure. A comma or 'and' list in one note is several items. " +
+  "A note that refers back to an item already named, with 'one', 'it', or 'that' (\"would love a wool one if the budget " +
+  "allows\" after \"big rug\"), is a wish about that item and never a new item; keep the item as the board first named it. " +
   "A note that names only colours (\"Dark blue, grey white\") is never an item: put each colour into suggested_colours " +
   "with a representative hex and the phrase it came from. " +
-  "with its rendering kind: seating, table, storage, soft_floor (rugs), bed, lighting, decor, or other; null when unsure. " +
   "A note that only states where an item goes (\"big rug under the desk\") still names its subject as an item. " +
   "visual_direction takes the swatch hex values only: lighter and warmer ones are base, darker or saturated ones accent; " +
   "never put colour words into visual_direction; they belong in suggested_colours. layout_requirements turns each spatial sentence into a relation (under, on_top_of, " +

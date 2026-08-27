@@ -30,4 +30,15 @@ describe.skipIf(process.env.LIVE_AGENT !== "1")("compileSpec live", () => {
     expect(spec!.room).toEqual({ width_mm: 3658, length_mm: 5486 });
     expect(spec!.budget?.maximum).toBe(2000);
   }, 60_000);
+
+  it("keeps the board's four items when a note refers back to the rug with 'one'", async () => {
+    const spec = await compileSpec(
+      ["12 × 18 living room", "big rug underneath everything", "$2500 max", "Need Sept 15", "Deep couch", "Round coffee table", "Leather ottoman", "would love a wool one if the budget allows"],
+      []
+    );
+    expect(spec).not.toBeNull();
+    const names = spec!.required_items.map((i) => i.name.toLowerCase());
+    expect(names).toEqual(expect.arrayContaining(["big rug", "deep couch", "round coffee table", "leather ottoman"]));
+    expect(names).toHaveLength(4);
+  }, 60_000);
 });
