@@ -4,6 +4,7 @@
  * the run checkpoints before the first delivery check so a missing address can pause it
  * (PRD 5.2, 10) and a later message can resume it from the delivery step.
  */
+import { CatalogError } from "../commerce";
 import { checkpoint, complete, failRecoverable, requestInput, startRun } from "../domain/agent-run";
 import { calculateBudget, regenerateBom, type Budget } from "../domain/bom";
 import { rankDeliveryConfidence } from "../domain/delivery";
@@ -210,6 +211,9 @@ async function searchAndEvaluate(projectId: string, cp: SourcingCheckpoint, item
     // candidates, and the search panel is the way to find one by hand.
     const message = e instanceof Error ? e.message : String(e);
     recordIssue(projectId, { source: "step search", severity: "error", message: `The catalog search for "${category}" failed (${message}); the item ends with no match in this run, so search for it in the search panel or ask again later.` });
+    // The card says the catalog refused the search, so "no match" is not read as "nothing sells".
+    const refused = e instanceof CatalogError && e.code === 429 ? `The catalog refused the search for "${category}" (rate limit) after a minute of retries; ask again shortly.` : `The catalog search for "${category}" failed, so the item has no candidates in this run.`;
+    cp.progress.notes = [...(cp.progress.notes ?? []), refused];
     progress.status = "no match";
     writeProgress(projectId, cp);
     return;

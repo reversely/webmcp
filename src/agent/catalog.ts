@@ -38,15 +38,19 @@ export function catalogDestination(destination: SearchDestination | undefined): 
 
 export type SearchOptions = { minCents?: number; maxCents?: number; limit?: number };
 
-/** Waits before each retry of a rate-limited search; a run sources one search per item, so a burst of items can trip the catalog's limit. */
-const RATE_LIMIT_WAITS_MS = [2000, 6000];
+/**
+ * Waits before each retry of a rate-limited search: a run searches one item after another, and
+ * the catalog's limit after a burst has outlasted eight seconds (#75), so the retries span
+ * about a minute before the search gives up.
+ */
+export const RATE_LIMIT_WAITS_MS = [2000, 6000, 15000, 30000];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * One live `search_catalog` call for `query`, filtered to in-stock products that ship to the
- * project address. An HTTP 429 from the catalog is retried after a pause, twice, before it
- * propagates.
+ * project address. An HTTP 429 from the catalog is retried after each wait in
+ * RATE_LIMIT_WAITS_MS before it propagates.
  */
 export async function searchProducts(client: CatalogClient, query: string, destination: SearchDestination | undefined, options: SearchOptions = {}): Promise<unknown[]> {
   const price = options.minCents !== undefined || options.maxCents !== undefined ? { min: options.minCents, max: options.maxCents } : undefined;

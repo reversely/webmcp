@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { catalogClient } from "../commerce";
 import type { DeliveryAddress } from "../domain/types";
-import { catalogDestination, searchProducts, shipsToFor } from "./catalog";
+import { catalogDestination, RATE_LIMIT_WAITS_MS, searchProducts, shipsToFor } from "./catalog";
 
 const CANADIAN: DeliveryAddress = { line1: "5 York Garden Way", city: "North York", region: "ON", postal_code: "M6A 0G9", country: "CA", currency: "CAD", source: "given" };
 
@@ -45,5 +45,39 @@ describe("searchProducts destination", () => {
     const args = (bodies[0].params as { arguments: { catalog: Record<string, unknown> } }).arguments.catalog;
     expect(args.filters).toEqual({ available: true });
     expect(args).not.toHaveProperty("context");
+  });
+});
+
+describe("searchProducts under a rate limit (#75)", () => {
+  afterEach(() => vi.useRealTimers());
+
+  function limitedClient(failures: number) {
+    let calls = 0;
+    const fetchImpl: typeof fetch = async () => {
+      calls += 1;
+      if (calls <= failures) return new Response("slow down", { status: 429 });
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify({ products: [] }) }] } }), { headers: { "Content-Type": "application/json" } });
+    };
+    return { client: catalogClient({ fetchImpl }), calls: () => calls };
+  }
+
+  it("retries once per wait and returns the products when the catalog answers before the waits run out", async () => {
+    vi.useFakeTimers();
+    const { client, calls } = limitedClient(RATE_LIMIT_WAITS_MS.length);
+    const pending = searchProducts(client, "big rug", undefined);
+    for (const wait of RATE_LIMIT_WAITS_MS) await vi.advanceTimersByTimeAsync(wait);
+    expect(await pending).toEqual([]);
+    expect(calls()).toBe(RATE_LIMIT_WAITS_MS.length + 1);
+  });
+
+  it("throws the 429 once every wait is spent", async () => {
+    vi.useFakeTimers();
+    const { client, calls } = limitedClient(RATE_LIMIT_WAITS_MS.length + 1);
+    const pending = searchProducts(client, "big rug", undefined).catch((e: Error) => e);
+    for (const wait of RATE_LIMIT_WAITS_MS) await vi.advanceTimersByTimeAsync(wait);
+    const error = await pending;
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toMatch(/429/);
+    expect(calls()).toBe(RATE_LIMIT_WAITS_MS.length + 1);
   });
 });

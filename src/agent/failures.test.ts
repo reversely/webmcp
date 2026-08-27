@@ -13,7 +13,7 @@ import { startModelGeneration } from "../domain/ingestion/hooks";
 import { appState, snapshot } from "../server/state";
 import type { ThreeDDeps } from "../server/three-d";
 import { issuesFor, resetTrace, spansFor, withProject } from "../server/trace";
-import { searchProducts, upsertCandidate } from "./catalog";
+import { RATE_LIMIT_WAITS_MS, searchProducts, upsertCandidate } from "./catalog";
 import { compileSpec, estimateRoom } from "./compile";
 import { evaluateDelivery } from "./delivery";
 import { inferKind } from "./kinds";
@@ -164,17 +164,17 @@ describe("PRD 17: Shopify search failure", () => {
     expect(calls).toEqual([429, 429, 200]);
   });
 
-  it("propagates a third 429 as a CatalogError naming the tool and host", async () => {
+  it("propagates a 429 that outlasts every retry wait as a CatalogError naming the tool and host", async () => {
     vi.useFakeTimers();
-    const { fetchImpl, calls } = statusFetch([429, 429, 429]);
+    const { fetchImpl, calls } = statusFetch(Array(RATE_LIMIT_WAITS_MS.length + 1).fill(429));
     const pending = searchProducts(catalogClient({ fetchImpl }), "three seat sofa", { country: "US" });
     const settled = pending.then(() => null, (e: unknown) => e);
-    await vi.advanceTimersByTimeAsync(8000);
+    for (const wait of RATE_LIMIT_WAITS_MS) await vi.advanceTimersByTimeAsync(wait);
     const error = (await settled) as CatalogError;
     expect(error).toBeInstanceOf(CatalogError);
     expect(error.code).toBe(429);
     expect(error.message).toBe("search_catalog: HTTP 429 from https://catalog.shopify.com/api/ucp/mcp");
-    expect(calls).toEqual([429, 429, 429]);
+    expect(calls).toEqual(Array(RATE_LIMIT_WAITS_MS.length + 1).fill(429));
   });
 
   it("a 5xx from the catalog ends that item as `no match` with an issue, and the run completes with the rest", async () => {
