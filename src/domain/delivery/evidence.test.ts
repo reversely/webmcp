@@ -168,3 +168,10 @@ describe("checkout option titles from the storefront survey", () => {
     expect(parse("Standard Fast Shipping (Ships in 1 business day via Standard Fast Shipping)").evidence.arrival_max).toBe("2026-09-02");
   });
 });
+
+describe("dated text from the past", () => {
+  it("ignores an explicit date before today instead of confirming it", () => {
+    const r = normalizeDeliveryEvidence({ kind: "duration_text", source: "shipping_policy", text: "Orders placed now arrive by September 17, 2024." }, { requiredBy: "2026-09-15", today: "2026-08-28" });
+    expect(r.status).toBe("unknown");
+  });
+});

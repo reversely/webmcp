@@ -85,6 +85,9 @@ function resolveDate(month: string, day: string, year: string | undefined, today
   const candidate = new Date(Date.UTC(candidateYear, monthIndex - 1, dayNumber));
   if (candidate.getUTCMonth() !== monthIndex - 1) return null;
   if (!year && candidate < todayDate) candidate.setUTCFullYear(candidateYear + 1);
+  // A dated sentence from a past season ("September 17, 2024") describes an old promise, not an
+  // arrival window; treat it as no evidence rather than a confirmed date.
+  if (year && candidate < todayDate) return null;
   return toIsoDate(candidate);
 }
 
