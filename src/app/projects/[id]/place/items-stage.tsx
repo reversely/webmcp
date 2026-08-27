@@ -129,7 +129,7 @@ export function ItemsStage({ projectId, initial }: { projectId: string; initial:
               <button type="button" aria-pressed={view === "2d"} onClick={() => setView("2d")}>
                 2D
               </button>
-              <button type="button" aria-pressed={view === "3d"} onClick={() => setView("3d")}>
+              <button type="button" aria-pressed={view === "3d"} onClick={() => setView("3d")} data-testid="view-toggle-3d">
                 3D
               </button>
             </div>

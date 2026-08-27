@@ -13,7 +13,7 @@ export function StageNav({ projectId, hasSpace, hasRequirements, bomCount }: { p
   const pathname = usePathname();
   const done: Record<string, boolean> = { board: hasRequirements, room: hasSpace, place: bomCount > 0, catalog: false };
   return (
-    <nav className="stages" aria-label="Stages">
+    <nav className="stages" aria-label="Stages" data-testid="stage-nav">
       {STAGES.map((stage, i) => {
         const href = `/projects/${projectId}/${stage.slug}`;
         const current = pathname === href;

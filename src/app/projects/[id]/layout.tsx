@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { appState, snapshot } from "../../../server/state";
 import { StageNav } from "./stage-nav";
 import { SidePanel } from "./side-panel";
+import { WebMcpProvider } from "./webmcp-provider";
 
 /**
  * The project frame (PRD 20): top bar with the four stages, the stage's centre surface, and the
@@ -18,6 +19,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
       <header className="topbar">
         <span className="brand">{snap.project.name}</span>
         <StageNav projectId={id} hasSpace={!!snap.space} hasRequirements={snap.requirements.length > 0} bomCount={snap.bom.filter((b) => b.status !== "removed").length} />
+        <WebMcpProvider projectId={id} />
       </header>
       <SidePanel projectId={id}>{children}</SidePanel>
     </>

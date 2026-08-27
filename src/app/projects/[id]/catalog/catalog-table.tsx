@@ -40,7 +40,7 @@ export function CatalogTable({ products, candidates }: { products: Product[]; ca
         <div className="empty">No products match this filter.</div>
       ) : (
         <div className={css.tableWrap}>
-          <table className={`table ${css.table}`}>
+          <table className={`table ${css.table}`} data-testid="catalog-table">
             <thead>
               <tr>
                 <th aria-label="Image" />

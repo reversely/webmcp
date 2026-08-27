@@ -192,7 +192,7 @@ export const TOOLS: readonly ToolDefinition[] = [
     route: {
       method: "PUT",
       path: `${PROJECT_PATH}/bom`,
-      body: ({ bomItemId, action, quantity }) => ({ bom_item_id: bomItemId, action, quantity })
+      body: ({ bomItemId, action, quantity }) => ({ bomItemId, action, quantity })
     }
   },
   {
@@ -251,10 +251,7 @@ export const TOOLS: readonly ToolDefinition[] = [
       method: "PUT",
       path: `${PROJECT_PATH}/placements`,
       body: ({ bomItemId, xMm, yMm, rotationDeg }) => ({
-        bom_item_id: bomItemId,
-        x_mm: xMm,
-        y_mm: yMm,
-        rotation_deg: rotationDeg
+        placements: [{ bom_item_id: bomItemId, x_mm: xMm, y_mm: yMm, rotation_deg: rotationDeg }]
       })
     }
   },

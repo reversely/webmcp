@@ -74,7 +74,7 @@ export function ProductSearch({ projectId, onAdded }: { projectId: string; onAdd
   }
 
   return (
-    <section className="surface" aria-label="Source products">
+    <section className="surface" aria-label="Source products" data-testid="product-search">
       <div className="eyebrow">Source products</div>
       <h2 className="surface-title">Search the catalog</h2>
       <form

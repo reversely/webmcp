@@ -143,7 +143,7 @@ export function PlanView({ space, door, window: win, items = [], selectedId, cle
     : [];
 
   return (
-    <div ref={ref} style={{ width: "100%" }}>
+    <div ref={ref} style={{ width: "100%" }} data-testid="plan-view">
       <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} role="img" aria-label={`Plan, ${formatFeetInches(W)} by ${formatFeetInches(L)}`} style={{ margin: "0 auto" }}>
         <rect x={X(0)} y={Y(L)} width={W * s} height={L * s} fill="var(--card)" stroke="var(--ink)" strokeWidth={2} />
         {ordered.map((item) => {
