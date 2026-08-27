@@ -20,6 +20,8 @@ export type SourcingCategory = {
 };
 
 export type SourcingData = {
+  /** The card's heading, written by the server for this project. */
+  title?: string;
   /** Progress per project item, keyed by the item's own phrase. */
   categories: Partial<Record<Category, SourcingCategory>>;
   subtotal_cents?: number;
@@ -62,6 +64,8 @@ export type SpecData = {
   required_items?: (string | { name: string; kind: Kind | null })[];
   visual_direction?: { base?: string[]; accent?: string[] } | null;
   layout_requirements?: (LayoutRule | { relation: string; subject: string; objects: string[]; distance_mm?: number | null })[];
+  /** Colours the model read from colour notes, each with the note it came from. */
+  suggested_colours?: { hex: string; from_text: string }[];
 };
 
 export type RoomEstimateData = {

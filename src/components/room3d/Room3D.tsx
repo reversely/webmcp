@@ -12,6 +12,8 @@ const FLOOR = "#d6ccbf";
 const WALL = "#eef0f2";
 const GRID = "#a9b6bf";
 const PAPER = "#f2f4f5";
+/* --signature-soft from tokens.css; the active preset is a chip in the app's segmented style. */
+const SIGNATURE_SOFT = "#e5edf2";
 
 export function Room3D({ space, items, selectedId = null, onSelect, className }: Room3DProps) {
   const room = useMemo(() => roomMetres(space), [space]);
@@ -54,12 +56,15 @@ export function Room3D({ space, items, selectedId = null, onSelect, className }:
 
 function presetButtonStyle(active: boolean): React.CSSProperties {
   return {
-    font: "500 12px/1 system-ui, sans-serif",
+    font: "inherit",
+    fontSize: 12,
+    fontWeight: 500,
+    lineHeight: 1,
     padding: "7px 10px",
     borderRadius: 6,
-    border: `1px solid ${active ? SIGNATURE : "#dfe5e9"}`,
-    background: active ? SIGNATURE : "#ffffff",
-    color: active ? "#ffffff" : "#1c2b36",
+    border: `1px solid ${active ? SIGNATURE_SOFT : "#dfe5e9"}`,
+    background: active ? SIGNATURE_SOFT : "#ffffff",
+    color: active ? SIGNATURE : "#1c2b36",
     cursor: "pointer"
   };
 }

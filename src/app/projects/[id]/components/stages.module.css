@@ -15,14 +15,16 @@
 .unit { font-size: 12px; color: var(--ink-3); }
 .mm { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
 
-.presets { display: flex; gap: 8px; flex-wrap: wrap; }
-.preset { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 12px; font-weight: 500; cursor: pointer; }
-.preset[aria-pressed="true"] { background: var(--signature-soft); color: var(--signature); border-color: var(--signature-soft); }
-.preset:disabled { opacity: 0.55; cursor: default; }
+.ftin .input { padding: 0 8px; }
+@media (max-width: 720px) { .dims { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
-.openings { display: grid; gap: 8px; }
-.opening { display: grid; grid-template-columns: 74px 110px 1fr 1fr; gap: 8px; align-items: end; }
-.opening .select, .opening .input { height: 32px; }
+/* An opening: the toggle and its wall on one row; offset and width appear under them once it is on. */
+.openings { display: grid; gap: 12px; }
+.opening { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 8px 12px; align-items: center; }
+.opening .field { grid-column: span 1; }
+.openingToggle { display: flex; align-items: center; gap: 8px; height: 36px; font-size: 14px; color: var(--ink); }
+.openingToggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--signature); }
+.opening .select { min-width: 0; }
 
 .canvas { background: var(--paper); border-radius: 8px; padding: 16px; display: grid; place-items: center; min-height: 320px; position: relative; }
 .canvas svg { display: block; max-width: 100%; touch-action: none; }
@@ -76,5 +78,7 @@
 
 /* The plan with the selected item's panel beside it (#48); the panel stacks under the plan on narrow screens. */
 .planWithPanel { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: 16px; align-items: start; }
-.itemPanel { display: grid; gap: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: var(--card); font-size: 13px; }
+/* The panel is an inset of the plan surface, on paper like the canvas beside it, so it reads as part of the plan. */
+.itemPanel { display: grid; gap: 12px; border-radius: 8px; padding: 16px; background: var(--paper); font-size: 13px; }
+.itemPanel .input, .itemPanel .select { background: var(--card); }
 @media (max-width: 1100px) { .planWithPanel { grid-template-columns: minmax(0, 1fr); } }

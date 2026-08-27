@@ -1,7 +1,7 @@
 "use client";
 import "tldraw/tldraw.css";
 import { useMemo, useRef, useState } from "react";
-import { Tldraw, createShapeId, toRichText, useEditor, useValue, type Editor, type TLComponents, type TLRecord } from "tldraw";
+import { DefaultStylePanel, Tldraw, createShapeId, toRichText, useEditor, useValue, type Editor, type TLComponents, type TLRecord } from "tldraw";
 import { PendingChanges, type BoardDelta, type BoardRecord } from "./board-sync";
 import { roleColour, setLocalCursor, usePresenceMembers } from "./presence-store";
 import { useIdentity } from "../../../identity";
@@ -162,11 +162,18 @@ function RemoteCursors({ projectId }: { projectId: string }) {
   );
 }
 
+/** The stock style panel stays collapsed until a shape is selected, when its colour and size controls apply to something. */
+function StylePanelOnSelection() {
+  const editor = useEditor();
+  const hasSelection = useValue("has selection", () => editor.getSelectedShapeIds().length > 0, [editor]);
+  return hasSelection ? <DefaultStylePanel /> : null;
+}
+
 export default function BoardCanvas({ projectId, initial, onReady, onSaveState }: BoardCanvasProps) {
   const [empty, setEmpty] = useState(false);
   const [editor, setEditor] = useState<Editor | null>(null);
   const editorRef = useRef<Editor | null>(null);
-  const components = useMemo<TLComponents>(() => ({ InFrontOfTheCanvas: () => <RemoteCursors projectId={projectId} /> }), [projectId]);
+  const components = useMemo<TLComponents>(() => ({ InFrontOfTheCanvas: () => <RemoteCursors projectId={projectId} />, StylePanel: StylePanelOnSelection }), [projectId]);
   return (
     <div
       data-testid="board-canvas"
@@ -199,7 +206,7 @@ export default function BoardCanvas({ projectId, initial, onReady, onSaveState }
       />
       {empty && (
         <div className={styles.emptyState} data-testid="board-empty">
-          <p>Notes you add here become the plan: one note for the room size, one for the budget, one for the date, and one for each item you need. A filled rectangle is a colour swatch.</p>
+          <p>Notes you add here become the plan: one note for the room size and one for each item you need. A filled rectangle is a colour swatch.</p>
           <button className="btn primary" type="button" onClick={() => editor?.setCurrentTool("note")}>
             Add a note
           </button>

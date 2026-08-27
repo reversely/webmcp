@@ -143,13 +143,6 @@ export function TracePanel({ projectId }: { projectId: string }) {
                 <col className="c-ref" />
                 <col className="c-dur" />
               </colgroup>
-              <colgroup>
-                <col style={{ width: 70 }} />
-                <col style={{ width: 76 }} />
-                <col />
-                <col style={{ width: 46 }} />
-                <col style={{ width: 70 }} />
-              </colgroup>
               <thead>
                 <tr>
                   <th>Time</th>

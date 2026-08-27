@@ -111,13 +111,13 @@ export function ItemPanel({ projectId, item, placement, job, swapping, onChanged
         </select>
       </div>
       <div className={css.row}>
-        <button className="btn" type="button" style={{ height: 30, padding: "0 10px", fontSize: 13 }} onClick={onRotate}>
+        <button className="btn sm" type="button" onClick={onRotate}>
           Rotate 90°
         </button>
-        <button className="btn" type="button" style={{ height: 30, padding: "0 10px", fontSize: 13 }} data-testid="item-swap" aria-pressed={swapping} onClick={onSwap}>
+        <button className="btn sm" type="button" data-testid="item-swap" aria-pressed={swapping} onClick={onSwap}>
           {swapping ? "Cancel swap" : "Swap product"}
         </button>
-        <button className="btn" type="button" style={{ height: 30, padding: "0 10px", fontSize: 13 }} data-testid="item-remove" disabled={busy === "remove"} onClick={remove}>
+        <button className="btn sm" type="button" data-testid="item-remove" disabled={busy === "remove"} onClick={remove}>
           {busy === "remove" ? "Removing" : "Remove"}
         </button>
       </div>

@@ -219,9 +219,10 @@ export function PlanView({ space, door, window: win, items = [], selectedId, cle
               <line key={i} x1={X(m.subject.x_mm)} y1={Y(m.subject.y_mm)} x2={X(t.x_mm)} y2={Y(t.y_mm)} stroke={m.colour} strokeWidth={1.5} strokeDasharray={m.pass ? undefined : "5 3"} />
             ))}
             <circle cx={X(m.subject.x_mm)} cy={Y(m.subject.y_mm)} r={7} fill="var(--card)" stroke={m.colour} strokeWidth={1.5} />
-            <text x={X(m.subject.x_mm)} y={Y(m.subject.y_mm) + 3.5} textAnchor="middle" fontSize={9} fontFamily="var(--font-mono)" fill={m.colour} stroke="none">
-              {m.pass ? "✓" : "✗"}
-            </text>
+            {/* A drawn check or cross, not a text glyph. */}
+            <g transform={`translate(${X(m.subject.x_mm)} ${Y(m.subject.y_mm)})`} stroke={m.colour} strokeWidth={1.5} strokeLinecap="round" fill="none">
+              {m.pass ? <path d="M -3 0.5 L -1 2.5 L 3 -2.5" /> : <path d="M -2.5 -2.5 L 2.5 2.5 M 2.5 -2.5 L -2.5 2.5" />}
+            </g>
           </g>
         ))}
         {labels.map(({ k, mm, pa, pb }) => (

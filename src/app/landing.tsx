@@ -1,11 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { saveIdentity } from "./identity";
 import styles from "./landing.module.css";
-
-/** Two roles the demo uses; the field takes any word, so the chips only save typing. */
-const SUGGESTED_ROLES = ["Zach", "Ben"];
 
 type Created = { id: string; code: string; name: string };
 
@@ -15,8 +12,12 @@ function boardUrl(projectId: string): string {
   return `/projects/${projectId}/board${flag ? `?webmcp=${flag}` : ""}`;
 }
 
-/** Name and role, shared by the join card and the post-create step. */
-function WhoAmI({ name, role, onName, onRole, idPrefix }: { name: string; role: string; onName: (v: string) => void; onRole: (v: string) => void; idPrefix: string }) {
+/**
+ * Name and role, shared by the join card and the post-create step. The role is the person's own
+ * word; when the project already has members, their roles are listed so a newcomer can avoid a
+ * duplicate.
+ */
+function WhoAmI({ name, role, onName, onRole, idPrefix, takenRoles = [] }: { name: string; role: string; onName: (v: string) => void; onRole: (v: string) => void; idPrefix: string; takenRoles?: string[] }) {
   return (
     <>
       <div className="field">
@@ -25,14 +26,8 @@ function WhoAmI({ name, role, onName, onRole, idPrefix }: { name: string; role: 
       </div>
       <div className="field">
         <label htmlFor={`${idPrefix}-role`}>Your part in the project</label>
-        <div className={styles.chips}>
-          {SUGGESTED_ROLES.map((r) => (
-            <button key={r} type="button" className={styles.chip} aria-pressed={role === r} onClick={() => onRole(r)} data-testid={`${idPrefix}-role-${r}`}>
-              {r}
-            </button>
-          ))}
-        </div>
-        <input id={`${idPrefix}-role`} className="input" value={role} onChange={(e) => onRole(e.target.value)} placeholder="Or type your own" data-testid={`${idPrefix}-role`} />
+        <input id={`${idPrefix}-role`} className="input" value={role} onChange={(e) => onRole(e.target.value)} data-testid={`${idPrefix}-role`} />
+        {takenRoles.length > 0 && <p className={styles.taken}>Already in the project: {takenRoles.join(", ")}.</p>}
       </div>
     </>
   );
@@ -45,8 +40,26 @@ async function join(code: string, displayName: string, role: string): Promise<{ 
   return { project_id: body.project_id, member_id: body.member_id };
 }
 
-export function Landing({ missingId, initialCode }: { missingId: string | null; initialCode: string | null }) {
+export function Landing({ missingId, initialCode, initialProjectId }: { missingId: string | null; initialCode: string | null; initialProjectId: string | null }) {
   const router = useRouter();
+  // Roles already taken, known only when the join link named the project.
+  const [takenRoles, setTakenRoles] = useState<string[]>([]);
+  useEffect(() => {
+    if (!initialProjectId) return;
+    let cancelled = false;
+    fetch(`/api/projects/${initialProjectId}/members`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body: { members?: { display_name: string; role: string }[] } | null) => {
+        if (cancelled || !body?.members) return;
+        setTakenRoles(body.members.map((m) => (m.role ? `${m.role} (${m.display_name})` : m.display_name)));
+      })
+      .catch(() => {
+        // The list is a courtesy; the join still works without it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [initialProjectId]);
   const [created, setCreated] = useState<Created | null>(null);
   const [name, setName] = useState("");
   const [budget, setBudget] = useState("2500");
@@ -111,7 +124,7 @@ export function Landing({ missingId, initialCode }: { missingId: string | null; 
               <h2>Create a project</h2>
               <div className="field">
                 <label htmlFor="create-name">Project name</label>
-                <input id="create-name" className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Living room" data-testid="create-name" required />
+                <input id="create-name" className="input" value={name} onChange={(e) => setName(e.target.value)} data-testid="create-name" required />
               </div>
               <div className="field">
                 <label htmlFor="create-budget">Budget (USD)</label>
@@ -124,7 +137,7 @@ export function Landing({ missingId, initialCode }: { missingId: string | null; 
               {createError && <p className={styles.error}>{createError}</p>}
               <div className={styles.actions}>
                 <button className="btn primary focal" type="submit" disabled={creating} data-testid="create-submit">
-                  {creating ? "Creating" : "Create and get a code"}
+                  {creating ? "Creating" : "Create project"}
                 </button>
               </div>
             </form>
@@ -163,11 +176,11 @@ export function Landing({ missingId, initialCode }: { missingId: string | null; 
                 required
               />
             </div>
-            <WhoAmI idPrefix="join" name={who.name} role={who.role} onName={(v) => setWho({ ...who, name: v })} onRole={(v) => setWho({ ...who, role: v })} />
+            <WhoAmI idPrefix="join" name={who.name} role={who.role} onName={(v) => setWho({ ...who, name: v })} onRole={(v) => setWho({ ...who, role: v })} takenRoles={code === initialCode ? takenRoles : []} />
             {joinError && <p className={styles.error}>{joinError}</p>}
             <div className={styles.actions}>
               <button className="btn primary focal" type="submit" disabled={joining || code.trim().length !== 6 || !who.name.trim()} data-testid="join-submit">
-                {joining ? "Joining" : "Join the project"}
+                {joining ? "Joining" : "Join"}
               </button>
             </div>
           </form>

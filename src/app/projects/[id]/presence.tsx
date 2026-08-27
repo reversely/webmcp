@@ -87,7 +87,7 @@ export function ProjectPresence({ projectId, code }: { projectId: string; code: 
           );
         })}
         {identity === null && code && (
-          <Link className="member-chip join" href={`/?code=${code}`} data-testid="presence-join">
+          <Link className="member-chip join" href={`/?code=${code}&project=${projectId}`} data-testid="presence-join">
             Join this project
           </Link>
         )}

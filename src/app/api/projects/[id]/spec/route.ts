@@ -7,8 +7,10 @@ type Params = { params: Promise<{ id: string }> };
 
 /**
  * Writes the room (Space), the agreed requirements (PRD 16), and board changes (#18). Body:
- * { space?: { width_mm, length_mm, height_mm? }, requirements?: [{ type, value, scope? }],
+ * { space?: { width_mm, length_mm, height_mm?, name?, confirmed? }, requirements?: [{ type, value, scope? }],
  *   board_changes?: { put: TLRecord[], remove: id[] }, since?: number, created_by?: string }
+ * A space with `confirmed: false` (the board stage's estimate) is held as the project's pending
+ * room estimate and prefills the Room stage; only a confirmed space (the default) writes the Space.
  * `created_by` is the display name of the person approving; it stamps every requirement row. A
  * `required_item` value is stored as { name, kind }; a bare string names the item with no kind yet.
  * `board_changes` merges record by record, last writer wins in arrival order; the answer carries
@@ -19,14 +21,21 @@ export async function PUT(request: Request, { params }: Params) {
   const s = appState();
   if (!s.store.projects.has(id)) return NextResponse.json({ error: `Project ${id} not found` }, { status: 404 });
   const body = (await request.json()) as {
-    space?: { width_mm: number; length_mm: number; height_mm?: number | null; name?: string };
+    space?: { width_mm: number; length_mm: number; height_mm?: number | null; name?: string; confirmed?: boolean };
     requirements?: { type: Requirement["type"]; value: unknown; scope?: string; source?: string }[];
     board_changes?: BoardChanges;
     since?: number;
     created_by?: string;
   };
   const createdBy = body.created_by?.trim() || "member";
-  if (body.space) {
+  if (body.space && body.space.confirmed === false) {
+    s.room_estimates.set(id, {
+      name: body.space.name ?? s.room_estimates.get(id)?.name ?? "",
+      width_mm: Math.round(body.space.width_mm),
+      length_mm: Math.round(body.space.length_mm),
+      height_mm: body.space.height_mm == null ? null : Math.round(body.space.height_mm)
+    });
+  } else if (body.space) {
     const existing = [...s.spaces.values()].find((sp) => sp.project_id === id);
     const space: Space = {
       id: existing?.id ?? s.store.newId("space"),
@@ -37,6 +46,7 @@ export async function PUT(request: Request, { params }: Params) {
       height_mm: body.space.height_mm == null ? null : Math.round(body.space.height_mm)
     };
     s.spaces.set(space.id, space);
+    s.room_estimates.delete(id);
   }
   if (body.requirements) {
     for (const r of [...s.requirements.values()]) if (r.project_id === id) s.requirements.set(r.id, { ...r, status: "superseded" });

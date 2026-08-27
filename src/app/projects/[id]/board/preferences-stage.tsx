@@ -5,7 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import type { Editor } from "tldraw";
 import { getSnapshot } from "tldraw";
 import type { BoardInitial, SaveState } from "./board-canvas";
-import { collectBoardItems, compileBoard, parseLayoutRule, type CompiledSpec, type Swatch } from "./compileBoard";
+import { collectBoardItems, compileBoard, parseLayoutRule, tagSwatches, type Swatch } from "./compileBoard";
+import { ruleSentence } from "../../../../domain/geometry";
+import { readLayoutRule } from "../../../../domain/types";
 import { latestArtifact, type ArtifactMessage } from "../artifacts";
 import type { SpecData } from "../artifacts/types";
 import { ANONYMOUS, useIdentity } from "../../../identity";
@@ -14,34 +16,25 @@ import styles from "./board.module.css";
 // tldraw reads window at import time, so the canvas is loaded on the client only.
 const BoardCanvas = dynamic(() => import("./board-canvas"), { ssr: false, loading: () => <div className={styles.placeholder}>Loading the board.</div> });
 
+/** A swatch on the form: from a filled shape, or suggested by the model from a colour note (`from_text`). */
+type FormSwatch = Swatch & { from_text?: string };
+
 /**
- * The plan form: the three fixed fields (room, budget, date) and, below them, whatever the board
- * named, in the board's words: items, colour swatches, and layout sentences. Each list is edited
- * in place and sent as written.
+ * The plan form: the three fixed fields (room, budget, date) in their own rows and, below them,
+ * whatever the board named, in the board's words: items, colour swatches, and layout sentences.
+ * Budget and date are the project's current values (set once on the landing form); the board's
+ * parse fills them only while the project has none.
  */
 type Form = {
-  width_ft: string;
-  length_ft: string;
+  /** The board's room reading, carried to the Room stage as its prefill; the Room stage is where the numbers are edited and confirmed. */
+  room: { width_ft: number; length_ft: number } | null;
   budget: string;
   required_by: string;
   items: string[];
-  swatches: Swatch[];
+  swatches: FormSwatch[];
   rules: string[];
   room_name: string | null;
 };
-
-function toForm(spec: CompiledSpec): Form {
-  return {
-    width_ft: spec.room ? String(spec.room.width_ft) : "",
-    length_ft: spec.room ? String(spec.room.length_ft) : "",
-    budget: spec.budget ? String(spec.budget.maximum) : "",
-    required_by: spec.required_by ?? "",
-    items: spec.required_items,
-    swatches: spec.swatches,
-    rules: spec.layout_rules,
-    room_name: spec.room_name
-  };
-}
 
 const MM_PER_FT = 304.8;
 
@@ -84,20 +77,57 @@ function roomFeet(room: SpecData["room"]): { width_ft: number; length_ft: number
   return width > 0 && length > 0 ? { width_ft: Math.round(width * 100) / 100, length_ft: Math.round(length * 100) / 100 } : null;
 }
 
+/** A compiled layout rule as the sentence the form edits. */
+function sentenceOf(rule: NonNullable<SpecData["layout_requirements"]>[number]): string | null {
+  const parsed = readLayoutRule("distance_mm" in rule && rule.distance_mm === null ? { ...rule, distance_mm: undefined } : rule);
+  return parsed ? ruleSentence(parsed) : null;
+}
+
+/** The project's budget and date as stored: the single entry point for both is the landing form. */
+async function projectFields(projectId: string): Promise<{ budget: string; required_by: string }> {
+  try {
+    const res = await fetch(`/api/projects/${projectId}`, { cache: "no-store" });
+    if (!res.ok) return { budget: "", required_by: "" };
+    const snap = (await res.json()) as { project?: { budget_cents?: number; required_by?: string | null } };
+    const cents = snap.project?.budget_cents ?? 0;
+    return { budget: cents > 0 ? String(cents / 100) : "", required_by: snap.project?.required_by ?? "" };
+  } catch {
+    return { budget: "", required_by: "" };
+  }
+}
+
 /**
- * The agent's spec wins on the three fixed fields it states. Items stay in the board's own words;
- * the agent's item names fill in only when the board named none. Colours come from swatches
- * alone, and layout sentences from the board alone.
+ * The model's reading is the form when it answered: its items (the board's phrases, qualifiers
+ * kept), its layout rules, its room, and, while the project has none, its budget and date. Colour
+ * swatches come from filled shapes plus the colours the model read from notes, tagged base or
+ * accent by luminance together. The regex compiler fills the form only when the model returned
+ * nothing.
  */
-function mergeSpec(local: CompiledSpec, spec: SpecData): CompiledSpec {
-  const agentItems = (spec.required_items ?? []).map((i) => (typeof i === "string" ? i : i.name)).filter(Boolean);
+function buildForm(spec: SpecData | null, boardItems: ReturnType<typeof collectBoardItems>, project: { budget: string; required_by: string }): Form {
+  const shapeHexes = boardItems.filter((i) => i.kind === "swatch").map((i) => i.colour);
+  if (!spec) {
+    const local = compileBoard(boardItems);
+    return {
+      room: local.room,
+      budget: project.budget || (local.budget ? String(local.budget.maximum) : ""),
+      required_by: project.required_by || (local.required_by ?? ""),
+      items: local.required_items,
+      swatches: local.swatches,
+      rules: local.layout_rules,
+      room_name: local.room_name
+    };
+  }
+  const suggested = spec.suggested_colours ?? [];
+  const tagged = tagSwatches([...shapeHexes, ...suggested.map((c) => c.hex)]);
+  const swatches: FormSwatch[] = tagged.map((sw, i) => (i < shapeHexes.length ? sw : { ...sw, from_text: suggested[i - shapeHexes.length].from_text }));
   return {
-    ...local,
-    room: roomFeet(spec.room) ?? local.room,
-    room_name: local.room_name ?? spec.room_name ?? null,
-    budget: spec.budget && spec.budget.maximum > 0 ? { maximum: spec.budget.maximum, currency: "USD" } : local.budget,
-    required_by: spec.required_by ?? local.required_by,
-    required_items: local.required_items.length > 0 ? local.required_items : agentItems
+    room: roomFeet(spec.room),
+    budget: project.budget || (spec.budget && spec.budget.maximum > 0 ? String(spec.budget.maximum) : ""),
+    required_by: project.required_by || (spec.required_by ?? ""),
+    items: (spec.required_items ?? []).map((i) => (typeof i === "string" ? i : i.name)).filter(Boolean),
+    swatches,
+    rules: (spec.layout_requirements ?? []).map(sentenceOf).filter((r): r is string => !!r),
+    room_name: spec.room_name ?? null
   };
 }
 
@@ -128,8 +158,8 @@ function EditableList({ id, values, placeholder, addLabel, onChange }: { id: str
   );
 }
 
-/** Colour swatches read off the board: a colour input edits each, the tag flips on click, and a colour input adds one. */
-function SwatchList({ swatches, onChange }: { swatches: Swatch[]; onChange: (next: Swatch[]) => void }) {
+/** Colour swatches read off the board: a colour input edits each, the tag flips on click, and a colour input adds one. A swatch the model read from a note says which note. */
+function SwatchList({ swatches, onChange }: { swatches: FormSwatch[]; onChange: (next: FormSwatch[]) => void }) {
   const [draft, setDraft] = useState("#888888");
   return (
     <div className={styles.list} data-testid="swatch-list">
@@ -139,7 +169,7 @@ function SwatchList({ swatches, onChange }: { swatches: Swatch[]; onChange: (nex
           <span className={styles.hex}>{sw.hex}</span>
           <button
             type="button"
-            className={`tag ${sw.tag === "base" ? "blue" : "yellow"} ${styles.tagButton}`}
+            className={styles.tagButton}
             data-testid="swatch-tag"
             data-tag={sw.tag}
             title="Click to switch between base and accent"
@@ -147,9 +177,14 @@ function SwatchList({ swatches, onChange }: { swatches: Swatch[]; onChange: (nex
           >
             {sw.tag === "base" ? "Base" : "Accent"}
           </button>
-          <button className={styles.remove} type="button" aria-label={`Remove colour ${sw.hex}`} onClick={() => onChange(swatches.filter((_, j) => j !== i))}>
-            ×
+          <button className="btn" type="button" aria-label={`Remove colour ${sw.hex}`} onClick={() => onChange(swatches.filter((_, j) => j !== i))}>
+            Remove
           </button>
+          {sw.from_text && (
+            <span className={styles.from} data-testid="swatch-from">
+              from the note &ldquo;{sw.from_text}&rdquo;
+            </span>
+          )}
         </div>
       ))}
       <div className={styles.add}>
@@ -169,7 +204,6 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
   const [board, setBoard] = useState<{ loaded: boolean; initial: BoardInitial }>({ loaded: false, initial: null });
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [form, setForm] = useState<Form | null>(null);
-  const [missing, setMissing] = useState<string[]>([]);
   const [approving, setApproving] = useState(false);
   const [compiling, setCompiling] = useState(false);
 
@@ -187,32 +221,26 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
 
   /**
    * "Create plan from board": the PlanningAgent compiles the board (POST compile) when it can;
-   * otherwise the newest spec artifact in the chat; otherwise the rule-based compiler. The
-   * board's own room name survives either way because ProjectSpec has no field for it.
+   * otherwise the newest spec artifact in the chat; otherwise the rule-based compiler.
    */
   async function compile() {
     const editor = editorRef.current;
     if (!editor) return;
     setCompiling(true);
     const items = collectBoardItems(getSnapshot(editor.store));
-    const local = compileBoard(items);
     const boardText = items.filter((i) => i.kind === "text").map((i) => i.text);
     const swatches = items.filter((i) => i.kind === "swatch").map((i) => i.colour);
     try {
-      let spec = await compileWithAgent(projectId, boardText, swatches);
-      if (!spec) spec = await latestSpecArtifact(projectId);
-      const merged = spec ? mergeSpec(local, spec) : local;
-      setForm(toForm(merged));
-      setMissing([!merged.room && "room size", !merged.budget && "budget", !merged.required_by && "date"].filter((m): m is string => !!m));
+      const [project, agentSpec] = await Promise.all([projectFields(projectId), compileWithAgent(projectId, boardText, swatches)]);
+      const spec = agentSpec ?? (await latestSpecArtifact(projectId));
+      setForm(buildForm(spec, items, project));
     } finally {
       setCompiling(false);
     }
   }
 
-  const width = form ? parseFloat(form.width_ft) : NaN;
-  const length = form ? parseFloat(form.length_ft) : NaN;
   const budget = form ? parseFloat(form.budget) : NaN;
-  const canApprove = !!form && width > 0 && length > 0 && budget > 0 && !approving;
+  const canApprove = !!form && budget > 0 && !approving;
 
   async function approve() {
     if (!form || !canApprove) return;
@@ -228,7 +256,12 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
     const spec = fetch(`/api/projects/${projectId}/spec`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ space: { width_mm: width * MM_PER_FT, length_mm: length * MM_PER_FT, ...(form.room_name ? { name: form.room_name } : {}) }, requirements, created_by: createdBy })
+      body: JSON.stringify({
+        // The board's room reading travels as an estimate; the Room stage confirms it as the Space.
+        ...(form.room ? { space: { confirmed: false, width_mm: form.room.width_ft * MM_PER_FT, length_mm: form.room.length_ft * MM_PER_FT, ...(form.room_name ? { name: form.room_name } : {}) } } : {}),
+        requirements,
+        created_by: createdBy
+      })
     });
     const project = fetch(`/api/projects/${projectId}`, {
       method: "PATCH",
@@ -249,7 +282,7 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
   return (
     <>
       <h1 className="page-title">Preferences</h1>
-      <p className="page-summary">Put the room size, budget, date, each item you need, colour swatches, and any layout rules on the board, then create the plan from it.</p>
+      <p className="page-summary">Put each item you need, colour swatches, any layout rules, and the room size on the board, then create the plan from it.</p>
       <div className={styles.stage}>
         <section className={styles.canvasSurface} aria-label="Whiteboard">
           <div className={styles.canvasHeader}>
@@ -276,7 +309,7 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
           <div className="eyebrow">Plan from board</div>
           {!form && (
             <>
-              <p>The plan reads the board's notes for room size, budget, and date, then lists every item, colour swatch, and layout sentence the board names, in your words. Edit any of it before approving.</p>
+              <p>The plan lists every item, colour swatch, and layout sentence the board names, in your words. Edit any of it before approving; the room size the board states goes to the Room stage.</p>
               <button className="btn primary focal" type="button" onClick={compile} disabled={!board.loaded || compiling} data-testid="create-plan">
                 {compiling ? "Reading the board" : "Create plan from board"}
               </button>
@@ -291,17 +324,6 @@ export function PreferencesStage({ projectId }: { projectId: string }) {
                 approve();
               }}
             >
-              {missing.length > 0 && <p className={styles.note}>The board did not state the {missing.join(", ")}. Fill it in here.</p>}
-              <div className={styles.pair}>
-                <div className="field">
-                  <label htmlFor="width">Room width (ft)</label>
-                  <input id="width" className="input" type="number" min="1" step="0.25" value={form.width_ft} onChange={(e) => setForm({ ...form, width_ft: e.target.value })} />
-                </div>
-                <div className="field">
-                  <label htmlFor="length">Room length (ft)</label>
-                  <input id="length" className="input" type="number" min="1" step="0.25" value={form.length_ft} onChange={(e) => setForm({ ...form, length_ft: e.target.value })} />
-                </div>
-              </div>
               <div className={styles.pair}>
                 <div className="field">
                   <label htmlFor="budget">Budget (USD)</label>

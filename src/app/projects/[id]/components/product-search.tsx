@@ -107,12 +107,11 @@ export function ProductSearch({ projectId, items, budget, onAdded, swap = null }
 
   return (
     <section className="surface" aria-label="Source products" data-testid="product-search" data-swap-for={swap?.bomItemId}>
-      <div className="eyebrow">Source products</div>
       <h2 className="surface-title">{swap ? `Swap the product for ${swap.name}` : "Search the catalog"}</h2>
       {swap && (
         <div className={css.row} style={{ marginBottom: 12 }}>
           <span className={css.note}>Adding a result replaces the selected line and keeps its place in the room.</span>
-          <button className="btn" type="button" style={{ height: 30, padding: "0 10px", fontSize: 13 }} onClick={swap.onCancel}>
+          <button className="btn sm" type="button" onClick={swap.onCancel}>
             Cancel
           </button>
         </div>
@@ -166,6 +165,7 @@ export function ProductSearch({ projectId, items, budget, onAdded, swap = null }
           {error}
         </p>
       )}
+      {results && !shipsTo && <p className={css.hint}>No delivery address yet, so the search carried no destination. Delivery estimates start once an address is set.</p>}
       {shipsTo && !shipsTo.postal_code && <p className={css.hint}>Searched with the country only. Delivery estimates improve after an address is set.</p>}
       {results && results.length === 0 && <div className="empty">No products matched. Try a broader search or raise the price limit.</div>}
       {results && results.length > 0 && (

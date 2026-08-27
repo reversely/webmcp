@@ -11,7 +11,7 @@ import { normalizeCatalogProduct } from "../domain/products/normalize";
 import { checkLayout, type LayoutCheck, type LayoutItem } from "../domain/geometry";
 import { emptyBoard, type BoardDoc } from "./board";
 import { recordIssue, withSpan } from "./trace";
-import { itemKey, readLayoutRule, readRequiredItem, type Candidate, type Category, type DeliveryAddress, type Kind, type LayoutRule, type Member, type Placement, type Product, type Project, type Requirement, type Space } from "../domain/types";
+import { itemKey, readLayoutRule, readRequiredItem, type Candidate, type Category, type DeliveryAddress, type ExtractedAddress, type Kind, type LayoutRule, type Member, type Placement, type Product, type Project, type Requirement, type Space } from "../domain/types";
 
 export type ArtifactKind = "sourcing" | "ranking" | "question" | "spec" | "room_estimate";
 
@@ -90,6 +90,8 @@ export type AppState = {
   pendingReplacements: Map<string, PendingReplacement>;
   /** Inferred rendering kind and search query per item phrase, keyed by `itemKey` (src/agent/kinds.ts). */
   kinds: Map<string, { kind: Kind; query: string }>;
+  /** The model's reading of each address reply, keyed by `extractionKey` (src/agent/address.ts); null when it read no address. */
+  addressExtractions: Map<string, ExtractedAddress | null>;
 };
 
 declare global {
@@ -155,7 +157,8 @@ function freshState(): AppState {
       runs: createInMemoryStore(),
       activeRuns: new Map(),
       pendingReplacements: new Map(),
-      kinds: new Map()
+      kinds: new Map(),
+      addressExtractions: new Map()
     };
 }
 
@@ -416,10 +419,21 @@ export function findArtifact(projectId: string, artifactId: string): Artifact | 
   return (appState().messages.get(projectId) ?? []).find((m) => m.artifact?.id === artifactId)?.artifact ?? null;
 }
 
+/**
+ * Stores the address a reply gave. An address without a country or postal code (the reply could
+ * not be read) is stored all the same, so the run's one address question is never asked again,
+ * and the gap is recorded as an issue.
+ */
 export function setDeliveryAddress(projectId: string, address: DeliveryAddress): void {
   const s = appState();
   const project = s.store.getProject(projectId);
   s.store.projects.set(projectId, { ...project, delivery_address_json: address, version: project.version + 1 });
+  if (address.country === null || address.postal_code === "") {
+    recordIssue(projectId, {
+      source: "domain infer_address",
+      message: "The reply was stored as the address line but no country or postal code could be read; delivery checks run without a shipping destination"
+    });
+  }
 }
 
 /** Replaces one candidate row; rows are immutable so the store's snapshot/restore keeps working. */

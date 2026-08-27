@@ -31,13 +31,14 @@ function funnel(c: SourcingData["categories"][keyof SourcingData["categories"]])
   return parts.join(" → ");
 }
 
-export function SourcingArtifact({ data, products, title = "Finding your living room" }: { data: SourcingData; products: ProductRef[]; title?: string }) {
+export function SourcingArtifact({ data, products, title }: { data: SourcingData; products: ProductRef[]; title?: string }) {
   const byId = new Map(products.map((p) => [p.id, p]));
+  const heading = title || data.title || "";
   const entries = Object.entries(data.categories ?? {});
   const hasWindow = typeof data.window?.min_cents === "number" && typeof data.window?.max_cents === "number";
   return (
-    <div className={css.card} data-testid="artifact-sourcing" role="group" aria-label={title}>
-      <div className={css.title}>{title}</div>
+    <div className={css.card} data-testid="artifact-sourcing" role="group" aria-label={heading || "Sourcing"}>
+      {heading && <div className={css.title}>{heading}</div>}
       <div className={css.rows}>
         {entries.length === 0 && <div className={css.sub}>No item has started yet.</div>}
         {entries.map(([category, c]) => {

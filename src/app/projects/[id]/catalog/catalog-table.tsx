@@ -99,7 +99,6 @@ export function CatalogTable({ projectId, products: initialProducts, candidates:
                 <th>Product</th>
                 <th>Item</th>
                 <th>Kind</th>
-                <th>Seller</th>
                 <th className="num">Price</th>
                 <th>W × D × H</th>
                 <th>Dimension source</th>
@@ -135,7 +134,6 @@ export function CatalogTable({ projectId, products: initialProducts, candidates:
                         <span className="tag">none</span>
                       )}
                     </td>
-                    <td>{p.merchant}</td>
                     <td className="num">{formatMoney(p.price_cents, p.currency)}</td>
                     <td>{dims ?? <span className="tag">unknown</span>}</td>
                     <td>{p.dimension_source ? <span className={`mono ${css.clip}`} title={p.dimension_source.text} style={{ display: "block" }}>{p.dimension_source.text}</span> : <span className="tag">not stated</span>}</td>

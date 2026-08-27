@@ -17,6 +17,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .stages { display: flex; gap: 4px; margin-left: auto; margin-right: auto; }
 .stage { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 8px; color: var(--ink-2); font-size: 14px; font-weight: 500; text-decoration: none; }
 .stage .n { width: 20px; height: 20px; border-radius: 10px; border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; color: var(--ink-3); }
+.stage:focus-visible { outline: 2px solid var(--signature); outline-offset: 1px; }
 .stage[aria-current="page"] { background: var(--signature-soft); color: var(--signature); }
 .stage[aria-current="page"] .n { border-color: var(--signature); color: var(--signature); }
 .stage.done .n { background: var(--signature); border-color: var(--signature); color: #fff; }
@@ -43,8 +44,10 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .btn { height: 36px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 14px; font-weight: 500; cursor: pointer; }
 .btn.primary { background: var(--signature); border-color: var(--signature); color: #fff; }
 .btn.focal { height: 40px; }
+/* Row-level actions (item panel, swap cancel) sit one step below the 36px control. */
+.btn.sm { height: 30px; padding: 0 10px; font-size: 13px; }
 .btn:disabled { opacity: 0.5; cursor: default; }
-.btn:focus-visible, .input:focus-visible { outline: 2px solid var(--signature); outline-offset: 1px; }
+.btn:focus-visible, .input:focus-visible, .select:focus-visible, .textarea:focus-visible { outline: 2px solid var(--signature); outline-offset: 1px; }
 
 .tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 4px; font-size: 12px; font-weight: 500; background: var(--tag-gray-bg); color: var(--tag-gray-text); }
 .tag.green { background: var(--tag-green-bg); color: var(--tag-green-text); }
@@ -56,7 +59,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--ink-3); height: 40px; border-bottom: 1px solid var(--line); }
 .table td { height: 44px; border-bottom: 1px solid var(--line); color: var(--ink); }
 .table td.num, .table th.num { text-align: right; font-variant-numeric: tabular-nums; }
-.table tr:hover td { background: var(--gray-soft-bg); }
+.table tbody tr:hover td { background: var(--paper); }
 .table .title { font-weight: 500; }
 
 .stat { font-size: 32px; font-weight: 300; color: var(--ink); line-height: 1.1; }
@@ -128,22 +131,24 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .trace-json pre { margin: 4px 0 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.45; color: var(--ink-2); background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
 
 .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-.card { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-card); padding: 12px; display: grid; gap: 8px; transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out); }
-.card:hover { transform: translateY(-2px); box-shadow: var(--shadow-card-hover); }
+/* A result card holds its own Add button and is not a link target, so it does not lift on hover (cards.md). */
+.card { background: var(--card); border-radius: 12px; box-shadow: var(--shadow-card); padding: 12px; display: grid; gap: 8px; }
 .card img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; background: var(--paper); }
 .card .name { font-weight: 500; color: var(--ink); font-size: 14px; line-height: 1.35; }
 .card .meta { color: var(--ink-3); font-size: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
 .empty { color: var(--ink-3); font-size: 14px; padding: 24px; text-align: center; }
 .mono { font-family: var(--font-mono); font-size: 11px; color: var(--ink-3); }
-@media (prefers-reduced-motion: reduce) { .card, .card:hover { transition: none; transform: none; } }
 
 /* Top bar: the room code and the presence chips sit between the stages and the tool tag. */
 .presence-bar { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .code-chip { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); cursor: pointer; }
+.code-chip:hover { border-color: var(--signature); }
+.code-chip:focus-visible, .member-chip.join:focus-visible { outline: 2px solid var(--signature); outline-offset: 1px; }
 .code-chip .mono-code { font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.12em; color: var(--signature); font-weight: 500; }
 .code-chip .code-hint { font-size: 11px; color: var(--ink-3); }
 .presence { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.member-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px; background: var(--signature-soft); color: var(--signature); font-size: 13px; font-weight: 500; text-decoration: none; transition: opacity var(--dur-slow) var(--ease-out); }
+/* Members are people present, not the current item, so the chip is neutral and the dot carries presence. */
+.member-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); color: var(--ink); font-size: 13px; font-weight: 500; text-decoration: none; transition: opacity var(--dur-slow) var(--ease-out); }
 .member-chip .member-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tag-green-text); }
 .member-chip.away { opacity: 0.45; }
 .member-chip.away .member-dot { background: var(--ink-3); }

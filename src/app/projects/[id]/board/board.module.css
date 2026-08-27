@@ -68,14 +68,17 @@
 .swatchRow { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
 .colour { width: 36px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--card); cursor: pointer; }
 .hex { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); }
-.remove { height: 36px; width: 36px; padding: 0; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink-3); cursor: pointer; }
-.remove:hover { color: var(--tag-red-text); border-color: var(--tag-red-text); }
+.from { grid-column: 2 / -1; font-size: 12px; color: var(--ink-3); line-height: 1.4; }
 .add { display: flex; gap: 8px; align-items: center; }
-.tagButton { cursor: pointer; border: 1px solid transparent; }
+/* Base or accent is a two-way toggle, so it renders as a chip (a control), not a tag (a value). */
+.tagButton { height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); font-size: 12px; font-weight: 500; cursor: pointer; }
 .tagButton:hover { border-color: var(--signature); }
+.tagButton[data-tag="accent"] { background: var(--signature-soft); border-color: var(--signature-soft); color: var(--signature); }
+.tagButton:focus-visible { outline: 2px solid var(--signature); outline-offset: 1px; }
 
 /* Other members' cursors (#18): a dot in the role's colour with the name beside it, over the canvas. */
 .cursorLayer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .cursor { position: absolute; display: flex; align-items: center; gap: 6px; transform: translate(-5px, -5px); transition: left 300ms ease-out, top 300ms ease-out; }
 .cursorDot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15); }
 .cursorLabel { font-size: 11px; font-weight: 500; color: #fff; padding: 1px 6px; border-radius: 8px; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .cursor { transition: none; } }

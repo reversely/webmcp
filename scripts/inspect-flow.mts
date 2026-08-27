@@ -47,7 +47,7 @@ const compiled = (compileSpan?.output ?? null) as { required_items?: unknown[] }
 note(!!compiled && Array.isArray(compiled.required_items) && compiled.required_items.length >= 2, `compile: model returned the board's items (${JSON.stringify(compiled?.required_items ?? null)?.slice(0, 120)})`);
 await zach.getByTestId("approve-plan").click();
 await zach.waitForURL(/\/room/, { timeout: 15000 }).catch(() => {});
-const after = (await (await zach.request.get(`${BASE}/api/projects/${projectId}`)).json()) as { requirements: { type: string; value_json: unknown }[]; space: { width_mm: number; length_mm: number } | null; project: { budget_cents: number; required_by: string | null } };
+const after = (await (await zach.request.get(`${BASE}/api/projects/${projectId}`)).json()) as { requirements: { type: string; value_json: unknown }[]; space: { width_mm: number; length_mm: number } | null; room_estimate: { width_mm: number; length_mm: number } | null; project: { budget_cents: number; required_by: string | null } };
 const reqItems = after.requirements.filter((r) => r.type === "required_item").map((r) => (r.value_json as { name: string }).name);
 note(reqItems.includes("reading chair") && reqItems.includes("standing desk"), `approve: required_item names ${JSON.stringify(reqItems)}`);
 const vis = after.requirements.find((r) => r.type === "visual_direction")?.value_json as { base?: string[]; accent?: string[] } | undefined;
@@ -55,7 +55,15 @@ const visAll = [...(vis?.base ?? []), ...(vis?.accent ?? [])].map((h) => h.toLow
 note(swatches.every((h) => visAll.includes(h)), `approve: visual_direction holds the swatch hexes ${JSON.stringify(vis)}`);
 const lay = after.requirements.filter((r) => r.type === "layout_requirement").map((r) => r.value_json);
 note(lay.length > 0 && JSON.stringify(lay).includes("standing desk") && JSON.stringify(lay).includes("reading chair"), `approve: layout_requirement objects resolve to the named items ${JSON.stringify(lay)}`);
-note(after.space?.width_mm === 3658 && after.space?.length_mm === 5486, `approve: space ${after.space?.width_mm} × ${after.space?.length_mm} from "12 x 18"`);
+note(after.space === null && after.room_estimate?.width_mm === 3658 && after.room_estimate?.length_mm === 5486, `approve: estimate ${after.room_estimate?.width_mm} × ${after.room_estimate?.length_mm} carried from "12 x 18", no Space yet`);
+await zach.goto(`${BASE}/projects/${projectId}/room`, { waitUntil: "networkidle" });
+const widthFt = await zach.getByLabel("Width, feet").inputValue();
+const lengthFt = await zach.getByLabel("Length, feet").inputValue();
+note(widthFt === "12" && lengthFt === "18", `room: fields prefilled ${widthFt} × ${lengthFt} ft from the estimate`);
+await zach.getByTestId("confirm-room").click();
+await zach.waitForURL(/\/place/, { timeout: 15000 }).catch(() => {});
+const confirmed = (await (await zach.request.get(`${BASE}/api/projects/${projectId}`)).json()) as { space: { width_mm: number; length_mm: number } | null; room_estimate: unknown };
+note(confirmed.space?.width_mm === 3658 && confirmed.space?.length_mm === 5486 && confirmed.room_estimate === null, `confirm: space ${confirmed.space?.width_mm} × ${confirmed.space?.length_mm}, estimate cleared`);
 note(after.project.budget_cents === 180000 && after.project.required_by === "2026-10-01", `approve: budget ${after.project.budget_cents}, date ${after.project.required_by}`);
 const benBar = (await ben.locator("header").innerText()).replace(/\s+/g, " ");
 note(/Zach/.test(benBar), `presence: Ben's bar shows Zach: "${benBar.slice(0, 80)}"`);
