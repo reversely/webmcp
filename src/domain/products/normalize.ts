@@ -30,6 +30,7 @@ const CatalogProduct = z.looseObject({
   title: z.string().optional(),
   name: z.string().optional(),
   url: z.string().optional(),
+  handle: z.string().optional(),
   description: z.union([z.string(), z.looseObject({ html: z.string().optional(), text: z.string().optional(), plain: z.string().optional() })]).optional(),
   media: z.array(Media).optional(),
   images: z.array(Media).optional(),
@@ -53,7 +54,7 @@ export function normalizeCatalogProduct(raw: unknown, source: ProductSource): Pr
   const externalId = externalProductId(catalog, source.sourceUrl);
 
   return Product.parse({
-    id: `${source.merchant}:${externalId}`,
+    id: productKey(catalog, source, externalId),
     merchant: source.merchant,
     source_url: source.sourceUrl,
     external_product_id: externalId,
@@ -72,6 +73,16 @@ export function normalizeCatalogProduct(raw: unknown, source: ProductSource): Pr
     glb_url: null,
     model_status: "no_model"
   });
+}
+
+/**
+ * The Global Catalog ids a product `gid://shopify/p/...` and a storefront ids the same product
+ * `gid://shopify/Product/{n}`, so the row key is the merchant plus the handle whenever a handle is
+ * known (#36); a product without a URL keeps its catalog id as the key.
+ */
+function productKey(catalog: CatalogProduct, source: ProductSource, externalId: string): string {
+  const handle = catalog.handle?.toLowerCase() ?? extractHandle(catalog.url ?? source.sourceUrl);
+  return `${source.merchant}:${handle ?? externalId}`;
 }
 
 function externalProductId(catalog: CatalogProduct, sourceUrl: string): string {

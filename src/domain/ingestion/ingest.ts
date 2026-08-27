@@ -1,3 +1,4 @@
+import { z } from "zod";
 import type { CatalogClient, CatalogProduct } from "../../commerce";
 import { storefrontEndpoint } from "../../commerce";
 import { regenerateBom } from "../bom";
@@ -20,6 +21,8 @@ export interface IngestProductUrlRequest {
   /** Global Catalog client; the storefront fallback is derived from it with `withEndpoint`. */
   client: CatalogClient;
   merchantFromUrl: (normalizedUrl: string) => string;
+  /** Fetches the shop's public `/products/{handle}.json` on a Global miss; defaults to global fetch. */
+  fetchImpl?: typeof fetch;
 }
 
 export interface IngestProductUrlResult {
@@ -45,7 +48,7 @@ export async function ingestProductUrl(store: ProjectStore, request: IngestProdu
   const url = normalizeProductUrl(request.url);
   if (!url) throw new InvalidProductUrlError(request.url);
 
-  const catalogProduct = await lookupByUrl(request.client, url);
+  const catalogProduct = await lookupByUrl(request.client, url, request.fetchImpl ?? fetch);
   const fresh = normalizeCatalogProduct(catalogProduct, { merchant: request.merchantFromUrl(url), sourceUrl: url });
   const category = request.category?.trim() || fresh.title;
   const kind = request.kind ?? (request.inferKind ? await request.inferKind(category) : "other");
@@ -73,14 +76,33 @@ export async function ingestProductUrl(store: ProjectStore, request: IngestProdu
   return { product: result.product, candidate: result.candidate, budget: result.budget };
 }
 
-/** Global Catalog first; on a miss, the storefront MCP of the URL's own host. */
-async function lookupByUrl(client: CatalogClient, url: string): Promise<CatalogProduct> {
+/** The part of a shop's `/products/{handle}.json` the fallback reads. */
+const HandleJson = z.object({ product: z.object({ id: z.union([z.number(), z.string()]) }) });
+
+/**
+ * Global Catalog first; on a miss, the storefront MCP of the URL's own host. That endpoint's
+ * `lookup_catalog` resolves only `gid://shopify/Product/{n}` ids (#36), so the numeric id comes
+ * from the shop's public `/products/{handle}.json` and the storefront is asked with `get_product`.
+ */
+async function lookupByUrl(client: CatalogClient, url: string, fetchImpl: typeof fetch): Promise<CatalogProduct> {
   const storefront = client.withEndpoint(storefrontEndpoint(new URL(url).hostname));
-  for (const endpoint of [client, storefront]) {
-    const { products } = await endpoint.lookupCatalog([url]);
-    if (products.length > 0) return products[0];
+  const { products } = await client.lookupCatalog([url]);
+  if (products.length > 0) return products[0];
+
+  const numericId = await productIdFromHandleJson(fetchImpl, url);
+  if (numericId !== null) {
+    const { product } = await storefront.getProduct(`gid://shopify/Product/${numericId}`);
+    if (product) return product;
   }
   throw new ProductNotFoundError(url, [client.endpoint, storefront.endpoint]);
+}
+
+/** Null when the shop serves no `{handle}.json` (headless fronts, password pages) or it lacks a product id. */
+async function productIdFromHandleJson(fetchImpl: typeof fetch, normalizedUrl: string): Promise<string | null> {
+  const response = await fetchImpl(`${normalizedUrl}.json`, { headers: { Accept: "application/json" } });
+  if (!response.ok) return null;
+  const parsed = HandleJson.safeParse(await response.json().catch(() => null));
+  return parsed.success ? String(parsed.data.product.id) : null;
 }
 
 /** Replaces catalog fields on re-ingestion but keeps the 3D model state the product already has. */

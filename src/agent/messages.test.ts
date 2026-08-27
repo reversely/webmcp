@@ -79,7 +79,8 @@ describe("replacement flow", () => {
     if (outcome.status !== "ranked") return;
     expect(outcome.required_savings_cents).toBe(required);
     expect(outcome.ceiling_cents).toBe(oldItem.product!.price_cents - required);
-    expect(outcome.ranked.map((r) => r.product_id)).toEqual([cheaper[0].id].map((id) => `round-coffee-table-shop-11.myshopify.com:${id}`));
+    // Product rows key on merchant plus handle (#36), and the handle here is the URL's last segment.
+    expect(outcome.ranked.map((r) => r.product_id)).toEqual(["round-coffee-table-shop-11.myshopify.com:round-coffee-table-11"]);
 
     const artifact = snapshot(projectId).messages.find((m) => m.artifact?.kind === "ranking")!.artifact!.data as RankingArtifact;
     expect(artifact.rows.map((r) => r.status)).toEqual(["selected", "eliminated", "eliminated"]);

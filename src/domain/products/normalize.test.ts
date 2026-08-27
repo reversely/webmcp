@@ -36,7 +36,7 @@ describe("normalizeCatalogProduct", () => {
     const product = normalizeCatalogProduct(globalCatalogSofa, source);
     expect(Product.safeParse(product).success).toBe(true);
     expect(product).toMatchObject({
-      id: "daalshome.com:gid://shopify/Product/8457432072354",
+      id: "daalshome.com:campbell-3-seater",
       external_product_id: "gid://shopify/Product/8457432072354",
       title: "Campbell 3 Seater",
       description: "A deep seat.\nOverall 200 x 140 x 95 cm",
@@ -93,6 +93,20 @@ describe("normalizeCatalogProduct", () => {
       dimension_source: null,
       spatial_status: "visual_only"
     });
+  });
+
+  it("keys the row on merchant and handle for both catalog id shapes, and on the catalog id without a URL", () => {
+    const url = "https://floydhome.com/products/the-sofa";
+    const via = { merchant: "floydhome.com", sourceUrl: url };
+    const global = normalizeCatalogProduct({ id: "gid://shopify/p/5uV0aBCRyvotspQjfccQGE", title: "The Sofa", url }, via);
+    const storefront = normalizeCatalogProduct({ id: "gid://shopify/Product/8457432072354", title: "The Sofa", handle: "The-Sofa" }, via);
+    expect(global.id).toBe("floydhome.com:the-sofa");
+    expect(storefront.id).toBe(global.id);
+    expect(global.external_product_id).toBe("gid://shopify/p/5uV0aBCRyvotspQjfccQGE");
+    expect(storefront.external_product_id).toBe("gid://shopify/Product/8457432072354");
+
+    const noUrl = normalizeCatalogProduct({ id: "gid://shopify/p/abc", title: "Rug" }, { merchant: "rugs.example", sourceUrl: "https://rugs.example/" });
+    expect(noUrl.id).toBe("rugs.example:gid://shopify/p/abc");
   });
 
   it("uses the URL handle as the external id when the catalog object has none", () => {
