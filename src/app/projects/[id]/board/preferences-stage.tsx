@@ -78,9 +78,21 @@ function roomFeet(room: SpecData["room"]): { width_ft: number; length_ft: number
 }
 
 /** A compiled layout rule as the sentence the form edits. */
-function sentenceOf(rule: NonNullable<SpecData["layout_requirements"]>[number]): string | null {
+/**
+ * The board's own sentence for a rule the model read, when a board line states the same relation
+ * about the same subject ("big rug underneath everything" stays as written); the model's expansion
+ * is regenerated only for a rule no board line states. Approve re-parses the sentence, so the
+ * board's phrase is what the requirement records.
+ */
+function sentenceOf(rule: NonNullable<SpecData["layout_requirements"]>[number], boardRules: string[]): string | null {
   const parsed = readLayoutRule("distance_mm" in rule && rule.distance_mm === null ? { ...rule, distance_mm: undefined } : rule);
-  return parsed ? ruleSentence(parsed) : null;
+  if (!parsed) return null;
+  if (parsed.relation === "text") return parsed.text;
+  const stated = boardRules.find((sentence) => {
+    const own = parseLayoutRule(sentence);
+    return own.relation === parsed.relation && own.subject.toLowerCase() === parsed.subject.toLowerCase();
+  });
+  return stated ?? ruleSentence(parsed);
 }
 
 /** The project's budget and date as stored: the single entry point for both is the landing form. */
@@ -105,8 +117,8 @@ async function projectFields(projectId: string): Promise<{ budget: string; requi
  */
 function buildForm(spec: SpecData | null, boardItems: ReturnType<typeof collectBoardItems>, project: { budget: string; required_by: string }): Form {
   const shapeHexes = boardItems.filter((i) => i.kind === "swatch").map((i) => i.colour);
+  const local = compileBoard(boardItems);
   if (!spec) {
-    const local = compileBoard(boardItems);
     return {
       room: local.room,
       budget: project.budget || (local.budget ? String(local.budget.maximum) : ""),
@@ -126,7 +138,7 @@ function buildForm(spec: SpecData | null, boardItems: ReturnType<typeof collectB
     required_by: project.required_by || (spec.required_by ?? ""),
     items: (spec.required_items ?? []).map((i) => (typeof i === "string" ? i : i.name)).filter(Boolean),
     swatches,
-    rules: (spec.layout_requirements ?? []).map(sentenceOf).filter((r): r is string => !!r),
+    rules: (spec.layout_requirements ?? []).map((rule) => sentenceOf(rule, local.layout_rules)).filter((r): r is string => !!r),
     room_name: spec.room_name ?? null
   };
 }
