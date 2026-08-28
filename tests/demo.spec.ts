@@ -368,6 +368,8 @@ test("Scene 10: Zach pastes a product URL; the product ingests under his phrase 
   if (!["queued", "generating", "ready", "proxy"].includes(product.model_status)) note("pending", `3D generation (#26): side table model_status is ${product.model_status}`);
   // Ben's rail shows the new line within one poll.
   await expect(ben.getByTestId("bom-rail")).toContainText(side.product!.title, { timeout: POLL_MS });
+  // The planner's reply follows the line; the next scene's message must not overlap this turn.
+  if (ingested) await waitForSnapshot(request, projectId, repliedSinceLastRequest, AGENT_WAIT_MS);
 });
 
 test("Scene 10b: Ben adds a floor lamp beside the sofa and watches its model generate", async ({ request }) => {
