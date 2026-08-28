@@ -55,8 +55,15 @@ async function rest(page: Page, ms = READ_MS) {
   await page.waitForTimeout(ms);
 }
 
-/** Writes the scene caption into a fixed strip at the foot of the page; the strip survives navigation because it is re-added on every call. */
-async function caption(page: Page, text: string) {
+/**
+ * Writes the scene caption into a fixed strip at the foot of both pages, so either recording cuts
+ * by scene; the strip survives navigation because it is re-added on every call.
+ */
+async function caption(_page: Page, text: string) {
+  for (const page of [zach, ben]) await captionOn(page, text);
+}
+
+async function captionOn(page: Page, text: string) {
   await page.evaluate((t) => {
     let el = document.getElementById("demo-caption");
     if (!el) {
