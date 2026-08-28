@@ -47,7 +47,8 @@ Check a key is present without printing it: `grep -cE '^OPENAI_API_KEY=.+' .env`
 | `npm run build` then `npm start` | production build and server |
 | `npm test` | vitest unit suite (domain, agent, server, UI helpers), no network |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm run demo:test` | the Playwright flow: two browser contexts play both people through every scene against the live app, catalog, and model; needs the dev server on 3111 and the OpenAI key; about 4 minutes; videos in `tests/videos/` |
+| `npm run demo:test` | the regression suites (`tests/demo.spec.ts`, `webmcp.spec.ts`, `failures.spec.ts`): two browser contexts play both people through every scene with API assertions and fallbacks; needs the dev server on 3111 and the OpenAI key; about 4 minutes |
+| `npm run demo:script` | the recorded walkthrough (`tests/script.spec.ts`): the same scenes through the visible interface at a human pace with a scene caption on each page, one path and no fallback; about 10 minutes; videos `tests/videos/script-zach-*.webm` and `script-ben-*.webm` |
 | `npm run test:webmcp` | discovers and executes the seven WebMCP tools through the polyfill |
 | `npx tsx scripts/inspect-ui.ts` / `inspect-flow.mts` / `inspect-items.mts` / `inspect-sync.mts` / `inspect-stream.mts` | semantic gates: open the running app and cross-check what is on screen against the API |
 | `npm run probe:weekly` | re-checks which discovered Shopify sellers carry the WebMCP loader |
