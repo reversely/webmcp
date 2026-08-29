@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Direct: write a note",
+    "messages": [{ "role": "user", "type": "message", "content": "Note that the sofa arrives Tuesday." }],
+    "expectedCall": [{ "functionName": "add_note", "arguments": { "text": { "$contains": "Tuesday" } } }]
+  },
+  {
+    "name": "Ambiguous: a question about what was noted reads the list first",
+    "messages": [{ "role": "user", "type": "message", "content": "What have I written down so far?" }],
+    "expectedCall": [{ "functionName": "list_notes", "arguments": {} }]
+  }
+]

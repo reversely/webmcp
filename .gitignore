@@ -1,6 +1,5 @@
 # Session log: local handoff between sessions, never staged.
 docs/log.md
-docs/prd.md
 
 # secrets baseline is committed; the actual secrets it would catch are not
 .env
@@ -20,7 +19,7 @@ yarn-error.log*
 # Browser automation / test output
 playwright-report/
 test-results/
-tests/videos/
+**/tests/videos/
 
 # Python / uv (in case a helper script lands here)
 __pycache__/
@@ -37,9 +36,9 @@ CLAUDE.md
 AGENTS.md
 .claude/
 docs/log.md
-docs/progress/
-docs/plans/
-docs/prd*.md
+**/docs/progress/
+**/docs/plans/
+**/docs/prd*.md
 
 # Next.js
 .next/
@@ -50,7 +49,7 @@ next-env.d.ts
 coverage/
 
 # Commercial font binaries (Aeonik, CoType Foundry); install locally from ~/Library/Fonts
-public/fonts/
+**/public/fonts/
 
 # Generated product meshes (src/server/three-d.ts); regenerated from the Modal endpoint
-public/models/
+**/public/models/

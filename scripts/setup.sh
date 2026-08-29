@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Sets up a fresh clone: checks Node, installs npm packages and Chromium, copies fonts when present,
+# Sets up a fresh clone of the workspace: checks Node, installs every app's packages (npm workspaces)
+# and Chromium, copies fonts into each app when present, links each app's .env to the shared one,
 # syncs the uv environment (modal, pre-commit, detect-secrets, ruff), installs the commit hooks, and
 # checks .env. Safe to run again.
 set -euo pipefail
@@ -23,13 +24,19 @@ npm rebuild esbuild >/dev/null 2>&1 || true
 
 npx playwright install chromium >/dev/null 2>&1 && ok "Playwright Chromium installed" || warn "Playwright Chromium install failed; run: npx playwright install chromium"
 
-mkdir -p public/fonts
+# Each app under the workspace list serves the fonts from its own public/fonts and reads the shared .env through a link.
+apps=$(node -p 'require("./package.json").workspaces.join(" ")')
 copied=0
-for w in Light Regular Medium; do
-  src="$HOME/Library/Fonts/Aeonik-$w.ttf"
-  if [ -f "$src" ] && [ ! -f "public/fonts/Aeonik-$w.ttf" ]; then cp "$src" public/fonts/ && copied=$((copied+1)); fi
+for app in $apps; do
+  mkdir -p "$app/public/fonts"
+  for w in Light Regular Medium; do
+    src="$HOME/Library/Fonts/Aeonik-$w.ttf"
+    if [ -f "$src" ] && [ ! -f "$app/public/fonts/Aeonik-$w.ttf" ]; then cp "$src" "$app/public/fonts/" && copied=$((copied+1)); fi
+  done
+  [ -e "$app/.env" ] || ln -s ../.env "$app/.env"
 done
-if ls public/fonts/Aeonik-Regular.ttf >/dev/null 2>&1; then ok "Aeonik fonts in public/fonts ($copied copied)"; else warn "Aeonik fonts absent; the fallback typeface applies (see README, Fonts)"; fi
+if ls 3droom-concept/public/fonts/Aeonik-Regular.ttf >/dev/null 2>&1; then ok "Aeonik fonts in each app's public/fonts ($copied copied)"; else warn "Aeonik fonts absent; the fallback typeface applies (see README, Fonts)"; fi
+ok ".env linked into: $apps"
 
 # Python side: modal (the image-to-3D endpoint) and the commit hooks, pinned in pyproject.toml and uv.lock.
 if command -v uv >/dev/null 2>&1; then
@@ -43,6 +50,6 @@ if [ ! -f .env ]; then cp .env.example .env; warn ".env created from .env.exampl
 if grep -qE '^OPENAI_API_KEY=.+' .env; then ok "OPENAI_API_KEY set in .env"; else warn "OPENAI_API_KEY missing in .env; the agent, compile, and visual checks will not run"; fi
 if grep -qE '^MODAL_IMAGE_TO_3D_URL=.+' .env; then ok "MODAL_IMAGE_TO_3D_URL set; 3D generation enabled"; else warn "MODAL_IMAGE_TO_3D_URL missing; products render as colour proxies (see README, 3D generation)"; fi
 
-npx tsc --noEmit >/dev/null && ok "typecheck clean" || fail "typecheck failed; run npm run typecheck"
+npm run typecheck >/dev/null 2>&1 && ok "typecheck clean in every app" || fail "typecheck failed; run npm run typecheck"
 printf 'disk  %s free on this volume\n' "$(df -h . | awk 'NR==2{print $4}')"
-echo "next  npm run dev   (or: npm run dev -- -p 3111 for the test scripts)"
+echo "next  npm run dev -w 3droom-concept -- -p 3111   (the room planner; see README for the other apps)"

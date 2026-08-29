@@ -1,49 +1,18 @@
 {
-  "name": "webmcp-planner",
+  "name": "webmcp-sandbox",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
+  "workspaces": [
+    "3droom-concept",
+    "app-template"
+  ],
   "scripts": {
     "setup": "bash scripts/setup.sh",
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
-    "demo:test": "playwright test tests/demo.spec.ts tests/webmcp.spec.ts tests/failures.spec.ts",
-    "test:webmcp": "playwright test tests/webmcp.spec.ts",
-    "probe:weekly": "bash spikes/storefront-survey/probe-weekly.sh",
-    "demo:script": "playwright test tests/script.spec.ts"
+    "test": "npm test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev": "npm run dev -w 3droom-concept"
   },
-  "dependencies": {
-    "@gltf-transform/core": "^4.4.2",
-    "@openai/agents": "^0.17.0",
-    "@react-three/drei": "^10.7.8",
-    "@react-three/fiber": "^9.7.0",
-    "next": "^16.3.3",
-    "openai": "^7.7.0",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "three": "^0.185.1",
-    "tldraw": "^5.3.2",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "@types/node": "^24.0.0",
-    "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0",
-    "@types/three": "^0.185.4",
-    "jsdom": "^30.0.1",
-    "tsx": "^4.23.12",
-    "typescript": "^5.9.0",
-    "vitest": "^4.1.11",
-    "webmcp-types": "^0.1.5"
-  },
-  "allowScripts": {
-    "esbuild@0.28.2": true
-  },
+  "allowScripts": {},
   "engines": {
     "node": ">=22",
     "npm": ">=10"

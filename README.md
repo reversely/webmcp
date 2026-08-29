@@ -1,96 +1,73 @@
-# Room planner
+# WebMCP sandbox
 
-Two people furnish one room together in a browser: a shared whiteboard, a planning agent that sources real products from Shopify merchants, a 2D plan and a 3D room at merchant dimensions, a bill of materials against a budget, and delivery checks against a date. The page exposes its project operations as WebMCP tools, so a browser agent can operate the same project state. `docs/prd.md` (local, not committed) is the specification; the thirteen-scene Playwright flow in `tests/demo.spec.ts` is its acceptance test.
+A workspace of WebMCP apps: pages that expose their operations as tools through `document.modelContext`, so a browser agent can operate the same state a person does. Each app is an npm workspace with its own Next.js server, tests, and Playwright suite; the toolchain, commit hooks, agent conventions, and `.env` names are shared at the root.
+
+| App | What it is | Port |
+| --- | --- | --- |
+| [`3droom-concept/`](3droom-concept/README.md) | two people furnish a room: shared whiteboard, planning agent sourcing real Shopify products, 2D plan and 3D room at merchant dimensions, bill of materials against a budget, delivery checks | 3000 (tests expect 3111) |
+| [`app-template/`](app-template/README.md) | the starting point for a new app: one page, one piece of state, two tools, a unit test, a Playwright test, an evals file | 3112 |
 
 ## Requirements
 
 | Dependency | Version used | Why |
 | --- | --- | --- |
-| Node.js | 26 (`engines` requires 22 or newer) | Next.js app and every script |
-| npm | 11 | package installs; `npm ci` reproduces `package-lock.json` |
-| Chromium for Playwright | installed by `npx playwright install chromium` | the demo flow and the semantic gate scripts |
-| OpenAI API key | any key with access to `gpt-5.6-terra` | the PlanningAgent, board compilation, kind inference, address extraction, visual checks |
-| `uv` and Python 3.13 | uv 0.11; `uv sync` installs the pinned Python | the Python side: the Modal client and the commit hooks, pinned in `pyproject.toml` and `uv.lock` |
-| Modal account (optional) | `uv run modal token new` | image-to-3D generation; without it every product renders as a colour proxy |
-| Aeonik font files (optional) | `Aeonik-Light/Regular/Medium.ttf` in `public/fonts/` | the house typeface; the CSS falls back to Helvetica Neue and Arial |
-
-No database, realtime service, or Shopify credential is needed. Project state lives in the server's memory and resets when the server restarts. Shopify's catalog and storefront endpoints take a hosted UCP agent profile and no API key; the app serves a copy of Shopify's public fixture profile at `/.well-known/ucp-agent-profile.json`.
+| Node.js | 26 (`engines` requires 22 or newer) | every app and script |
+| npm | 11 | workspaces; `npm ci` reproduces `package-lock.json` |
+| Chromium for Playwright | `npx playwright install chromium` | the apps' Playwright suites |
+| `uv` and Python 3.13 | uv 0.11 | the Python side: the commit hooks and the room planner's Modal client, pinned in `pyproject.toml` and `uv.lock` |
+| OpenAI API key | access to `gpt-5.6-terra` | the room planner's agent; the template needs none |
+| Modal account (optional) | `uv run modal token new` | the room planner's image-to-3D endpoint |
+| Aeonik font files (optional) | `Aeonik-Light/Regular/Medium.ttf` | the house typeface; the CSS falls back to Helvetica Neue and Arial |
 
 ## Setup
 
 ```sh
 git clone https://github.com/reversely/webmcp.git && cd webmcp
 cp .env.example .env            # then put your OpenAI key in it
-npm run setup                   # npm ci, Chromium, uv sync, commit hooks; checks versions and .env
-npm run dev                     # http://localhost:3000
+npm run setup                   # npm ci for every app, Chromium, uv sync, hooks, fonts, .env links
+npm run dev -w 3droom-concept   # or: npm run dev -w app-template -- -p 3112
 ```
 
-`npm run setup` runs `scripts/setup.sh`. It is safe to run again; it reports each check and stops on a missing requirement with the command that fixes it.
+`npm run setup` runs `scripts/setup.sh`. It is safe to run again. The one `.env` at the root is linked into each app (`<app>/.env -> ../.env`), so every app reads the same names. The file is gitignored; never commit it.
 
 ## Environment variables
 
-Copy `.env.example` to `.env`. The file is gitignored; never commit it.
-
-| Variable | Required | Meaning |
+| Variable | Used by | Meaning |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | yes | read by the Next server at runtime for every model call |
-| `MODAL_IMAGE_TO_3D_URL` | no | the deployed Modal endpoint (see below); absent means proxies only |
-| `NEXT_PUBLIC_WEBMCP_POLYFILL` | no | `1` loads Chrome's WebMCP polyfill for browsers without `document.modelContext`; the demo passes `?webmcp=polyfill` in the URL instead |
+| `OPENAI_API_KEY` | 3droom-concept | every model call |
+| `MODAL_IMAGE_TO_3D_URL` | 3droom-concept | the deployed Modal endpoint; absent means colour proxies |
+| `NEXT_PUBLIC_WEBMCP_POLYFILL` | every app | `1` loads Chrome's WebMCP polyfill for browsers without `document.modelContext`; the suites pass `?webmcp=polyfill` in the URL instead |
 
 Check a key is present without printing it: `grep -cE '^OPENAI_API_KEY=.+' .env` prints `1`.
 
-## Running
+## Commands at the root
 
 | Command | What it does |
 | --- | --- |
-| `npm run dev` | dev server on port 3000 (`-- -p 3111` for the port the test scripts expect) |
-| `npm run build` then `npm start` | production build and server |
-| `npm test` | vitest unit suite (domain, agent, server, UI helpers), no network |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run demo:test` | the regression suites (`tests/demo.spec.ts`, `webmcp.spec.ts`, `failures.spec.ts`): two browser contexts play both people through every scene with API assertions and fallbacks; needs the dev server on 3111 and the OpenAI key; about 4 minutes |
-| `npm run demo:script` | the recorded walkthrough (`tests/script.spec.ts`): the same scenes through the visible interface at a human pace with a scene caption on each page, one path and no fallback; about 10 minutes; videos `tests/videos/script-zach-*.webm` and `script-ben-*.webm` |
-| `npm run test:webmcp` | discovers and executes the seven WebMCP tools through the polyfill |
-| `npx tsx scripts/inspect-ui.ts` / `inspect-flow.mts` / `inspect-items.mts` / `inspect-sync.mts` / `inspect-stream.mts` | semantic gates: open the running app and cross-check what is on screen against the API |
-| `npm run probe:weekly` | re-checks which discovered Shopify sellers carry the WebMCP loader |
+| `npm test` | every app's vitest suite |
+| `npm run typecheck` | `tsc --noEmit` in every app |
+| `npm run <script> -w <app>` | one app's script (`dev`, `build`, `test:webmcp`, `demo:test`, `demo:script`, ...) |
+| `uv run pre-commit run --files <paths>` | the hooks on chosen files before staging |
 
-Live tests that hit external services are skipped unless you opt in: `LIVE_SHOPIFY=1`, `LIVE_AGENT=1` (load the key first: `set -a; . ./.env; set +a`).
+## Adding an app
 
-## 3D generation on Modal
+1. Copy `app-template/` to a new folder and rename `name` in its `package.json`.
+2. Add the folder to `workspaces` in the root `package.json` and run `npm install`.
+3. Give it a port of its own in `playwright.config.ts` and its README.
+4. `npm run setup` links `.env` and copies the fonts into it.
 
-`modal/image_to_3d.py` is a Modal app running TripoSR on one A10G with weights in a Modal volume and no keep-warm. Deploy it once and put the printed endpoint URL in `.env`:
+## Commit hooks and layout
 
-```sh
-uv run modal token new                       # once per machine
-uv run modal deploy modal/image_to_3d.py     # prints https://<user>--webmcp-image-to-3d-imageto3d-generate.modal.run
-```
-
-A cold call takes about 60 s (container start), a warm call about 10 s, at a few cents each. `modal/README.md` has the operating notes.
-
-## Fonts
-
-The house style uses Aeonik (CoType Foundry, commercial). If you have a licence, copy `Aeonik-Light.ttf`, `Aeonik-Regular.ttf`, and `Aeonik-Medium.ttf` into `public/fonts/` (gitignored). `npm run setup` copies them from `~/Library/Fonts` when they are there. Without them the fallback stack applies and nothing else changes.
-
-## Commit hooks
-
-`.pre-commit-config.yaml` runs ruff (lint and format on the Python files), whitespace and end-of-file fixes, JSON, YAML, and TOML checks, and `detect-secrets` against `.secrets.baseline`. The hook tools come from the uv dev group (`uv sync`), and `npm run setup` runs `uv run pre-commit install`. Run `uv run pre-commit run --files <paths>` before staging so a fixer never edits a file mid-commit.
-
-## Layout
+`.pre-commit-config.yaml` runs ruff (Python), whitespace and end-of-file fixes, JSON, YAML, and TOML checks, and `detect-secrets` against `.secrets.baseline`. One ticket is one commit to `main`; the message body ends with `closes #N`.
 
 ```
-src/domain/      types, BOM and budget, geometry relations, ranking, products, delivery, 3D proxies
-src/agent/       PlanningAgent (OpenAI Agents SDK), sourcing, replacement, delivery, visual, compile
-src/commerce/    UCP catalog client with recorded fixtures
-src/server/      in-memory state, trace, board sync, 3D jobs
-src/webmcp/      the seven WebMCP tools and their registration
-src/app/         Next.js routes and the four-stage UI
-src/components/  React Three Fiber room
-tests/           Playwright flow, WebMCP and failure suites
-scripts/         semantic gate scripts, previews, schema generation
-spikes/          storefront survey and probes
-modal/           image-to-3D endpoint (Python; see pyproject.toml)
-evals/           WebMCP tool evals for the Chrome webmcp-evals CLI
+3droom-concept/  the room planner (see its README for the layout inside)
+app-template/    the starting point for a new app
+scripts/         setup.sh
+pyproject.toml   the uv project: modal, pre-commit, detect-secrets, ruff
+docs/            the local session log (gitignored)
 ```
 
 ## Disk
 
-Playwright videos, `.next/`, and `test-results/` grow quickly. `npm run setup` prints free space; clear `test-results/`, `playwright-report/`, and `.next/cache` before a recorded run.
+Playwright videos, `.next/`, and `test-results/` in each app grow quickly; `npm run setup` prints free space. Clear `<app>/test-results`, `<app>/.next/cache`, and old `<app>/tests/videos/*.webm` before a recorded run.
