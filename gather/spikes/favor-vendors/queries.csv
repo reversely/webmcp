@@ -1,0 +1,25 @@
+type,key,query,price_max_usd,ships_from,note
+category,favors,party favors,,*,plain category noun
+category,cookies,cookie favors,,*,plain category noun
+category,dessert_box,dessert box gift,,*,plain category noun
+category,candles,candle favors,,*,plain category noun
+category,stickers,sticker sheet,,*,plain category noun
+category,coasters,coasters gift,,*,plain category noun
+category,totes,tote bag gift,,*,plain category noun
+personalization,favors_personalized,personalized party favors,,*,category plus a personalization word
+personalization,cookies_custom,custom cookies with names,,*,category plus a personalization phrase
+personalization,coasters_engraved,engraved coaster,,*,category plus a personalization word
+personalization,totes_monogram,monogrammed tote bag,,*,category plus a personalization word
+dietary,cookies_vegan,vegan cookie favors,,*,category plus a dietary word
+dietary,cookies_gf,gluten free cookies gift,,*,category plus a dietary word
+dietary,chocolate_nutfree,nut free chocolate gift box,,*,category plus an allergen word
+occasion,wedding,wedding favors for guests,,*,occasion phrase
+occasion,baby_shower,baby shower favors,,*,occasion phrase
+occasion,kids,kids party favor bags,,*,occasion phrase
+occasion,corporate,corporate event gifts for attendees,,*,occasion phrase
+bulk,favors_bulk,party favors bulk 50,,*,category plus a quantity
+bulk,cookies_bulk,cookies bulk order 100,,*,category plus a quantity
+price,favors_under_10,party favors,10,*,category with a price ceiling in the filter
+price,favors_under_25,personalized party favors,25,*,personalization with a price ceiling in the filter
+sentence,sentence_dessert,a small dessert box each guest can take home,,*,an organizer's sentence as typed
+sentence,sentence_kids,something for the kids at a birthday party under ten dollars,,*,an organizer's sentence as typed
