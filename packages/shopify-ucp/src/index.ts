@@ -18,3 +18,8 @@ export type {
   SearchFilters,
   ShipsTo
 } from "./types";
+export { addBusinessDays, addCalendarDays, isAfter, isOnOrBefore, parseIsoDate, toIsoDate } from "./delivery/dates";
+export { SHIPPING_BUFFER_BUSINESS_DAYS, parseArrivalWindow } from "./delivery/durationText";
+export type { ArrivalWindow, DurationUnit, ParsedDuration } from "./delivery/durationText";
+export { CHECKOUT_PLACEHOLDER_BUYER, CHECKOUT_PLACEHOLDER_PHONE, CHECKOUT_PLACEHOLDER_STREET, CHECKOUT_TIMEOUT_MS, checkoutOptions, probeCheckout, shippingPolicyUrl } from "./checkout";
+export type { CheckoutDestination, CheckoutOption, CheckoutPayload, CheckoutPlaceholder, CheckoutProbe } from "./checkout";

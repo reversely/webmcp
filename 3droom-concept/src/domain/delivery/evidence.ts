@@ -9,8 +9,8 @@
  * ranks below a fitting one instead of being eliminated on a guess.
  */
 import type { DeliveryStatus } from "../types";
-import { isAfter, isOnOrBefore } from "./dates";
-import { parseArrivalWindow, type ParsedDuration } from "./durationText";
+import { isAfter, isOnOrBefore } from "@webmcp/shopify-ucp";
+import { parseArrivalWindow, type ParsedDuration } from "@webmcp/shopify-ucp";
 
 export type DeliveryStatusValue = (typeof DeliveryStatus)["options"][number];
 
