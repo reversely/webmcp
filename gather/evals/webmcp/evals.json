@@ -1,0 +1,6 @@
+[
+  { "name": "Direct: who is going", "messages": [{ "role": "user", "type": "message", "content": "Who has said they're going?" }], "expectedCall": [{ "functionName": "list_guests", "arguments": { "filter": { "$contains": "status:eq:going" } } }] },
+  { "name": "Ambiguous: the whole picture", "messages": [{ "role": "user", "type": "message", "content": "How are the replies looking?" }], "expectedCall": [{ "functionName": "get_summary", "arguments": {} }] },
+  { "name": "Direct: what changed since last time", "messages": [{ "role": "user", "type": "message", "content": "What changed since sequence 40?" }], "expectedCall": [{ "functionName": "get_changes", "arguments": { "since_seq": 40 } }] },
+  { "name": "Direct: reply to the vendor on a gift", "messages": [{ "role": "user", "type": "message", "content": "Tell the vendor on gift gift_3: yes, go ahead with the extra box." }], "expectedCall": [{ "functionName": "post_update", "arguments": { "gift_id": "gift_3", "kind": "reply" } }] }
+]

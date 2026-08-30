@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { snapshot } from "../../../server/api";
 import { Overview } from "./overview";
+import { WebMcpProvider } from "../../webmcp-provider";
 
 export type Snapshot = ReturnType<typeof snapshot>;
 type Tab = "overview" | "experience";
@@ -44,6 +45,7 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
           <button type="button" className={tab === "experience" ? "on" : ""} aria-current={tab === "experience" ? "page" : undefined} onClick={() => setTab("experience")} data-testid="tab-experience">Guest Experience</button>
         </nav>
         <div className="right">
+          <WebMcpProvider eventId={event.id} />
           <span className={`pill${event.status === "published" ? " live" : ""}`} data-testid="status">{event.status === "published" ? "Published" : "Draft"}</span>
           {invite && (
             <button className="btn ghost" type="button" onClick={() => { navigator.clipboard?.writeText(invite); setCopied(true); setTimeout(() => setCopied(false), 1500); }} data-testid="copy-invite">
