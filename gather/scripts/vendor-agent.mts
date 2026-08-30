@@ -34,10 +34,15 @@ const units = rows.filter((r) => ["open", "locked"].includes(r.unit_status)).len
 console.log(`${rows.length} rows, ${units} units to produce`);
 
 if (step === "confirm") {
-  const expected = new Date(Date.now() + 5 * 86_400_000).toISOString().slice(0, 10);
-  await call("post_update", { gift_id: giftId, kind: "confirmed", text: `Confirmed ${units} units; expected ready by ${expected}.`, expected_date: expected });
+  // The vendor commits to the organizer's needed-by date (or the lock date when no needed-by is set).
+  const neededBy = (manifest.payload?.needed_by as string | null) ?? (manifest.payload?.cutoff as string | null);
+  if (!neededBy) {
+    console.error("The manifest carries no needed-by or lock date; nothing to confirm against.");
+    process.exit(1);
+  }
+  await call("post_update", { gift_id: giftId, kind: "confirmed", text: `${units} units confirmed for ${neededBy}`, expected_date: neededBy });
 } else if (step === "ship") {
-  await call("post_update", { gift_id: giftId, kind: "shipped", text: `${units} units shipped.`, reference: `REF-${Date.now().toString(36).toUpperCase()}` });
+  await call("post_update", { gift_id: giftId, kind: "shipped", text: `${units} units shipped`, reference: `REF-${Date.now().toString(36).toUpperCase()}` });
 } else if (step === "watch") {
   let since = changes.seq ?? 0;
   for (let i = 0; i < 30; i++) {

@@ -10,7 +10,7 @@ import cardsData from "./cards.json";
 export type CardSearch = { query: string; categories?: string[] };
 export type Card = { key: string; label: string; searches: CardSearch[] };
 export type CardsConfig = { cards: Card[]; delivery_buffer_days: number; lead_time_cap_days: number; weights: Record<ScoreTerm, number> };
-export type ScoreTerm = "coverage" | "lead_time" | "price_headroom" | "delivery_confidence" | "cancellation_terms" | "seller_signal";
+export type ScoreTerm = "coverage" | "lead_time" | "price_fit" | "delivery_confidence" | "cancellation_terms" | "seller_signal";
 
 export function cardsConfig(): CardsConfig {
   return cardsData as CardsConfig;
@@ -175,15 +175,27 @@ function daysBetween(a: string, b: string): number {
   return Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
 }
 
+/**
+ * How well a unit price uses the amount the organizer set per person: 1 from 60% to 100% of it,
+ * falling to 0 at a price of nothing, and 0 above it. A gift budget is an amount to spend, so a
+ * cheaper product does not outrank one that uses it.
+ */
+export function priceFit(price_cents: number | null, budget_cents: number | null): number {
+  if (budget_cents === null || budget_cents <= 0 || price_cents === null) return 0.5;
+  if (price_cents > budget_cents) return 0;
+  const share = price_cents / budget_cents;
+  return share >= 0.6 ? 1 : share / 0.6;
+}
+
 /** Each term is normalized to 0 to 1 and weighted by the configuration row; the coverage term is 1 until a dietary mapping exists (Section 9 supplies it later). */
 export function score(c: Candidate, ctx: EventContext, config = cardsConfig(), coverage = 1): Scored {
   const verdict = eligibility(c, ctx, config);
   const lead = c.delivery?.window ? Math.max(0, Math.min(config.lead_time_cap_days, daysBetween(c.delivery.window.latest, ctx.event_date))) / config.lead_time_cap_days : 0;
-  const headroom = ctx.budget_cents && c.price_cents !== null ? Math.max(0, ctx.budget_cents - c.price_cents) / ctx.budget_cents : 0.5;
+  const fit = priceFit(c.price_cents, ctx.budget_cents);
   const confidence = c.delivery?.confidence === "dated" ? 1 : c.delivery?.confidence === "duration" ? 0.5 : 0;
   const refund = c.policy_links.some((l) => l.type === "refund_policy") ? 0.5 : 0;
   const seller = (c.shop_url ? 0.4 : 0) + (c.policy_links.length >= 4 ? 0.3 : 0) + (c.delivery?.window ? 0.3 : 0);
-  const terms: Record<ScoreTerm, number> = { coverage, lead_time: lead, price_headroom: headroom, delivery_confidence: confidence, cancellation_terms: refund, seller_signal: seller };
+  const terms: Record<ScoreTerm, number> = { coverage, lead_time: lead, price_fit: fit, delivery_confidence: confidence, cancellation_terms: refund, seller_signal: seller };
   const total = (Object.keys(terms) as ScoreTerm[]).reduce((s, k) => s + terms[k] * config.weights[k], 0) / (Object.values(config.weights).reduce((a, b) => a + b, 0) || 1);
   return { ...c, score: Math.round(total * 1000) / 1000, terms, verdict };
 }

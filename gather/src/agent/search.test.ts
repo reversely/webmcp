@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogClient } from "@webmcp/shopify-ucp";
-import { eligibility, rank, searchCandidates, searchesForSentence, withDelivery, type Candidate, type EventContext } from "./search";
+import { eligibility, priceFit, rank, searchCandidates, searchesForSentence, withDelivery, type Candidate, type EventContext } from "./search";
 
 const CTX: EventContext = { event_date: "2030-01-10", venue: { name: "Venue", line1: "1 Street", city: "City", region: "RG", postal_code: "00000", country: "CA" }, budget_cents: 2000, quantity: 20, today: "2029-12-20" };
 
@@ -64,9 +64,16 @@ describe("withDelivery, eligibility, and rank", () => {
     expect(step.delivery?.verdict).toBe("needs_buyer");
     expect(eligibility(step, CTX).eligible).toBe(true);
   });
-  it("excludes a price above the budget and ranks dated, cheaper, better-documented sellers first", async () => {
-    const dated = await withDelivery(base({ product_id: "dated", price_cents: 1000 }), CTX, checkoutWith(["Arrives Dec 28 to Jan 2"]));
-    const unknown = await withDelivery(base({ product_id: "unknown", price_cents: 1000 }), CTX, async () => new Response("no", { status: 500 }));
+  it("scores a price that uses the budget above a cheap one", () => {
+    expect(priceFit(1800, 2000)).toBe(1);
+    expect(priceFit(1200, 2000)).toBe(1);
+    expect(priceFit(300, 2000)).toBeCloseTo(0.25);
+    expect(priceFit(2500, 2000)).toBe(0);
+    expect(priceFit(1000, null)).toBe(0.5);
+  });
+  it("excludes a price above the budget and ranks dated, budget-using, better-documented sellers first", async () => {
+    const dated = await withDelivery(base({ product_id: "dated", price_cents: 1500 }), CTX, checkoutWith(["Arrives Dec 28 to Jan 2"]));
+    const unknown = await withDelivery(base({ product_id: "unknown", price_cents: 1500 }), CTX, async () => new Response("no", { status: 500 }));
     const pricey = base({ product_id: "pricey", price_cents: 2500 });
     const { ranked, excluded } = rank([unknown, dated, pricey], CTX);
     expect(ranked.map((r) => r.product_id)).toEqual(["dated", "unknown"]);

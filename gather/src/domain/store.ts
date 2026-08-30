@@ -102,7 +102,8 @@ export function createEvent(input: EventInput): Event {
 export function getEvent(id: string): Event {
   const event = state().events.get(id);
   if (!event) throw new Error(`No event ${id}.`);
-  return event;
+  // An event stored before the delivery choice existed reads as "to the venue, no date yet".
+  return event.delivery ? event : { ...event, delivery: { destination: "venue", address: null, needed_by: null } };
 }
 
 export function eventByCode(code: string): Event | undefined {

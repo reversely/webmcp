@@ -1,0 +1,13 @@
+{
+  "title": "",
+  "host": "",
+  "starts_at": "2030-01-10T19:00",
+  "venue": { "name": "", "line1": "", "city": "", "region": "", "postal_code": "", "country": "" },
+  "spots": "",
+  "cost": "",
+  "deadline": "2030-01-03",
+  "needed_by": "2030-01-08",
+  "choices": ["", "", ""],
+  "guests": [{ "name": "", "choice": "" }, { "name": "", "choice": "" }, { "name": "", "choice": "" }],
+  "card": "food_drink"
+}

@@ -20,8 +20,8 @@ test("the overview shows the replies as they arrive and edits the setup in place
   await expect(page.getByTestId("stat-going").locator(".n")).toHaveText("2", { timeout: 8000 });
   await expect(page.getByTestId("stat-maybe").locator(".n")).toHaveText("1");
   await expect(page.getByTestId("guest-row")).toHaveCount(3);
-  await expect(page.getByTestId("followups")).toContainText("1 guest going has not given name for printing");
-  await expect(page.getByTestId("followups")).toContainText("1 guest is Maybe");
+  await expect(page.getByTestId("followups")).toContainText("1 guest going without name for printing");
+  await expect(page.getByTestId("followups")).toContainText("1 guest still Maybe");
   await expect(page.getByTestId("replies-card")).toContainText("2 going");
   await expect(page.getByTestId("replies-card")).toContainText("Choice A");
   // A follow-up filters the table to its guests.

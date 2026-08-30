@@ -23,7 +23,7 @@ test("a guest replies going with answers, then edits, then cancels from the same
   await page.getByTestId("answer-printed_name").getByRole("textbox").fill("One");
   await page.getByTestId("answer-dietary").getByRole("button", { name: "Choice A" }).click();
   await page.getByTestId("send").click();
-  await expect(page.getByTestId("saved")).toHaveText("Saved as Going.");
+  await expect(page.getByTestId("saved")).toHaveText("Saved as Going");
   const url = page.url();
   expect(url).toMatch(/\?guest=guest_/);
 
@@ -36,12 +36,12 @@ test("a guest replies going with answers, then edits, then cancels from the same
   await expect(page.getByTestId("guest-name")).toHaveValue("Guest One");
   await page.getByTestId("answer-printed_name").getByRole("textbox").fill("One R.");
   await page.getByTestId("send").click();
-  await expect(page.getByTestId("saved")).toHaveText("Saved as Going.");
+  await expect(page.getByTestId("saved")).toHaveText("Saved as Going");
   snap = (await (await request.get(`/api/events/${id}`)).json()) as typeof snap;
   expect(Object.values(snap.guests[0].values)).toContain("One R.");
 
   await page.getByTestId("cancel").click();
-  await expect(page.getByTestId("saved")).toHaveText("Saved as Can't go.");
+  await expect(page.getByTestId("saved")).toHaveText("Saved as Can't go");
   snap = (await (await request.get(`/api/events/${id}`)).json()) as typeof snap;
   expect(snap.guests[0].status).toBe("cant_go");
   expect(snap.counts.cant_go).toBe(1);

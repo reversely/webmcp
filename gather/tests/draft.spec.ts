@@ -16,6 +16,7 @@ test("a draft becomes a published event with the organizer's questions", async (
   await page.getByTestId("spots").fill("10");
   await page.getByTestId("cost").fill("10");
   await page.getByTestId("deadline").fill("2030-01-03");
+  await page.getByTestId("needed_by").fill("2030-01-08");
   // The preview follows the fields.
   await expect(page.getByTestId("invite-preview")).toContainText("Team offsite");
   await expect(page.getByTestId("invite-preview")).toContainText("Hosted by A. Host");
@@ -37,8 +38,8 @@ test("a draft becomes a published event with the organizer's questions", async (
   await expect(page.getByTestId("status")).toHaveText("Published");
   await expect(page.getByTestId("invite-link")).toContainText(/\/i\/[A-Z0-9]{6}/);
   const id = page.url().split("/events/")[1];
-  const snap = (await (await request.get(`/api/events/${id}`)).json()) as { definitions: { label: string; constraints: { options?: { label: string }[] } }[]; event: { status: string; cost_per_person_cents: number } };
-  expect(snap.event).toMatchObject({ status: "published", cost_per_person_cents: 1000 });
+  const snap = (await (await request.get(`/api/events/${id}`)).json()) as { definitions: { label: string; constraints: { options?: { label: string }[] } }[]; event: { status: string; cost_per_person_cents: number; delivery: { destination: string; needed_by: string } } };
+  expect(snap.event).toMatchObject({ status: "published", cost_per_person_cents: 1000, delivery: { destination: "venue", needed_by: "2030-01-08" } });
   const multi = snap.definitions.find((d) => (d.constraints.options ?? []).length > 0)!;
   expect(multi.constraints.options!.map((o) => o.label)).toEqual(["Choice one", "No preference"]);
   expect(snap.definitions.map((d) => d.label)).toContain("Anything else we should know?");

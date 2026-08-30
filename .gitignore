@@ -53,3 +53,6 @@ coverage/
 
 # Generated product meshes (src/server/three-d.ts); regenerated from the Modal endpoint
 **/public/models/
+
+# The demo event a person records with; local
+**/docs/demo-event.json

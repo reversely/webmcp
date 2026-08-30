@@ -17,6 +17,7 @@ type Draft = {
   invite_extras: string[];
   response_options: GuestStatus[];
   settings: Library["event_defaults"]["settings"];
+  delivery: { destination: "venue" | "address"; address: { name: string; line1: string; city: string; region: string; postal_code: string; country: string }; needed_by: string };
 };
 
 /** A question on the draft: a library row the organizer kept or wrote, with its options in their words. */
@@ -25,10 +26,10 @@ type DraftQuestion = { key: string; label: string; scope: LibraryQuestion["scope
 const STATUS_LABEL: Record<GuestStatus, string> = { going: "Going", maybe: "Maybe", cant_go: "Can't go", no_reply: "No reply" };
 const TYPE_LABEL: Record<ValueType, string> = { text: "Text", number: "Number", boolean: "Yes or no", enum: "One choice", multi_enum: "Several choices", date: "Date", file: "File", reference: "A record" };
 const SETTING_LABEL: Record<keyof Draft["settings"], string> = {
-  guest_approval: "Each guest needs your approval before they count",
-  reminders: "Remind guests before the RSVP deadline",
-  reask_on_change: "Ask guests again when a question changes after they answered",
-  order_approval: "Show you the gift order before any cart is kept"
+  guest_approval: "Guests count only after your approval",
+  reminders: "Reminder before the RSVP deadline",
+  reask_on_change: "Re-ask guests when a question changes",
+  order_approval: "Your approval before any cart is kept"
 };
 
 function fromLibrary(q: LibraryQuestion): DraftQuestion {
@@ -52,7 +53,8 @@ export function DraftPage({ library }: { library: Library }) {
     description: "",
     invite_extras: [],
     response_options: library.event_defaults.response_options,
-    settings: library.event_defaults.settings
+    settings: library.event_defaults.settings,
+    delivery: { destination: "venue", address: { name: "", line1: "", city: "", region: "", postal_code: "", country: "" }, needed_by: "" }
   });
   const [questions, setQuestions] = useState<DraftQuestion[]>(library.questions.filter((q) => q.seed).map(fromLibrary));
   const [extraDraft, setExtraDraft] = useState("");
@@ -95,7 +97,8 @@ export function DraftPage({ library }: { library: Library }) {
         description: draft.description,
         invite_extras: draft.invite_extras,
         response_options: draft.response_options,
-        settings: draft.settings
+        settings: draft.settings,
+        delivery: { destination: draft.delivery.destination, address: draft.delivery.destination === "address" ? draft.delivery.address : null, needed_by: draft.delivery.needed_by || null }
       };
       const created = await fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!created.ok) throw new Error(((await created.json()) as { error: string }).error);
@@ -138,8 +141,8 @@ export function DraftPage({ library }: { library: Library }) {
       <main className="sheet">
         <div className="wrap">
           <div>
-            <h1 className="title">Your event</h1>
-            <p className="lead">The details guests see, the questions they answer, and how their replies are handled. The invite on the right updates as you type; publishing creates its link.</p>
+            <h1 className="title">New event</h1>
+            <p className="lead">Details and questions for the invite on the right</p>
 
             <section className="block" aria-labelledby="details">
               <div className="labelrow"><h2 id="details">Details</h2><span className="eyebrow">Shown on the invite</span></div>
@@ -175,6 +178,30 @@ export function DraftPage({ library }: { library: Library }) {
               <div className="field"><label htmlFor="description">Description</label><textarea id="description" rows={3} value={draft.description} onChange={(e) => set("description", e.target.value)} /></div>
             </section>
 
+            <section className="block" aria-labelledby="delivery">
+              <div className="labelrow"><h2 id="delivery">Gift delivery</h2></div>
+              <div className="field">
+                <label>Delivered to</label>
+                <div className="chips" data-testid="delivery-destination">
+                  <button type="button" className={`chip${draft.delivery.destination === "venue" ? " on" : ""}`} aria-pressed={draft.delivery.destination === "venue"} onClick={() => set("delivery", { ...draft.delivery, destination: "venue" })}>The venue</button>
+                  <button type="button" className={`chip${draft.delivery.destination === "address" ? " on" : ""}`} aria-pressed={draft.delivery.destination === "address"} onClick={() => set("delivery", { ...draft.delivery, destination: "address" })}>Another address</button>
+                </div>
+              </div>
+              {draft.delivery.destination === "address" && (
+                <>
+                  <div className="field"><label htmlFor="d-name">Name at the address</label><input id="d-name" value={draft.delivery.address.name} onChange={(e) => set("delivery", { ...draft.delivery, address: { ...draft.delivery.address, name: e.target.value } })} /></div>
+                  <div className="field"><label htmlFor="d-line1">Street address</label><input id="d-line1" value={draft.delivery.address.line1} onChange={(e) => set("delivery", { ...draft.delivery, address: { ...draft.delivery.address, line1: e.target.value } })} /></div>
+                  <div className="grid3">
+                    <div className="field"><label htmlFor="d-city">City</label><input id="d-city" value={draft.delivery.address.city} onChange={(e) => set("delivery", { ...draft.delivery, address: { ...draft.delivery.address, city: e.target.value } })} /></div>
+                    <div className="field"><label htmlFor="d-region">Region</label><input id="d-region" value={draft.delivery.address.region} onChange={(e) => set("delivery", { ...draft.delivery, address: { ...draft.delivery.address, region: e.target.value } })} /></div>
+                    <div className="field"><label htmlFor="d-postal">Postal code</label><input id="d-postal" value={draft.delivery.address.postal_code} onChange={(e) => set("delivery", { ...draft.delivery, address: { ...draft.delivery.address, postal_code: e.target.value } })} /></div>
+                  </div>
+                  <div className="field"><label htmlFor="d-country">Country code</label><input id="d-country" maxLength={2} value={draft.delivery.address.country} onChange={(e) => set("delivery", { ...draft.delivery, address: { ...draft.delivery.address, country: e.target.value.toUpperCase() } })} /></div>
+                </>
+              )}
+              <div className="field" style={{ maxWidth: 320 }}><label htmlFor="needed_by">Gifts needed by</label><input id="needed_by" type="date" value={draft.delivery.needed_by} onChange={(e) => set("delivery", { ...draft.delivery, needed_by: e.target.value })} data-testid="needed_by" /></div>
+            </section>
+
             <section className="block" aria-labelledby="questions">
               <div className="labelrow"><h2 id="questions">RSVP questions</h2><span className="eyebrow">Guests answer these</span></div>
               <div className="field">
@@ -204,7 +231,7 @@ export function DraftPage({ library }: { library: Library }) {
                         <span className="chip">
                           <input aria-label={`Add a choice to ${q.label}`} placeholder="Add a choice" onKeyDown={(e) => { const v = (e.target as HTMLInputElement).value.trim(); if (e.key === "Enter" && v && !q.options.includes(v)) { updateQuestion(i, { options: [...q.options, v] }); (e.target as HTMLInputElement).value = ""; } }} />
                         </span>
-                        {q.options.length === 0 && <span className="hint">Guests choose from the choices you add here.</span>}
+                        {q.options.length === 0 && <span className="hint">Choices for guests</span>}
                       </div>
                     )}
                   </div>
@@ -229,7 +256,7 @@ export function DraftPage({ library }: { library: Library }) {
             </section>
 
             <div className="foot">
-              <p className="note">Publishing creates the invite link and opens the event's dashboard. Gifts for guests are chosen there once replies arrive.</p>
+              <p className="note">Publish to create the invite link</p>
               <button className="btn primary" type="button" onClick={publish} disabled={!canPublish || publishing}>{publishing ? "Publishing" : "Publish"}</button>
             </div>
             {error && <p className="error" role="alert">{error}</p>}

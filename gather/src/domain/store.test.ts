@@ -14,7 +14,8 @@ const EVENT: EventInput = {
   invite_extras: [],
   response_options: ["going", "maybe", "cant_go"],
   settings: { guest_approval: false, reminders: true, reask_on_change: true, order_approval: true },
-  segments: []
+  segments: [],
+  delivery: { destination: "venue", address: null, needed_by: "2030-01-08" }
 };
 
 const OPTIONS = [{ value: "a", label: "Option A" }, { value: "b", label: "Option B" }, { value: "none", label: "None" }];

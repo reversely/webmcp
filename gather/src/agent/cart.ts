@@ -11,6 +11,7 @@ import { getGift, lockGift, manifest, quantities, updateGift, type GiftInput } f
 import { currentSeq, getEvent } from "../domain/store";
 import type { Batch, CartBuyer, DeliveryWindow, Event, Proposal, UpdateKind, VendorUpdate } from "../domain/types";
 import { postUpdate, updatesFor } from "../server/api";
+import { deliveryTarget } from "../lib/delivery";
 import { cardsConfig } from "./search";
 
 export type CartDeps = { client: () => CatalogClient; now: () => Date };
@@ -38,13 +39,13 @@ export function cartLines(gift: Batch): CartLineInput[] {
 function destinationFor(event: Event, buyer: CartBuyer | null): CheckoutDestination {
   return {
     first_name: event.host,
-    last_name: event.venue.name,
+    last_name: deliveryTarget(event).address.name,
     ...(buyer?.phone_number ? { phone_number: buyer.phone_number } : {}),
-    street_address: event.venue.line1,
-    address_locality: event.venue.city,
-    address_region: event.venue.region,
-    postal_code: event.venue.postal_code,
-    address_country: event.venue.country
+    street_address: deliveryTarget(event).address.line1,
+    address_locality: deliveryTarget(event).address.city,
+    address_region: deliveryTarget(event).address.region,
+    postal_code: deliveryTarget(event).address.postal_code,
+    address_country: deliveryTarget(event).address.country
   };
 }
 
@@ -77,7 +78,7 @@ const MS_PER_DAY = 86_400_000;
  * today, so its latest date minus today is the lead time; with no window the buffer alone applies.
  */
 export function cutoffFor(event: Event, window: DeliveryWindow | null, today: string, bufferDays: number): string {
-  const eventDate = event.starts_at.slice(0, 10);
+  const eventDate = deliveryTarget(event).needed_by ?? event.starts_at.slice(0, 10);
   const leadDays = window ? Math.max(0, Math.round((parseIsoDate(window.latest).getTime() - parseIsoDate(today).getTime()) / MS_PER_DAY)) : 0;
   return addCalendarDays(eventDate, -(leadDays + bufferDays));
 }

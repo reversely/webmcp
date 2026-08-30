@@ -24,7 +24,7 @@ function Question({ def, value, onChange, disabled }: { def: AttributeDefinition
           {options.map((o) => (
             <button key={o.value} type="button" className={`chip${chosen.includes(o.value) ? " on" : ""}`} aria-pressed={chosen.includes(o.value)} onClick={() => onChange(chosen.includes(o.value) ? chosen.filter((v) => v !== o.value) : [...chosen, o.value])}>{o.label}</button>
           ))}
-          {options.length === 0 && <span className="hint">The organizer has not added choices yet.</span>}
+          {options.length === 0 && <span className="hint">No choices yet</span>}
         </div>
       </fieldset>
     );
@@ -77,7 +77,7 @@ export function InviteForm({ invite, guestId }: { invite: Invite; guestId: strin
     if (!guestId) return;
     fetch(`/api/events/${event.id}/guests/${guestId}`)
       .then(async (r) => {
-        if (!r.ok) throw new Error("This reply link no longer resolves; reply again below.");
+        if (!r.ok) throw new Error("Reply link expired");
         const g = (await r.json()) as { display_name: string; status: GuestStatus; values: Answers };
         setName(g.display_name);
         setStatus(g.status === "no_reply" ? null : g.status);
@@ -147,7 +147,7 @@ export function InviteForm({ invite, guestId }: { invite: Invite; guestId: strin
             </div>
 
             {!loaded ? (
-              <p className="lead">Loading your reply.</p>
+              <p className="lead">Loading your reply</p>
             ) : (
               <>
                 <div className="field">
@@ -168,9 +168,9 @@ export function InviteForm({ invite, guestId }: { invite: Invite; guestId: strin
                     {locked[q.id] && <p className="error" data-testid={`locked-${q.key}`}>{locked[q.id]}</p>}
                   </div>
                 ))}
-                {missing.length > 0 && status && <p className="hint" style={{ color: "var(--muted)" }}>Still needed: {missing.map((q) => q.label).join(", ")}.</p>}
+                {missing.length > 0 && status && <p className="hint" style={{ color: "var(--muted)" }}>Still needed: {missing.map((q) => q.label).join(" and ")}</p>}
                 <div className="foot">
-                  <p className="note">{done ? "Your reply is saved. Change it any time from this link." : "You can come back to this link to change your reply."}</p>
+                  <p className="note">{done ? "Saved for this link" : "This link keeps your reply"}</p>
                   <div style={{ display: "flex", gap: 10 }}>
                     {done && status !== "cant_go" && event.response_options.includes("cant_go") && (
                       <button type="button" className="btn ghost" onClick={() => send("cant_go")} disabled={saving} data-testid="cancel">Can't go</button>
@@ -179,7 +179,7 @@ export function InviteForm({ invite, guestId }: { invite: Invite; guestId: strin
                   </div>
                 </div>
                 {error && <p className="error" role="alert" data-testid="error">{error}</p>}
-                {savedStatus && <p className="hint" style={{ color: "var(--muted)", marginTop: 12 }} data-testid="saved">Saved as {STATUS_LABEL[savedStatus]}.</p>}
+                {savedStatus && <p className="hint" style={{ color: "var(--muted)", marginTop: 12 }} data-testid="saved">Saved as {STATUS_LABEL[savedStatus]}</p>}
               </>
             )}
           </div>

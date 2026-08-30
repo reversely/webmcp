@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { catalogClient } from "@webmcp/shopify-ucp";
 import { BadRequestError, errorResponse, requireEvent } from "../../../../../server/api";
 import { guestsFor } from "../../../../../domain/store";
-import { cardsConfig, emptyFunnel, rank, searchCandidates, searchesForSentence, withDelivery, withDetail, type EventContext } from "../../../../../agent/search";
+import { deliveryTarget } from "../../../../../lib/delivery";
+import { cardsConfig, emptyFunnel, priceFit, rank, searchCandidates, searchesForSentence, withDelivery, withDetail, type EventContext } from "../../../../../agent/search";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -21,15 +22,18 @@ export async function POST(request: Request, { params }: Params) {
     const searches = card ? card.searches : body.sentence?.trim() ? searchesForSentence(body.sentence, config) : null;
     if (!searches) throw new BadRequestError("Send a card key or a sentence.");
     const going = guestsFor(event.id).filter((g) => g.status === "going").length;
-    const ctx: EventContext = { event_date: event.starts_at.slice(0, 10), venue: event.venue, budget_cents: event.cost_per_person_cents, quantity: going, today: new Date().toISOString().slice(0, 10) };
+    const target = deliveryTarget(event);
+    if (!target.needed_by) throw new BadRequestError("Set where the gifts are delivered and by when before searching.");
+    const ctx: EventContext = { event_date: target.needed_by, venue: target.address, budget_cents: event.cost_per_person_cents, quantity: going, today: new Date().toISOString().slice(0, 10) };
     const started = Date.now();
     const client = catalogClient();
     const funnel = emptyFunnel();
     const found = await searchCandidates(client, searches, ctx, { limit: 50, pages: 2, sleepMs: 1500, funnel });
-    // Every candidate with a price under the budget gets the detail and a delivery probe, a few
-    // shops at a time; the probe cap keeps a broad search inside a minute.
+    // The candidates that use the budget best and offer the most variants get the detail and a
+    // delivery probe, a few shops at a time; the probe cap keeps a broad search inside a minute.
     const cap = Math.max(1, Math.min(body.probe ?? 30, 60));
-    const shortlist = [...found].filter((c) => ctx.budget_cents === null || c.price_cents === null || c.price_cents <= ctx.budget_cents).sort((a, b) => (b.variants.length - a.variants.length) || ((a.price_cents ?? Infinity) - (b.price_cents ?? Infinity))).slice(0, cap);
+    const preScore = (c: (typeof found)[number]) => priceFit(c.price_cents, ctx.budget_cents) * 2 + Math.min(c.variants.length, 6) / 6;
+    const shortlist = [...found].filter((c) => ctx.budget_cents === null || c.price_cents === null || c.price_cents <= ctx.budget_cents).sort((a, b) => preScore(b) - preScore(a)).slice(0, cap);
     const probed: typeof shortlist = [];
     for (let i = 0; i < shortlist.length; i += 6) probed.push(...(await Promise.all(shortlist.slice(i, i + 6).map(async (c) => withDelivery(await withDetail(client, c), ctx)))));
     funnel.probed = probed.length;

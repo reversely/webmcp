@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 
 test("the vendor agent reads its manifest and posts a confirmation and a shipped notice", async ({ request, baseURL }) => {
-  const created = await request.post("/api/events", { data: { title: "Test event", starts_at: "2030-01-10T19:00:00Z", venue: { name: "Venue", line1: "1 Street", city: "City", region: "RG", postal_code: "00000", country: "CA" } } });
+  const created = await request.post("/api/events", { data: { title: "Test event", starts_at: "2030-01-10T19:00:00Z", venue: { name: "Venue", line1: "1 Street", city: "City", region: "RG", postal_code: "00000", country: "CA" }, delivery: { destination: "venue", address: null, needed_by: "2030-01-08" } } });
   const { id } = (await created.json()) as { id: string };
   await request.post(`/api/events/${id}/publish`);
   await request.post(`/api/events/${id}/rsvp`, { data: { guests: [{ display_name: "Guest One", status: "going" }, { display_name: "Guest Two", status: "going" }] } });
@@ -13,6 +13,7 @@ test("the vendor agent reads its manifest and posts a confirmation and a shipped
 
   const out = execFileSync("npx", ["tsx", "scripts/vendor-agent.mts", baseURL!, id, token.id, gift.id, "confirm"], { encoding: "utf8" });
   expect(out).toContain("2 units to produce");
+  expect(out).toContain("2 units confirmed for 2030-01-08");
   const shipped = execFileSync("npx", ["tsx", "scripts/vendor-agent.mts", baseURL!, id, token.id, gift.id, "ship"], { encoding: "utf8" });
   expect(shipped).toContain("shipped");
 

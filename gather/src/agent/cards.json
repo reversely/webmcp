@@ -7,5 +7,5 @@
   ],
   "delivery_buffer_days": 3,
   "lead_time_cap_days": 14,
-  "weights": { "coverage": 30, "lead_time": 25, "price_headroom": 20, "delivery_confidence": 15, "cancellation_terms": 10, "seller_signal": 5 }
+  "weights": { "coverage": 30, "lead_time": 25, "price_fit": 20, "delivery_confidence": 15, "cancellation_terms": 10, "seller_signal": 5 }
 }

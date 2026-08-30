@@ -35,7 +35,7 @@ import {
   writeValue,
   type EventInput
 } from "../domain/store";
-import { Constraints, EventSettings, FilterSchema, GiftOverride, GiftRule, Guest, GuestStatus, MissingValueFallback, PostLockCancellation, Segment, UpdateKind, ValueType, Variant, VariantMappingRow, Venue, type AttributeDefinition, type Batch, type VendorUpdate, DeliveryWindow } from "../domain/types";
+import { Constraints, EventSettings, FilterSchema, GiftOverride, GiftRule, Guest, GuestStatus, MissingValueFallback, PostLockCancellation, Segment, UpdateKind, ValueType, Variant, VariantMappingRow, Venue, type AttributeDefinition, type Batch, type VendorUpdate, DeliveryWindow, Delivery } from "../domain/types";
 import { matches } from "../domain/filter";
 import { createGift, getGift, giftsFor, manifest, quantities, removeGift, setGiftOverride, unservable, updateGift, type GiftInput } from "../domain/gifts";
 import { afterRsvpWrite } from "./hooks";
@@ -59,6 +59,7 @@ export const EventBody = z.object({
   invite_extras: z.array(z.string()).default([]),
   response_options: z.array(GuestStatus).default(defaults.response_options),
   settings: EventSettings.default(defaults.settings),
+  delivery: Delivery.default({ destination: "venue", address: null, needed_by: null }),
   segments: z.array(Segment).default([])
 });
 
@@ -225,7 +226,9 @@ export function giftView(eventId: string, giftId: string) {
 }
 
 export function manifestView(eventId: string, giftId: string) {
-  return { gift_id: giftId, rows: manifest(requireGift(eventId, giftId)) };
+  const gift = requireGift(eventId, giftId);
+  const event = requireEvent(eventId);
+  return { gift_id: giftId, product_title: gift.product_title, needed_by: event.delivery?.needed_by ?? null, cutoff: gift.cutoff, locked_at: gift.locked_at, rows: manifest(gift) };
 }
 
 /** The organizer's decision for one guest; an empty body clears it. */

@@ -5,6 +5,7 @@ import type { Scored } from "../../../agent/search";
 import cards from "../../../agent/cards.json";
 import type { AttributeDefinition, Batch, GuestStatus } from "../../../domain/types";
 import { dateOnly, dateTime, money } from "../../../lib/format";
+import { deliveryTarget } from "../../../lib/delivery";
 import type { VendorUpdate } from "../../../domain/types";
 
 type Step = "pick" | "results" | "recipients" | "mapping" | "list";
@@ -26,6 +27,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
   const gifts = snap.gifts as GiftWithQuantities[];
   const [step, setStep] = useState<Step>(gifts.length ? "list" : "pick");
   const [sentence, setSentence] = useState("");
+  const [searchedFor, setSearchedFor] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const reply = lastSearch;
@@ -45,10 +47,17 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
 
   const choiceQuestions = useMemo(() => snap.definitions.filter((d) => d.scope === "guest" && (d.value_type === "enum" || d.value_type === "multi_enum") && (d.constraints.options?.length ?? 0) > 0), [snap.definitions]);
   const counts = { going: snap.counts.going, going_maybe: snap.counts.going + snap.counts.maybe, everyone: snap.guests.length };
-  const eventDate = snap.event.starts_at.slice(0, 10);
+  const target = deliveryTarget(snap.event);
+  const [neededBy, setNeededBy] = useState("");
+  async function saveNeededBy() {
+    if (!neededBy) return;
+    const res = await fetch(`/api/events/${snap.event.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ delivery: { ...(snap.event.delivery ?? { destination: "venue", address: null }), needed_by: neededBy } }) });
+    if (res.ok) onChanged();
+  }
 
   async function search(body: { card?: string; sentence?: string }) {
-    setBusy("Searching the catalog, then checking delivery to the venue for the closest matches.");
+    setSearchedFor(body.card ? (cards.cards.find((c) => c.key === body.card)?.label ?? body.card) : (body.sentence ?? ""));
+    setBusy("Searching the catalog and checking delivery");
     setError(null);
     try {
       const res = await fetch(`/api/events/${snap.event.id}/search`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -85,11 +94,11 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
   }
 
   async function confirm() {
-    setBusy("Saving the gift.");
+    setBusy("Saving the gift");
     setError(null);
     try {
       const source = editing ?? chosen;
-      if (!source) throw new Error("Pick a product first.");
+      if (!source) throw new Error("No product chosen");
       const variants = editing ? editing.variants : chosen!.variants.map((v) => ({ id: v.id, title: v.title, price_cents: v.price_cents, currency: v.currency }));
       const rows = Object.entries(mapping).filter(([, variantId]) => variantId).map(([key, variantId]) => { const [definition_id, value] = key.split("|"); return { definition_id, value, variant_id: variantId! }; });
       const recipientsFilter = RECIPIENT_FILTERS[recipients];
@@ -108,7 +117,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
   }
 
   async function act(gift: Batch, action: "send" | "approve" | "remove") {
-    setBusy(action === "remove" ? "Removing the gift." : action === "send" ? "Building the priced proposal at the shop." : "Approving.");
+    setBusy(action === "remove" ? "Removing the gift" : action === "send" ? "Pricing the cart at the shop" : "Approving");
     setError(null);
     try {
       const res = await fetch(action === "remove" ? `/api/events/${snap.event.id}/gifts/${gift.id}` : `/api/events/${snap.event.id}/gifts/${gift.id}/${action}`, { method: action === "remove" ? "DELETE" : "POST" });
@@ -142,17 +151,17 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
     if (!q.trim()) return;
     if (/why|missing|not (in|on) the list|excluded/.test(q) && reply) {
       const named = reply.excluded.find((e) => q.includes(e.title.toLowerCase().slice(0, 12)));
-      setAnswer(named ? `${named.title} (${named.shop_name}) failed the ${named.rule} rule: ${named.reason}` : reply.excluded.length ? `${reply.excluded.length} products did not fit: ${reply.excluded.slice(0, 5).map((e) => `${e.title} (${e.rule})`).join("; ")}.` : "Nothing was excluded from this search.");
+      setAnswer(named ? `${named.title} from ${named.shop_name} excluded by the ${named.rule} rule` : reply.excluded.length ? `${reply.excluded.length} excluded: ${reply.excluded.slice(0, 5).map((e) => `${e.title} by ${e.rule}`).join(" / ")}` : "Nothing excluded in this search");
     } else if (/lock|cutoff|deadline/.test(q)) {
       const dated = gifts.filter((g) => g.cutoff).sort((a, b) => (a.cutoff! < b.cutoff! ? -1 : 1));
-      setAnswer(dated.length ? `${dated[0].product_title} locks first, on ${dateOnly(dated[0].cutoff)}.` : "No gift has a lock date yet; the date is set when a gift is approved.");
+      setAnswer(dated.length ? `${dated[0].product_title} locks first on ${dateOnly(dated[0].cutoff)}` : "No lock date before approval");
     } else if (/name|value|answer/.test(q)) {
       const missing = snap.follow_ups.filter((f) => f.kind === "missing_value");
-      setAnswer(missing.length ? missing.map((f) => `${f.guest_ids.length} missing ${snap.definitions.find((d) => d.id === f.definition_id)?.label.toLowerCase()}`).join("; ") + "." : "Every guest going has answered every required question.");
+      setAnswer(missing.length ? missing.map((f) => `${f.guest_ids.length} without ${snap.definitions.find((d) => d.id === f.definition_id)?.label.toLowerCase()}`).join(" / ") : "Every required answer given");
     } else if (/how many|count|quantit/.test(q)) {
-      setAnswer(gifts.length ? gifts.map((g) => `${g.product_title}: ${g.quantities.reduce((s, x) => s + x.quantity, 0)} units`).join("; ") + "." : `${counts.going} guests are going; no gift is chosen yet.`);
+      setAnswer(gifts.length ? gifts.map((g) => `${g.product_title} ${g.quantities.reduce((s, x) => s + x.quantity, 0)} units`).join(" / ") : `${counts.going} going and no gift yet`);
     } else {
-      setAnswer("This bar answers from the search and the plan: why a product is missing, which gift locks first, who is missing a value, and how many units each gift needs.");
+      setAnswer("Ask why a product is missing or which gift locks first or who is missing a value or how many units");
     }
   }
 
@@ -162,7 +171,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
       <div className="dark-card" data-testid="order-summary">
         <div className="in">
           <h2>{gifts.reduce((s, g) => s + g.quantities.reduce((t, x) => t + x.quantity, 0), 0)} gifts</h2>
-          <div className="when">Quantities follow the replies until each gift's lock date.</div>
+          <div className="when">Quantities follow the replies until the lock date</div>
           {gifts.map((g) => (
             <div key={g.id}>
               <div className="kv"><span>{g.product_title}</span><span>{g.shop_domain}</span></div>
@@ -173,7 +182,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
               <div className="kv"><span style={{ paddingLeft: 12 }}>Locks</span><span>{g.cutoff ? dateOnly(g.cutoff) : "after approval"}</span></div>
             </div>
           ))}
-          <div className="note">The vendor receives variants and quantities after you approve; a cart is priced on send and kept only once approved.</div>
+          <div className="note">Priced on send and kept after approval</div>
         </div>
       </div>
     </aside>
@@ -188,11 +197,21 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
 
         {step === "pick" && (
           <section aria-labelledby="gx-pick">
-            <h1 className="title" id="gx-pick">A gift for your guests</h1>
-            <p className="lead">Pick a category or describe it. Delivery to the venue by {dateOnly(eventDate)} is checked before anything is shown.</p>
+            <h1 className="title" id="gx-pick">Gifts</h1>
+            {target.needed_by ? (
+              <p className="lead">Delivery to {target.label} by {dateOnly(target.needed_by)} checked before anything is shown</p>
+            ) : (
+              <div className="field" style={{ maxWidth: 420 }} data-testid="needed-by-ask">
+                <label htmlFor="gx-needed">Gifts needed at {target.label} by</label>
+                <div className="row" style={{ gridTemplateColumns: "1fr auto", padding: 0, border: 0 }}>
+                  <input id="gx-needed" type="date" value={neededBy} onChange={(e) => setNeededBy(e.target.value)} />
+                  <button type="button" className="btn primary small" onClick={saveNeededBy} disabled={!neededBy}>Set</button>
+                </div>
+              </div>
+            )}
             <div className="cats" data-testid="cards">
               {cards.cards.map((c) => (
-                <button key={c.key} type="button" className="cat" onClick={() => search({ card: c.key })} disabled={!!busy} data-testid={`card-${c.key}`}>
+                <button key={c.key} type="button" className="cat" onClick={() => search({ card: c.key })} disabled={!!busy || !target.needed_by} data-testid={`card-${c.key}`}>
                   <span className="ph" />
                   <span>{c.label}</span>
                 </button>
@@ -200,7 +219,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
             </div>
             <div className="ask" style={{ marginBottom: 24 }}>
               <input aria-label="Describe the gift" placeholder="Or describe it" value={sentence} onChange={(e) => setSentence(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sentence.trim() && search({ sentence })} data-testid="sentence" />
-              <button type="button" className="btn primary small" onClick={() => sentence.trim() && search({ sentence })} disabled={!!busy || !sentence.trim()}>Search</button>
+              <button type="button" className="btn primary small" onClick={() => sentence.trim() && search({ sentence })} disabled={!!busy || !sentence.trim() || !target.needed_by}>Search</button>
             </div>
             {gifts.length > 0 && <button type="button" className="btn ghost" onClick={() => setStep("list")}>Back to the gifts</button>}
           </section>
@@ -208,8 +227,8 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
 
         {step === "results" && reply && (
           <section aria-labelledby="gx-results">
-            <h1 className="title" id="gx-results">{reply.funnel?.ranked ?? reply.ranked.length} fit; the best {Math.min(shown, reply.ranked.length)} below</h1>
-            <p className="lead">{reply.found} products came back from {reply.searches.length} {reply.searches.length === 1 ? "search" : "searches"}; {reply.probed} were checked for delivery to the venue; {reply.excluded.length} were excluded. Ranked by delivery, price, and what the shop states.</p>
+            <h1 className="title" id="gx-results">Results for {searchedFor}</h1>
+            <p className="lead">{Math.min(shown, reply.ranked.length)} of {reply.funnel?.ranked ?? reply.ranked.length} shown</p>
             {reply.funnel && (
               <div className="list" style={{ marginBottom: 24 }} data-testid="funnel">
                 {reply.funnel.searches.map((s, i) => (
@@ -218,7 +237,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
                 <div className="row" style={{ gridTemplateColumns: "1fr auto" }}><span>Distinct products</span><span className="type">{reply.funnel.merged}</span></div>
                 <div className="row" style={{ gridTemplateColumns: "1fr auto" }}><span>Checked for delivery to the venue</span><span className="type">{reply.funnel.probed}</span></div>
                 {Object.entries(reply.funnel.excluded).map(([rule, n]) => (
-                  <div className="row" key={rule} style={{ gridTemplateColumns: "1fr auto" }}><span>Excluded by the {rule.replace(/_/g, " ")} rule</span><span className="type">{n}</span></div>
+                  <div className="row" key={rule} style={{ gridTemplateColumns: "1fr auto" }}><span>Excluded by {rule.replace(/_/g, " ")}</span><span className="type">{n}</span></div>
                 ))}
               </div>
             )}
@@ -237,15 +256,15 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
               ))}
               {shown < reply.ranked.length && <button type="button" className="more" onClick={() => setShown(shown + 5)} data-testid="show-more">Show 5 more</button>}
             </div>
-            {reply.ranked.length === 0 && <p className="lead">Nothing that fits came back. {reply.excluded.length} products were excluded; ask why below, or try another category.</p>}
+            {reply.ranked.length === 0 && <p className="lead">Nothing fits and {reply.excluded.length} excluded</p>}
             <div style={{ display: "flex", gap: 10, marginTop: 24 }}><button type="button" className="btn ghost" onClick={() => setStep("pick")}>Back</button></div>
           </section>
         )}
 
         {step === "recipients" && chosen && (
           <section aria-labelledby="gx-who">
-            <h1 className="title" id="gx-who">Who receives one?</h1>
-            <p className="lead">{chosen.title} from {chosen.shop_name}. The quantity follows the replies in this group until the lock date.</p>
+            <h1 className="title" id="gx-who">Recipients</h1>
+            <p className="lead">{chosen.title} from {chosen.shop_name} to {target.label}</p>
             <div className="big" data-testid="recipients">
               {(Object.keys(RECIPIENT_LABEL) as Recipients[]).map((r) => (
                 <button key={r} type="button" className={recipients === r ? "on" : ""} aria-pressed={recipients === r} onClick={() => setRecipients(r)}>{RECIPIENT_LABEL[r]} ({counts[r]})</button>
@@ -257,9 +276,9 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
 
         {step === "mapping" && (chosen || editing) && (
           <section aria-labelledby="gx-map">
-            <h1 className="title" id="gx-map">How each guest's unit is chosen</h1>
-            <p className="lead">Each answer to a choice question maps to one of the shop's variants; a guest with no answer takes the fallback.</p>
-            {choiceQuestions.length === 0 && <p className="hint" style={{ color: "var(--muted)" }}>No choice question is on the form, so every guest takes the default variant.</p>}
+            <h1 className="title" id="gx-map">Variants</h1>
+            <p className="lead">One variant per answer and a fallback for no answer</p>
+            {choiceQuestions.length === 0 && <p className="hint" style={{ color: "var(--muted)" }}>No choice question so every guest takes the default variant</p>}
             {choiceQuestions.map((q) => (
               <div key={q.id} data-testid={`map-${q.key}`}>
                 <div className="labelrow"><h2 style={{ fontSize: 18 }}>{q.label}</h2></div>
@@ -274,17 +293,17 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
                 ))}
               </div>
             ))}
-            <div className="line"><span>Default variant, for a guest with no answer</span><select aria-label="Default variant" value={defaultVariant ?? ""} onChange={(e) => setDefaultVariant(e.target.value || null)}>{(editing ? editing.variants : chosen!.variants).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</select></div>
-            <div className="line"><span>When a required answer is missing</span><select aria-label="Missing answer" value={fallback} onChange={(e) => setFallback(e.target.value as Batch["missing_value_fallback"])}><option value="default">Use the default variant</option><option value="hold">Hold the unit until they answer</option><option value="blank">No unit for them</option></select></div>
-            <div className="line"><span>If a guest cancels after the lock</span><select aria-label="After the lock" value={postLock} onChange={(e) => setPostLock(e.target.value as Batch["post_lock_cancellation"])}><option value="keep">Keep the unit</option><option value="reassign">Offer it to a maybe</option><option value="drop">Drop it if the shop allows</option></select></div>
+            <div className="line"><span>Default variant for no answer</span><select aria-label="Default variant" value={defaultVariant ?? ""} onChange={(e) => setDefaultVariant(e.target.value || null)}>{(editing ? editing.variants : chosen!.variants).map((v) => <option key={v.id} value={v.id}>{v.title}</option>)}</select></div>
+            <div className="line"><span>Missing required answer</span><select aria-label="Missing answer" value={fallback} onChange={(e) => setFallback(e.target.value as Batch["missing_value_fallback"])}><option value="default">Use the default variant</option><option value="hold">Hold the unit until an answer</option><option value="blank">No unit for them</option></select></div>
+            <div className="line"><span>Cancellation after the lock</span><select aria-label="After the lock" value={postLock} onChange={(e) => setPostLock(e.target.value as Batch["post_lock_cancellation"])}><option value="keep">Keep the unit</option><option value="reassign">Offer it to a maybe</option><option value="drop">Drop it where the shop allows</option></select></div>
             <div className="acts"><button type="button" className="btn ghost" onClick={() => (editing ? setStep("list") : setStep("recipients"))}>Back</button><button type="button" className="btn primary" onClick={confirm} disabled={!!busy} data-testid="confirm">{editing ? "Save changes" : "Add this gift"}</button></div>
           </section>
         )}
 
         {step === "list" && (
           <section aria-labelledby="gx-list">
-            <h1 className="title" id="gx-list">Gifts for your guests</h1>
-            <p className="lead">Each gift's quantities follow the replies until its lock date. Send builds the priced proposal at the shop; approve keeps it.</p>
+            <h1 className="title" id="gx-list">Gifts</h1>
+            <p className="lead">Quantities follow the replies until the lock date</p>
             <div data-testid="gifts">
               {gifts.map((g) => {
                 const units = g.quantities.reduce((s, q) => s + q.quantity, 0);
@@ -294,8 +313,8 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
                   <div className="item" key={g.id} data-testid="gift">
                     <div>
                       <div style={{ fontWeight: 600 }}>{g.product_title}</div>
-                      <div className="m">{g.shop_domain}; {units} units, {money(total, currency)}; {g.cutoff ? `locks ${dateOnly(g.cutoff)}` : "lock date set on approval"}{g.cart_id ? "; priced at the shop" : ""}{g.locked_at ? "; locked" : ""}</div>
-                      <div className="m">{g.quantities.map((q) => `${g.variants.find((v) => v.id === q.variant_id)?.title ?? "Variant"} ${q.quantity}`).join(", ") || "no units yet"}</div>
+                      <div className="m">{[g.shop_domain, `${units} units`, money(total, currency), g.cutoff ? `locks ${dateOnly(g.cutoff)}` : "lock date on approval", g.cart_id ? "priced at the shop" : "", g.locked_at ? "locked" : ""].filter(Boolean).join(" / ")}</div>
+                      <div className="m">{g.quantities.map((q) => `${g.variants.find((v) => v.id === q.variant_id)?.title ?? "Variant"} ${q.quantity}`).join(" / ") || "no units yet"}</div>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <button type="button" className="btn ghost small" onClick={() => (thread?.giftId === g.id ? setThread(null) : openThread(g))} data-testid="thread-gift">{thread?.giftId === g.id ? "Hide thread" : "Thread"}</button>
@@ -312,11 +331,11 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
             </div>
             {thread && (
               <div className="list" style={{ marginBottom: 16 }} data-testid="thread">
-                {thread.updates.length === 0 && <div className="row" style={{ gridTemplateColumns: "1fr" }}><span className="type">No posts yet. The vendor's agent posts here; your replies reach it through the same feed.</span></div>}
+                {thread.updates.length === 0 && <div className="row" style={{ gridTemplateColumns: "1fr" }}><span className="type">No posts yet</span></div>}
                 {thread.updates.map((u) => (
                   <div className="row" key={u.id} style={{ gridTemplateColumns: "auto 1fr auto" }}>
                     <span className={`tag${u.kind === "reply" ? " quiet" : ""}`}>{KIND_LABEL[u.kind]}</span>
-                    <span>{u.text}{u.expected_date ? ` (expected ${dateOnly(u.expected_date)})` : ""}{u.reference ? ` (${u.reference})` : ""}</span>
+                    <span>{[u.text, u.expected_date ? `expected ${dateOnly(u.expected_date)}` : "", u.reference ?? ""].filter(Boolean).join(" / ")}</span>
                     <span className="type">{dateTime(u.created_at)}</span>
                   </div>
                 ))}
@@ -329,7 +348,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
             <div className="acts">
               <button type="button" className="btn ghost" onClick={() => setStep("pick")} data-testid="add-gift">Add another gift</button>
               <div className="ask" style={{ flex: 1 }}>
-                <input aria-label="Ask about the gifts" placeholder="Ask: which gift locks first, why a product is missing, who is missing a name" value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask()} data-testid="ask" />
+                <input aria-label="Ask about the gifts" placeholder="Ask about the gifts" value={question} onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask()} data-testid="ask" />
                 <button type="button" className="btn primary small" onClick={ask}>Ask</button>
               </div>
             </div>

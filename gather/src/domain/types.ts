@@ -71,6 +71,16 @@ export const Venue = z.object({
 });
 export type Venue = z.infer<typeof Venue>;
 
+/** Where the gifts go and by when: the organizer's choice, read by the search, the probe, the cart, and the lock date. */
+export const Delivery = z.object({
+  destination: z.enum(["venue", "address"]),
+  /** The address when the destination is not the venue. */
+  address: Venue.nullable(),
+  /** ISO date the gifts must have arrived by; null until the organizer sets it. */
+  needed_by: z.string().nullable()
+});
+export type Delivery = z.infer<typeof Delivery>;
+
 export const EventSettings = z.object({
   guest_approval: z.boolean(),
   reminders: z.boolean(),
@@ -93,6 +103,7 @@ export const Event = z.object({
   invite_extras: z.array(z.string()),
   response_options: z.array(GuestStatus),
   settings: EventSettings,
+  delivery: Delivery,
   segments: z.array(Segment),
   definition_ids: z.array(z.string()),
   status: z.enum(["draft", "published"]),
