@@ -30,11 +30,12 @@ import {
   state,
   subjectFor,
   updateEvent,
+  upsertDefinition,
   valuesFor,
   writeValue,
   type EventInput
 } from "../domain/store";
-import { EventSettings, Guest, GuestStatus, Segment, UpdateKind, Venue, type AttributeDefinition, type VendorUpdate } from "../domain/types";
+import { Constraints, EventSettings, Guest, GuestStatus, Segment, UpdateKind, ValueType, Venue, type AttributeDefinition, type VendorUpdate } from "../domain/types";
 import { matches } from "../domain/filter";
 
 export class NotFoundError extends Error {}
@@ -88,6 +89,31 @@ export function requireGuest(eventId: string, guestId: string): Guest {
   }
   if (guest.event_id !== eventId) throw new NotFoundError(`No guest ${guestId} on event ${eventId}.`);
   return guest;
+}
+
+const DefinitionBody = z.object({
+  key: z.string().min(1),
+  label: z.string().min(1),
+  scope: z.enum(["guest", "party", "event"]).default("guest"),
+  value_type: ValueType,
+  constraints: Constraints.default({}),
+  required_rule: z.enum(["always", "going", "never"]).default("never"),
+  default_visibility: z.array(z.string()).default([])
+});
+
+/** The organizer's question list replaces the event's: matching keys keep their ids, new keys get one, absent keys leave the event. */
+export function replaceDefinitions(eventId: string, body: unknown) {
+  const event = requireEvent(eventId);
+  const parsed = z.object({ definitions: z.array(DefinitionBody) }).safeParse(body);
+  if (!parsed.success) throw new BadRequestError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
+  const existing = definitionsFor(eventId);
+  const kept = parsed.data.definitions.map((d) => {
+    const prior = existing.find((x) => x.key === d.key);
+    return upsertDefinition(eventId, { ...(prior ?? {}), ...d, namespace: prior?.namespace ?? "organizer", creator: prior?.creator ?? "organizer", id: prior?.id });
+  });
+  const s = state();
+  s.events.set(eventId, { ...getEvent(event.id), definition_ids: kept.map((d) => d.id) });
+  return kept;
 }
 
 /* ---- Snapshot and follow-ups ---- */

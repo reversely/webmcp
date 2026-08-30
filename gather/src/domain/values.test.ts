@@ -21,11 +21,11 @@ describe("validateValue per value type", () => {
     expect(validateValue(def("boolean"), "yes")).toMatchObject({ ok: false });
   });
   it("enum and multi_enum read the options row", () => {
-    const options = [{ value: "vegan", label: "Vegan" }, { value: "none", label: "None" }];
-    expect(validateValue(def("enum", { options }), "vegan")).toEqual({ ok: true, value: "vegan" });
-    expect(validateValue(def("enum", { options }), "halal")).toMatchObject({ ok: false, reason: "Field must be one of: vegan, none." });
-    expect(validateValue(def("multi_enum", { options }), ["vegan", "vegan", "none"])).toEqual({ ok: true, value: ["vegan", "none"] });
-    expect(validateValue(def("multi_enum", { options }), ["halal"])).toMatchObject({ ok: false });
+    const options = [{ value: "a", label: "Option A" }, { value: "none", label: "None" }];
+    expect(validateValue(def("enum", { options }), "a")).toEqual({ ok: true, value: "a" });
+    expect(validateValue(def("enum", { options }), "zzz")).toMatchObject({ ok: false, reason: "Field must be one of: a, none." });
+    expect(validateValue(def("multi_enum", { options }), ["a", "a", "none"])).toEqual({ ok: true, value: ["a", "none"] });
+    expect(validateValue(def("multi_enum", { options }), ["zzz"])).toMatchObject({ ok: false });
   });
   it("date, file, and reference check their forms", () => {
     expect(validateValue(def("date"), "2026-10-17")).toEqual({ ok: true, value: "2026-10-17" });
@@ -39,11 +39,11 @@ describe("validateValue per value type", () => {
 
 describe("aggregate per value type", () => {
   it("counts options for multi_enum and reports missing", () => {
-    const options = [{ value: "vegan", label: "Vegan" }, { value: "gluten_free", label: "Gluten-free" }];
-    const a = aggregate(def("multi_enum", { options }), [["vegan"], ["vegan", "gluten_free"], undefined, []]);
+    const options = [{ value: "a", label: "Option A" }, { value: "b", label: "Option B" }];
+    const a = aggregate(def("multi_enum", { options }), [["a"], ["a", "b"], undefined, []]);
     expect(a).toMatchObject({ value_type: "multi_enum", missing: 1 });
     if (a.value_type !== "multi_enum") throw new Error();
-    expect(a.counts.map((c) => [c.option.value, c.count])).toEqual([["vegan", 2], ["gluten_free", 1]]);
+    expect(a.counts.map((c) => [c.option.value, c.count])).toEqual([["a", 2], ["b", 1]]);
   });
   it("sums numbers into quartile buckets", () => {
     const a = aggregate(def("number"), [1, 2, 3, 4, 5, 6, 7, 8, undefined]);
