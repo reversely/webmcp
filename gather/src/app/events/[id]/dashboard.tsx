@@ -1,18 +1,48 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { snapshot } from "../../../server/api";
+import { Overview } from "./overview";
 
-type Snapshot = ReturnType<typeof snapshot>;
+export type Snapshot = ReturnType<typeof snapshot>;
+type Tab = "overview" | "experience";
 
-/** The published event's page: the band with the status and the invite link, and the sheet the tabs fill (#89, #94). */
+/** The published event's page (PRD Section 5): the band with the tabs, the status, and the invite link; the sheet the tab fills. The snapshot polls every four seconds. */
 export function Dashboard({ initial }: { initial: Snapshot }) {
+  const [snap, setSnap] = useState(initial);
+  const [tab, setTab] = useState<Tab>("overview");
   const [copied, setCopied] = useState(false);
-  const event = initial.event;
-  const invite = event.invite_code ? `${typeof window !== "undefined" ? window.location.origin : ""}/i/${event.invite_code}` : null;
+  const [origin, setOrigin] = useState("");
+  const event = snap.event;
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    let stop = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/events/${event.id}`, { cache: "no-store" });
+        if (res.ok && !stop) setSnap((await res.json()) as Snapshot);
+      } catch {
+        // The next tick reads again.
+      }
+    };
+    const timer = setInterval(tick, 4000);
+    window.addEventListener("event:changed", tick);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+      window.removeEventListener("event:changed", tick);
+    };
+  }, [event.id]);
+
+  const invite = event.invite_code ? `${origin}/i/${event.invite_code}` : null;
   return (
     <>
       <header className="band">
         <a className="brand" href="/">Gather</a>
+        <nav className="tabs" aria-label="Sections">
+          <button type="button" className={tab === "overview" ? "on" : ""} aria-current={tab === "overview" ? "page" : undefined} onClick={() => setTab("overview")} data-testid="tab-overview">Overview</button>
+          <button type="button" className={tab === "experience" ? "on" : ""} aria-current={tab === "experience" ? "page" : undefined} onClick={() => setTab("experience")} data-testid="tab-experience">Guest Experience</button>
+        </nav>
         <div className="right">
           <span className={`pill${event.status === "published" ? " live" : ""}`} data-testid="status">{event.status === "published" ? "Published" : "Draft"}</span>
           {invite && (
@@ -23,17 +53,16 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
         </div>
       </header>
       <main className="sheet">
-        <div className="wrap">
-          <div>
-            <h1 className="title">{event.title}</h1>
-            {invite && (
-              <div className="linkbox" data-testid="invite-link">
-                <span>{invite}</span>
-                <span className="tag">Invite</span>
-              </div>
-            )}
+        {tab === "overview" ? (
+          <Overview snap={snap} invite={invite} onChanged={() => window.dispatchEvent(new Event("event:changed"))} />
+        ) : (
+          <div className="wrap">
+            <div>
+              <h1 className="title">Gifts for your guests</h1>
+              <p className="lead">Choosing gifts from the replies opens here once the search behind the cards is in place.</p>
+            </div>
           </div>
-        </div>
+        )}
       </main>
     </>
   );
