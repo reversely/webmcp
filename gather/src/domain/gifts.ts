@@ -168,7 +168,7 @@ function cancelledAfterLock(gift: Batch, productId: string, override: GiftOverri
 }
 
 /** The unit statuses a cart line counts: a kept or reassignable cancelled unit still ships. */
-const COUNTED: ReadonlySet<UnitStatus> = new Set(["open", "locked", "cancelled_sunk", "cancelled_reassignable"]);
+export const COUNTED: ReadonlySet<UnitStatus> = new Set(["open", "locked", "cancelled_sunk", "cancelled_reassignable"]);
 
 /** One row per guest the recipients filter selects, plus any guest the lock recorded. */
 export function manifest(gift: Batch): ManifestRow[] {

@@ -13,9 +13,11 @@ import type { Batch, CartBuyer, DeliveryWindow, Event, Proposal, UpdateKind, Ven
 import { postUpdate, updatesFor } from "../server/api";
 import { deliveryTarget } from "../lib/delivery";
 import { cardsConfig } from "./search";
+import { printshopClient, type PrintshopClient } from "./printshop";
 
-export type CartDeps = { client: () => CatalogClient; now: () => Date };
-export const liveDeps: CartDeps = { client: () => catalogClient(), now: () => new Date() };
+/** The shop clients and the clock; `printshop` takes the buyer email the shop scopes a batch by and defaults to the live shop. */
+export type CartDeps = { client: () => CatalogClient; now: () => Date; printshop?: (buyerEmail: string | null) => PrintshopClient };
+export const liveDeps: CartDeps = { client: () => catalogClient(), now: () => new Date(), printshop: (buyerEmail) => printshopClient({ buyerEmail }) };
 
 /** The caller name Gather writes on an update it derives from the shop's order. */
 export const GATHER_CALLER = "gather";

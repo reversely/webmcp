@@ -246,7 +246,9 @@ export const Batch = z.object({
   approved_at: z.string().nullable().optional(),
   delivery_window: DeliveryWindow.nullable().optional(),
   /** Set by the lock: the shop's hosted checkout page, where the organizer pays. */
-  checkout_url: z.string().nullable().optional()
+  checkout_url: z.string().nullable().optional(),
+  /** Set by each poll of a vendor with a change feed: the last sequence number read from it. */
+  vendor_seq: z.number().int().nullable().optional()
 });
 export type Batch = z.infer<typeof Batch>;
 

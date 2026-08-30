@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import { approveGift, CartStateError, liveDeps, lockAndCheckout, lockIsDue, pollOrder, refreshCart, sendGift, syncGift, type CartDeps, type ShortLine } from "../agent/cart";
+import * as printshop from "../agent/printshop-cart";
 import { CartBuyer, DeliveryWindow } from "../domain/types";
 import { BadRequestError, giftView, requireGift } from "./api";
 
@@ -43,28 +44,30 @@ async function step<T>(run: () => Promise<T>): Promise<T> {
 
 const SendBody = z.object({ buyer: CartBuyer.nullable().default(null) });
 
-/** POST .../send: the cart at the shop, priced; the proposal comes back on the gift view. */
+/** POST .../send: the cart at the shop, priced (or the print shop's batch, quoted and ordered); the proposal comes back on the gift view. */
 export async function sendGiftOp(eventId: string, giftId: string, body: unknown) {
-  requireGift(eventId, giftId);
+  const gift = requireGift(eventId, giftId);
   const { buyer } = parseBody(SendBody, body);
-  const proposal = await step(() => sendGift(eventId, giftId, deps, buyer));
+  const send = printshop.isPrintshopGift(gift) ? printshop.sendGift : sendGift;
+  const proposal = await step(() => send(eventId, giftId, deps, buyer));
   return { ...giftView(eventId, giftId), proposal };
 }
 
 const ApproveBody = z.object({ delivery_window: DeliveryWindow.nullable().default(null) });
 
-/** POST .../approve: the organizer keeps the priced cart; the cutoff follows from the delivery window. */
+/** POST .../approve: the organizer keeps the priced cart and the cutoff follows from the delivery window; on a print-shop gift the organizer approves the proof. */
 export async function approveGiftOp(eventId: string, giftId: string, body: unknown) {
-  requireGift(eventId, giftId);
+  const gift = requireGift(eventId, giftId);
   const { delivery_window } = parseBody(ApproveBody, body);
-  await step(async () => approveGift(eventId, giftId, deps, delivery_window));
+  await step(async () => (printshop.isPrintshopGift(gift) ? printshop.approveGift(eventId, giftId, deps) : approveGift(eventId, giftId, deps, delivery_window)));
   return giftView(eventId, giftId);
 }
 
-/** POST .../sync: recompute the quantities and rewrite the cart when they changed. */
+/** POST .../sync: recompute the quantities and rewrite the cart (or the batch's units) when they changed. */
 export async function syncGiftOp(eventId: string, giftId: string) {
-  requireGift(eventId, giftId);
-  const result = await step(() => syncGift(eventId, giftId, deps));
+  const gift = requireGift(eventId, giftId);
+  const sync = printshop.isPrintshopGift(gift) ? printshop.syncGift : syncGift;
+  const result = await step(() => sync(eventId, giftId, deps));
   return { ...giftView(eventId, giftId), ...result };
 }
 
@@ -78,12 +81,21 @@ export async function lockGiftOp(eventId: string, giftId: string) {
 /**
  * GET .../cart: the dashboard's poll. Creates the checkout when the cutoff has arrived, reads the
  * order once one exists, and otherwise reads the cart back and names any line the shop cut short.
+ * On a print-shop gift the poll reads the shop's change feed into the thread and the batch's
+ * issues into the follow-ups.
  */
 export async function cartView(eventId: string, giftId: string) {
   let gift = requireGift(eventId, giftId);
-  if (lockIsDue(gift, deps.now())) gift = await step(() => lockAndCheckout(eventId, giftId, deps));
-  let follow_ups: ShortLine[] = [];
+  let follow_ups: (ShortLine | printshop.UnitIssue)[] = [];
   let update = null;
+  if (printshop.isPrintshopGift(gift)) {
+    if (gift.cart_id) {
+      update = (await printshop.pollBatch(eventId, giftId, deps)).at(-1) ?? null;
+      follow_ups = (await step(() => printshop.refreshCart(eventId, giftId, deps))).follow_ups;
+    }
+    return { ...giftView(eventId, giftId), follow_ups, update };
+  }
+  if (lockIsDue(gift, deps.now())) gift = await step(() => lockAndCheckout(eventId, giftId, deps));
   if (gift.order_id) update = await pollOrder(eventId, giftId, deps);
   else if (gift.cart_id) follow_ups = (await step(() => refreshCart(eventId, giftId, deps))).follow_ups;
   return { ...giftView(eventId, giftId), follow_ups, update };

@@ -8,7 +8,10 @@ import { addCalendarDays, deliveryVerdict, isOnOrBefore, parseArrivalWindow, pro
 import cardsData from "./cards.json";
 
 export type CardSearch = { query: string; categories?: string[] };
-export type Card = { key: string; label: string; searches: CardSearch[] };
+/** A search source: the Shopify catalog or the print shop; a card names its sources, and a card row without them searches the catalog alone. */
+export type Source = "shopify" | "printshop";
+export const DEFAULT_SOURCES: Source[] = ["shopify"];
+export type Card = { key: string; label: string; searches: CardSearch[]; sources?: Source[] };
 export type CardsConfig = { cards: Card[]; delivery_buffer_days: number; lead_time_cap_days: number; weights: Record<ScoreTerm, number> };
 export type ScoreTerm = "coverage" | "lead_time" | "price_fit" | "delivery_confidence" | "cancellation_terms" | "seller_signal";
 
@@ -17,6 +20,8 @@ export function cardsConfig(): CardsConfig {
 }
 
 export type Variant = { id: string; title: string; price_cents: number | null; currency: string | null; available: boolean; options: { name: string; label: string }[] };
+/** One value a printed unit carries, as the print shop's design schema states it. */
+export type PersonalizationField = { key: string; label: string; kind: string; max_length: number; required: boolean };
 export type Candidate = {
   product_id: string;
   title: string;
@@ -33,10 +38,12 @@ export type Candidate = {
   option_names: string[];
   searches: string[];
   delivery: { window: { earliest: string; latest: string } | null; text: string | null; confidence: "dated" | "duration" | "unknown"; verdict: DeliveryVerdict; error: string | null } | null;
+  /** Set on a print-shop design: the fields each unit carries. */
+  personalization?: { fields: PersonalizationField[] };
 };
 
 /** What each search returned and how many products each stage kept, for the results screen and the ask bar. */
-export type Funnel = { searches: { query: string; categories?: string[]; returned: number; total: number | null }[]; merged: number; probed: number; ranked: number; excluded: Record<string, number> };
+export type Funnel = { searches: { query: string; categories?: string[]; returned: number; total: number | null; error?: string }[]; merged: number; probed: number; ranked: number; excluded: Record<string, number> };
 
 export type EventContext = {
   /** ISO date of the event. */
@@ -116,9 +123,20 @@ export async function searchCandidates(client: CatalogClient, searches: CardSear
 
 /** The searches a sentence maps to: the sentence as typed plus the searches of every card whose label it names. */
 export function searchesForSentence(sentence: string, config = cardsConfig()): CardSearch[] {
+  return [{ query: sentence }, ...cardsNamed(sentence, config).flatMap((c) => c.searches)];
+}
+
+function cardsNamed(sentence: string, config: CardsConfig): Card[] {
   const lower = sentence.toLowerCase();
-  const named = config.cards.filter((c) => c.label.toLowerCase().split(/\s*&\s*|\s+/).some((w) => w.length > 3 && lower.includes(w)));
-  return [{ query: sentence }, ...named.flatMap((c) => c.searches)];
+  return config.cards.filter((c) => c.label.toLowerCase().split(/\s*&\s*|\s+/).some((w) => w.length > 3 && lower.includes(w)));
+}
+
+/** The sources a sentence searches: the catalog, plus the sources of every card it names, plus the print shop when it asks for cards. */
+export function sourcesForSentence(sentence: string, config = cardsConfig()): Source[] {
+  const sources = new Set<Source>(DEFAULT_SOURCES);
+  for (const card of cardsNamed(sentence, config)) for (const s of card.sources ?? []) sources.add(s);
+  if (/\bcards?\b/i.test(sentence)) sources.add("printshop");
+  return [...sources];
 }
 
 /** Fills a candidate's variants and option values from get_product when the search left them thin. */

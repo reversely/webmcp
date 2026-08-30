@@ -4,6 +4,7 @@
  * on the shop.
  */
 import { syncGift } from "../agent/cart";
+import { isPrintshopGift, syncGift as syncPrintshopGift } from "../agent/printshop-cart";
 import { giftsFor } from "../domain/gifts";
 import { cartDeps } from "./cart-api";
 
@@ -14,7 +15,7 @@ export function afterRsvpWrite(eventId: string): void {
   for (const gift of giftsFor(eventId)) {
     if (!gift.cart_id || gift.locked_at) continue;
     const previous = pending.get(gift.id) ?? Promise.resolve();
-    const next = previous.then(() => syncGift(eventId, gift.id, cartDeps())).catch((e: unknown) => console.error(`Cart sync for gift ${gift.id} failed: ${(e as Error).message}`));
+    const next = previous.then(() => (isPrintshopGift(gift) ? syncPrintshopGift : syncGift)(eventId, gift.id, cartDeps())).catch((e: unknown) => console.error(`Cart sync for gift ${gift.id} failed: ${(e as Error).message}`));
     pending.set(gift.id, next);
   }
 }
