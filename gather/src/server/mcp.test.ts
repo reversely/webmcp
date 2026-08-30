@@ -4,6 +4,7 @@ import { publishEvent, resetState, upsertDefinition } from "../domain/store";
 import { createEventFromBody, snapshot, submitRsvp } from "./api";
 import { createToken, handleRpc, tokenFrom } from "./mcp";
 import { TOOLS } from "../webmcp/tools";
+import { cartOperations } from "./registry";
 
 const BODY = { title: "Test event", starts_at: "2030-01-10T19:00:00Z", venue: { name: "Venue", line1: "1 Street", city: "City", region: "RG", postal_code: "00000", country: "CA" } };
 
@@ -78,6 +79,11 @@ describe("the MCP endpoint", () => {
     const feed = payload(await call(event.id, vendor, "get_changes", { since_seq: before })).entries as { kind: string }[];
     expect(feed.map((e) => e.kind)).toEqual(["update"]);
     expect(tokenFrom(event.id, new Request("http://x", { headers: { authorization: `Bearer ${vendor.id}` } }))?.last_profile_url).toBe("https://vendor.example/profile.json");
+  });
+
+  it("has the cart operations registered for the organizer's send and approve", () => {
+    expect(typeof cartOperations.send).toBe("function");
+    expect(typeof cartOperations.approve).toBe("function");
   });
 
   it("reads the token from the bearer header and rejects an expired or foreign one", () => {

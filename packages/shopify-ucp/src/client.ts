@@ -2,7 +2,7 @@
  * JSON-RPC client for Shopify's catalog MCP endpoints. Every `tools/call` carries the agent
  * profile URL in `arguments.meta["ucp-agent"].profile` and needs no API key.
  */
-import type { z } from "zod";
+import { z } from "zod";
 import {
   CatalogError,
   GetProductResult,
@@ -40,6 +40,12 @@ export interface CatalogClient {
   searchCatalog(params: SearchCatalogParams): Promise<SearchCatalogResult>;
   lookupCatalog(ids: string[], options?: LookupOptions): Promise<LookupCatalogResult>;
   getProduct(id: string, options?: GetProductOptions): Promise<GetProductResult>;
+  /**
+   * Any tool by name, with `args` spread beside `meta` in `arguments` (a cart tool takes
+   * `{ cart }` or `{ id }`, a catalog tool `{ catalog }`). The reply is checked against `schema`
+   * when one is given and returned as is otherwise.
+   */
+  callTool<T = unknown>(name: string, args: Record<string, unknown>, schema?: z.ZodType<T>): Promise<T>;
   /** The same profile and fetch against another endpoint, e.g. a merchant's storefront. */
   withEndpoint(endpoint: string): CatalogClient;
 }
@@ -51,17 +57,22 @@ export function catalogClient(options: CatalogClientOptions = {}): CatalogClient
   const onCall = options.onCall;
   let nextId = 1;
 
-  function call<T extends z.ZodType>(tool: string, catalog: Record<string, unknown>, schema: T): Promise<z.infer<T>> {
-    const run = () => send(tool, catalog, schema);
-    return onCall ? onCall({ endpoint, tool, args: catalog }, run) : run();
+  /** `hookArgs` is what the tracing hook sees: a catalog tool's own payload rather than its `{ catalog }` wrapper. */
+  function call<T extends z.ZodType>(tool: string, args: Record<string, unknown>, schema: T, hookArgs: Record<string, unknown> = args): Promise<z.infer<T>> {
+    const run = () => send(tool, args, schema);
+    return onCall ? onCall({ endpoint, tool, args: hookArgs }, run) : run();
   }
 
-  async function send<T extends z.ZodType>(tool: string, catalog: Record<string, unknown>, schema: T): Promise<z.infer<T>> {
+  function catalogCall<T extends z.ZodType>(tool: string, catalog: Record<string, unknown>, schema: T): Promise<z.infer<T>> {
+    return call(tool, { catalog }, schema, catalog);
+  }
+
+  async function send<T extends z.ZodType>(tool: string, args: Record<string, unknown>, schema: T): Promise<z.infer<T>> {
     const body = {
       jsonrpc: "2.0",
       id: nextId++,
       method: "tools/call",
-      params: { name: tool, arguments: { meta: { "ucp-agent": { profile: profileUrl } }, catalog } }
+      params: { name: tool, arguments: { meta: { "ucp-agent": { profile: profileUrl } }, ...args } }
     };
     const response = await fetchImpl(endpoint, {
       method: "POST",
@@ -82,16 +93,19 @@ export function catalogClient(options: CatalogClientOptions = {}): CatalogClient
       if (limit !== undefined && (limit < 1 || limit > MAX_PAGE_SIZE)) {
         throw new RangeError(`pagination.limit must be between 1 and ${MAX_PAGE_SIZE}, got ${limit}`);
       }
-      return call("search_catalog", { ...params }, SearchCatalogResult);
+      return catalogCall("search_catalog", { ...params }, SearchCatalogResult);
     },
     lookupCatalog(ids, lookupOptions = {}) {
       if (ids.length < 1 || ids.length > MAX_PAGE_SIZE) {
         throw new RangeError(`lookup_catalog takes 1 to ${MAX_PAGE_SIZE} ids, got ${ids.length}`);
       }
-      return call("lookup_catalog", { ids, ...lookupOptions }, LookupCatalogResult);
+      return catalogCall("lookup_catalog", { ids, ...lookupOptions }, LookupCatalogResult);
     },
     getProduct(id, productOptions = {}) {
-      return call("get_product", { id, ...productOptions }, GetProductResult);
+      return catalogCall("get_product", { id, ...productOptions }, GetProductResult);
+    },
+    callTool<T>(name: string, args: Record<string, unknown>, schema?: z.ZodType<T>) {
+      return call(name, args, schema ?? (z.unknown() as z.ZodType<T>));
     },
     withEndpoint(other) {
       return catalogClient({ endpoint: other, profileUrl, fetchImpl, onCall });

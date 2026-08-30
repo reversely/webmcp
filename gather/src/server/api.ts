@@ -38,6 +38,7 @@ import {
 import { Constraints, EventSettings, FilterSchema, GiftOverride, GiftRule, Guest, GuestStatus, MissingValueFallback, PostLockCancellation, Segment, UpdateKind, ValueType, Variant, VariantMappingRow, Venue, type AttributeDefinition, type Batch, type VendorUpdate } from "../domain/types";
 import { matches } from "../domain/filter";
 import { createGift, getGift, giftsFor, manifest, quantities, removeGift, setGiftOverride, unservable, updateGift, type GiftInput } from "../domain/gifts";
+import { afterRsvpWrite } from "./hooks";
 
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
@@ -259,6 +260,7 @@ export function submitRsvp(eventId: string, body: unknown) {
     for (const [definitionId, raw] of Object.entries(g.answers ?? {})) writeAnswer(eventId, guest, definitionId, raw, "guest");
     return guest;
   });
+  afterRsvpWrite(eventId);
   return { party_id: party.id, guest_ids: guests.map((g) => g.id) };
 }
 
@@ -284,6 +286,7 @@ export function patchRsvp(eventId: string, guestId: string, body: unknown) {
   for (const [definitionId, raw] of Object.entries(parsed.data.answers ?? {})) writeAnswer(eventId, guest, definitionId, raw, parsed.data.source);
   for (const [segment, present] of Object.entries(parsed.data.attendance ?? {})) guest = setGuestAttendance(guestId, segment, present);
   if (parsed.data.status) guest = setGuestStatus(guestId, parsed.data.status, parsed.data.source);
+  afterRsvpWrite(eventId);
   return { ...guest, values: valuesFor(guest) };
 }
 

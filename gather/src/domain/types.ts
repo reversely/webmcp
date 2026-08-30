@@ -192,6 +192,20 @@ export type GiftRule = z.infer<typeof GiftRule>;
 export const GiftOverride = z.object({ variant_id: z.string().optional(), excluded: z.boolean().optional() });
 export type GiftOverride = z.infer<typeof GiftOverride>;
 
+/** One priced line of the shop's cart: the variant, its unit price, and the line total in the currency's minor unit. */
+export const ProposalLine = z.object({ variant_id: z.string(), title: z.string().nullable(), unit_price: z.number().nullable(), quantity: z.number().int(), total: z.number().nullable() });
+export type ProposalLine = z.infer<typeof ProposalLine>;
+
+/** The cart as the shop last returned it: the priced proposal the organizer approves. */
+export const Proposal = z.object({ cart_id: z.string(), currency: z.string().nullable(), lines: z.array(ProposalLine), total: z.number().nullable(), continue_url: z.string().nullable() });
+export type Proposal = z.infer<typeof Proposal>;
+
+export const DeliveryWindow = z.object({ earliest: z.string(), latest: z.string() });
+export type DeliveryWindow = z.infer<typeof DeliveryWindow>;
+
+export const CartBuyer = z.object({ email: z.string().optional(), phone_number: z.string().optional() });
+export type CartBuyer = z.infer<typeof CartBuyer>;
+
 export const Batch = z.object({
   id: z.string(),
   event_id: z.string(),
@@ -212,7 +226,16 @@ export const Batch = z.object({
   overrides: z.record(z.string(), GiftOverride),
   /** Set by the lock: the date and the guests whose units the checkout carries. */
   locked_at: z.string().nullable(),
-  locked_guest_ids: z.array(z.string())
+  locked_guest_ids: z.array(z.string()),
+  /** Set by send: the buyer the cart names and the cart as the shop last priced it, with the change-log seq that cart reflects. */
+  buyer: CartBuyer.nullable().optional(),
+  proposal: Proposal.nullable().optional(),
+  cart_seq: z.number().int().nullable().optional(),
+  /** Set by approve: when the organizer approved and the delivery window the cutoff came from. */
+  approved_at: z.string().nullable().optional(),
+  delivery_window: DeliveryWindow.nullable().optional(),
+  /** Set by the lock: the shop's hosted checkout page, where the organizer pays. */
+  checkout_url: z.string().nullable().optional()
 });
 export type Batch = z.infer<typeof Batch>;
 

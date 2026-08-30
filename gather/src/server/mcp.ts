@@ -11,6 +11,8 @@ import { newId, state } from "../domain/store";
 import { LockedValueError } from "../domain/store";
 import type { CallerToken } from "../domain/types";
 import { TOOLS, type ToolArgs, type ToolDefinition } from "../webmcp/tools";
+import { cartOperations } from "./registry";
+import "./cart-api";
 
 export type McpResult = { content: [{ type: "text"; text: string }]; isError?: true };
 const text = (payload: unknown, isError = false): McpResult => (isError ? { content: [{ type: "text", text: JSON.stringify(payload) }], isError: true } : { content: [{ type: "text", text: JSON.stringify(payload) }] });
@@ -129,9 +131,6 @@ async function dispatch(eventId: string, token: CallerToken, tool: ToolDefinitio
       throw new BadRequestError(`No operation for ${tool.name}.`);
   }
 }
-
-/** The cart operations register here when their module loads (#95); until then the endpoint says they are unavailable. */
-export const cartOperations: { send?: (eventId: string, giftId: string) => Promise<unknown>; approve?: (eventId: string, giftId: string) => Promise<unknown> } = {};
 
 async function cartOperation(eventId: string, name: string, giftId: string): Promise<unknown> {
   const fn = name === "send_to_vendor" ? cartOperations.send : cartOperations.approve;
