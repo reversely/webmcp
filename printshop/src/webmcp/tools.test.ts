@@ -1,30 +1,13 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { resetNotes } from "../notes/store";
-import { TOOLS, executeTool } from "./tools";
+import { describe, expect, it } from "vitest";
+import { buildRequest, TOOLS } from "./tools";
 
-const tool = (name: string) => TOOLS.find((t) => t.name === name)!;
-
-describe("template tools", () => {
-  beforeEach(resetNotes);
-
-  it("add_note then list_notes round-trips through the page's store", () => {
-    const added = executeTool(tool("add_note"), { text: "call the mover" });
-    expect(added.isError).toBeUndefined();
-    expect(JSON.parse(added.content[0].text)).toMatchObject({ id: 1, text: "call the mover" });
-    const listed = executeTool(tool("list_notes"), {});
-    expect(JSON.parse(listed.content[0].text)).toHaveLength(1);
-  });
-
-  it("an empty note is an error the agent can see", () => {
-    const result = executeTool(tool("add_note"), { text: " " });
-    expect(result.isError).toBe(true);
-    expect(JSON.parse(result.content[0].text).error).toMatch(/needs some text/);
-  });
-
-  it("every tool describes each property and declares required", () => {
-    for (const t of TOOLS) {
-      for (const p of Object.values(t.inputSchema.properties)) expect(p.description.length).toBeGreaterThan(0);
-      expect(t.inputSchema.additionalProperties).toBe(false);
-    }
+describe("the tool definitions", () => {
+  it("describe every property and build the routes", () => {
+    for (const t of TOOLS) { expect(t.description.length).toBeGreaterThan(20); for (const p of Object.values(t.inputSchema.properties)) expect(p.description.length).toBeGreaterThan(0); }
+    expect(buildRequest(TOOLS.find((t) => t.name === "get_design")!, { design_id: "d 1" }).url).toBe("/api/designs/d%201");
+    const q = buildRequest(TOOLS.find((t) => t.name === "quote_batch")!, { design_id: "d", quantity: 10, needed_by: "2031-01-01", address: { country: "CA" } });
+    expect(q.init.method).toBe("POST");
+    expect(JSON.parse(String(q.init.body))).toMatchObject({ design_id: "d", quantity: 10 });
+    expect(buildRequest(TOOLS.find((t) => t.name === "get_changes")!, { since_seq: 4 }).url).toBe("/api/changes?since=4");
   });
 });

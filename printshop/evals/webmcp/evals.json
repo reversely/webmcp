@@ -1,12 +1,5 @@
 [
-  {
-    "name": "Direct: write a note",
-    "messages": [{ "role": "user", "type": "message", "content": "Note that the sofa arrives Tuesday." }],
-    "expectedCall": [{ "functionName": "add_note", "arguments": { "text": { "$contains": "Tuesday" } } }]
-  },
-  {
-    "name": "Ambiguous: a question about what was noted reads the list first",
-    "messages": [{ "role": "user", "type": "message", "content": "What have I written down so far?" }],
-    "expectedCall": [{ "functionName": "list_notes", "arguments": {} }]
-  }
+  { "name": "Direct: what do you sell", "messages": [{ "role": "user", "type": "message", "content": "What card designs do you have under $3 a card?" }], "expectedCall": [{ "functionName": "list_designs", "arguments": { "max_unit_cents": { "$any": true } } }] },
+  { "name": "Direct: a quote", "messages": [{ "role": "user", "type": "message", "content": "Quote 60 flat thank-you cards to Toronto by March 8 2027." }], "expectedCall": [{ "functionName": "quote_batch", "arguments": { "quantity": 60 } }] },
+  { "name": "Ambiguous: is my order moving", "messages": [{ "role": "user", "type": "message", "content": "Anything new on my batches since sequence 12?" }], "expectedCall": [{ "functionName": "get_changes", "arguments": { "since_seq": 12 } }] }
 ]
