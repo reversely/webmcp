@@ -1,50 +1,16 @@
-"use client";
-import { useState, useSyncExternalStore } from "react";
-import { addNote, listNotes, subscribe } from "../notes/store";
-import { WebMcpProvider } from "./webmcp-provider";
+import { designs, shop } from "../domain/store";
 
-const EMPTY: never[] = [];
-
-/** A list of notes a person adds by hand and an agent adds through the add_note tool; both call addNote. */
-export default function NotesPage() {
-  const notes = useSyncExternalStore(subscribe, listNotes, () => EMPTY);
-  const [draft, setDraft] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  function submit() {
-    try {
-      addNote(draft);
-      setDraft("");
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
+/** The design list (PRD Section 7); the full page lands with the pages ticket. */
+export default function Page() {
   return (
     <main className="page">
-      <header className="topbar">
-        <span className="brand">Notes</span>
-        <WebMcpProvider />
-      </header>
+      <header className="topbar"><span className="brand">{shop().name}</span></header>
       <section className="card">
-        <label htmlFor="note">Note</label>
-        <div className="row">
-          <input id="note" className="input" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} data-testid="note-input" />
-          <button type="button" className="btn primary" onClick={submit} data-testid="note-add">
-            Add
-          </button>
-        </div>
-        {error && <p className="error">{error}</p>}
-        {notes.length === 0 ? (
-          <p className="empty" data-testid="notes-empty">No notes yet.</p>
-        ) : (
-          <ul className="notes" data-testid="notes-list">
-            {notes.map((n) => (
-              <li key={n.id} data-testid="note">{n.text}</li>
-            ))}
-          </ul>
-        )}
+        <ul className="notes" data-testid="designs">
+          {designs().map((d) => (
+            <li key={d.id} data-testid="design">{d.title} from {(d.price_bands[d.price_bands.length - 1].unit_cents / 100).toFixed(2)} {shop().currency}</li>
+          ))}
+        </ul>
       </section>
     </main>
   );
