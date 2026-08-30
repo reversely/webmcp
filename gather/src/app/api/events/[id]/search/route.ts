@@ -3,7 +3,7 @@ import { catalogClient } from "@webmcp/shopify-ucp";
 import { BadRequestError, errorResponse, requireEvent } from "../../../../../server/api";
 import { guestsFor } from "../../../../../domain/store";
 import { deliveryTarget } from "../../../../../lib/delivery";
-import { DEFAULT_SOURCES, cardsConfig, emptyFunnel, priceFit, rank, searchCandidates, searchesForSentence, sourcesForSentence, withDelivery, withDetail, type Candidate, type EventContext, type Funnel } from "../../../../../agent/search";
+import { DEFAULT_SOURCES, cardsConfig, emptyFunnel, priceFit, rank, searchCandidates, searchesForSentence, personalizedRequest, sourcesForSentence, withDelivery, withDetail, type Candidate, type EventContext, type Funnel } from "../../../../../agent/search";
 import { PRINTSHOP_SOURCE, printshopCandidates } from "../../../../../agent/printshop";
 
 type Params = { params: Promise<{ id: string }> };
@@ -38,7 +38,7 @@ export async function POST(request: Request, { params }: Params) {
     const going = guestsFor(event.id).filter((g) => g.status === "going").length;
     const target = deliveryTarget(event);
     if (!target.needed_by) throw new BadRequestError("Set where the gifts are delivered and by when before searching.");
-    const ctx: EventContext = { event_date: target.needed_by, venue: target.address, budget_cents: event.cost_per_person_cents, quantity: going, today: new Date().toISOString().slice(0, 10) };
+    const ctx: EventContext = { event_date: target.needed_by, venue: target.address, budget_cents: event.cost_per_person_cents, quantity: going, today: new Date().toISOString().slice(0, 10), personalized: card ? !!card.personalized : personalizedRequest(body.sentence ?? "") };
     const started = Date.now();
     const client = catalogClient();
     const funnel = emptyFunnel();

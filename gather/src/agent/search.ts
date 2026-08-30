@@ -11,7 +11,7 @@ export type CardSearch = { query: string; categories?: string[] };
 /** A search source: the Shopify catalog or the print shop; a card names its sources, and a card row without them searches the catalog alone. */
 export type Source = "shopify" | "printshop";
 export const DEFAULT_SOURCES: Source[] = ["shopify"];
-export type Card = { key: string; label: string; searches: CardSearch[]; sources?: Source[] };
+export type Card = { key: string; label: string; searches: CardSearch[]; sources?: Source[]; personalized?: boolean };
 export type CardsConfig = { cards: Card[]; delivery_buffer_days: number; lead_time_cap_days: number; weights: Record<ScoreTerm, number> };
 export type ScoreTerm = "coverage" | "lead_time" | "price_fit" | "delivery_confidence" | "cancellation_terms" | "seller_signal";
 
@@ -56,6 +56,8 @@ export type EventContext = {
   quantity: number;
   /** ISO date of the run, for the delivery arithmetic. */
   today: string;
+  /** True when the request asks for each guest's name on the unit, so only a candidate with a name field covers it. */
+  personalized?: boolean;
 };
 
 /* ---- Stage 0: search and detail ---- */
@@ -129,6 +131,11 @@ export function searchesForSentence(sentence: string, config = cardsConfig()): C
 function cardsNamed(sentence: string, config: CardsConfig): Card[] {
   const lower = sentence.toLowerCase();
   return config.cards.filter((c) => c.label.toLowerCase().split(/\s*&\s*|\s+/).some((w) => w.length > 3 && lower.includes(w)));
+}
+
+/** A sentence asks for personalization when it names a name or a personalized item. */
+export function personalizedRequest(sentence: string): boolean {
+  return /\bnames?\b|personali[sz]/i.test(sentence);
 }
 
 /** The sources a sentence searches: the catalog, plus the sources of every card it names, plus the print shop when it asks for cards. */
@@ -205,9 +212,10 @@ export function priceFit(price_cents: number | null, budget_cents: number | null
   return share >= 0.6 ? 1 : share / 0.6;
 }
 
-/** Each term is normalized to 0 to 1 and weighted by the configuration row; the coverage term is 1 until a dietary mapping exists (Section 9 supplies it later). */
+/** Each term is normalized to 0 to 1 and weighted by the configuration row. Coverage: for a personalized request a candidate with a name field covers it and any other candidate scores 0; otherwise the given value (1 until a dietary mapping exists; Section 9 supplies it later). */
 export function score(c: Candidate, ctx: EventContext, config = cardsConfig(), coverage = 1): Scored {
   const verdict = eligibility(c, ctx, config);
+  if (ctx.personalized) coverage = c.personalization?.fields.some((f) => f.kind === "name") ? 1 : 0;
   const lead = c.delivery?.window ? Math.max(0, Math.min(config.lead_time_cap_days, daysBetween(c.delivery.window.latest, ctx.event_date))) / config.lead_time_cap_days : 0;
   const fit = priceFit(c.price_cents, ctx.budget_cents);
   const confidence = c.delivery?.confidence === "dated" ? 1 : c.delivery?.confidence === "duration" ? 0.5 : 0;

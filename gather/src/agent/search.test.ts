@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CatalogClient } from "@webmcp/shopify-ucp";
-import { eligibility, priceFit, rank, searchCandidates, searchesForSentence, withDelivery, type Candidate, type EventContext } from "./search";
+import { eligibility, personalizedRequest, priceFit, rank, searchCandidates, searchesForSentence, withDelivery, type Candidate, type EventContext } from "./search";
 
 const CTX: EventContext = { event_date: "2030-01-10", venue: { name: "Venue", line1: "1 Street", city: "City", region: "RG", postal_code: "00000", country: "CA" }, budget_cents: 2000, quantity: 20, today: "2029-12-20" };
 
@@ -79,5 +79,15 @@ describe("withDelivery, eligibility, and rank", () => {
     expect(ranked.map((r) => r.product_id)).toEqual(["dated", "unknown"]);
     expect(ranked[0].terms.delivery_confidence).toBe(1);
     expect(excluded.map((e) => [e.product_id, e.verdict.rule])).toEqual([["pricey", "price"]]);
+  });
+  it("ranks a design with a name field above a boxed product when the request is personalized", async () => {
+    const boxed = await withDelivery(base({ product_id: "boxed", price_cents: 1500 }), CTX, checkoutWith(["Arrives Dec 28 to Jan 2"]));
+    const design = { ...base({ product_id: "design", price_cents: 320 }), delivery: boxed.delivery, personalization: { fields: [{ key: "name", label: "Name", kind: "name", max_length: 40, required: true }] } };
+    expect(rank([boxed, design], CTX).ranked.map((r) => r.product_id)).toEqual(["boxed", "design"]);
+    const { ranked } = rank([boxed, design], { ...CTX, personalized: true });
+    expect(ranked.map((r) => r.product_id)).toEqual(["design", "boxed"]);
+    expect(ranked.map((r) => r.terms.coverage)).toEqual([1, 0]);
+    expect(personalizedRequest("thank-you cards with each guest's name")).toBe(true);
+    expect(personalizedRequest("chocolate boxes")).toBe(false);
   });
 });

@@ -3,7 +3,7 @@
     { "key": "gift_sets", "label": "Gift sets", "sources": ["shopify"], "searches": [{ "query": "gift sets", "categories": ["bu"] }, { "query": "party favors", "categories": ["ae-2-1"] }] },
     { "key": "food_drink", "label": "Food & drink", "sources": ["shopify"], "searches": [{ "query": "dessert box gift", "categories": ["fb"] }, { "query": "cookie favors", "categories": ["fb"] }, { "query": "chocolate favor box", "categories": ["fb"] }] },
     { "key": "apparel", "label": "Apparel", "sources": ["shopify"], "searches": [{ "query": "tote bag gift", "categories": ["aa"] }, { "query": "t-shirt favors", "categories": ["aa"] }] },
-    { "key": "stationery", "label": "Stationery", "sources": ["shopify", "printshop"], "searches": [{ "query": "sticker sheet", "categories": ["os"] }, { "query": "stationery gifts", "categories": ["os"] }, { "query": "personalized stationery", "categories": ["os"] }] }
+    { "key": "stationery", "label": "Stationery", "sources": ["shopify", "printshop"], "personalized": true, "searches": [{ "query": "sticker sheet", "categories": ["os"] }, { "query": "stationery gifts", "categories": ["os"] }, { "query": "personalized stationery", "categories": ["os"] }] }
   ],
   "delivery_buffer_days": 3,
   "lead_time_cap_days": 14,
