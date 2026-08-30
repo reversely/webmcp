@@ -124,6 +124,8 @@ async function dispatch(eventId: string, token: CallerToken, tool: ToolDefinitio
       if (!organizer) requireGiftScope(token, giftId);
       return { updates: updatesFor(eventId, giftId, Number(args.since_seq ?? 0) || 0) };
     }
+    case "search_gifts":
+      return searchOperation(eventId, args);
     case "send_to_vendor":
     case "approve":
       return cartOperation(eventId, tool.name, String(args.gift_id));
@@ -136,6 +138,15 @@ async function cartOperation(eventId: string, name: string, giftId: string): Pro
   const fn = name === "send_to_vendor" ? cartOperations.send : cartOperations.approve;
   if (!fn) throw new BadRequestError(`${name} is not available on this build.`);
   return fn(eventId, giftId);
+}
+
+/** The search runs through the same route handler the page calls, so an agent and the page see one result shape. */
+async function searchOperation(eventId: string, args: ToolArgs): Promise<unknown> {
+  const mod = await import("../app/api/events/[id]/search/route");
+  const res = await mod.POST(new Request("http://gather.local/search", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ card: args.card, sentence: args.sentence }) }), { params: Promise.resolve({ id: eventId }) });
+  const body = (await res.json()) as Record<string, unknown>;
+  if (!res.ok) throw new BadRequestError(String(body.error ?? "the search failed"));
+  return body;
 }
 
 /* ---- JSON-RPC ---- */

@@ -26,7 +26,7 @@ describe("the tool definitions", () => {
     expect(JSON.parse(String(init.body))).toEqual({ kind: "confirmed", text: "Confirmed.", expected_date: null, reference: null, guest_id: null });
   });
   it("keeps the money-spending tools away from vendor scope", () => {
-    for (const name of ["set_gift_plan", "send_to_vendor", "approve", "list_guests", "get_guest", "list_missing"]) expect(tool(name).scopes).toEqual(["organizer"]);
+    for (const name of ["set_gift_plan", "send_to_vendor", "approve", "list_guests", "get_guest", "list_missing", "search_gifts"]) expect(tool(name).scopes).toEqual(["organizer"]);
     for (const name of ["get_manifest", "get_changes", "post_update", "get_updates", "count_by", "get_summary"]) expect(tool(name).scopes).toContain("vendor");
   });
 });

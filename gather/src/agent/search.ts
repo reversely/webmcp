@@ -4,7 +4,7 @@
  * the cards it names. Every candidate carries its seller, its variants, and a delivery probe.
  * Stage 1 (eligibility) and Stage 2 (scoring) read only those fields and the event.
  */
-import { addCalendarDays, isOnOrBefore, parseArrivalWindow, probeCheckout, checkoutOptions, shippingPolicyUrl, type CatalogClient, type CatalogProduct, type CheckoutProbe } from "@webmcp/shopify-ucp";
+import { addCalendarDays, deliveryVerdict, isOnOrBefore, parseArrivalWindow, probeCheckout, checkoutOptions, shippingPolicyUrl, type CatalogClient, type CatalogProduct, type CheckoutProbe, type DeliveryVerdict } from "@webmcp/shopify-ucp";
 import cardsData from "./cards.json";
 
 export type CardSearch = { query: string; categories?: string[] };
@@ -32,8 +32,11 @@ export type Candidate = {
   variants: Variant[];
   option_names: string[];
   searches: string[];
-  delivery: { window: { earliest: string; latest: string } | null; text: string | null; confidence: "dated" | "duration" | "unknown"; error: string | null } | null;
+  delivery: { window: { earliest: string; latest: string } | null; text: string | null; confidence: "dated" | "duration" | "unknown"; verdict: DeliveryVerdict; error: string | null } | null;
 };
+
+/** What each search returned and how many products each stage kept, for the results screen and the ask bar. */
+export type Funnel = { searches: { query: string; categories?: string[]; returned: number; total: number | null }[]; merged: number; probed: number; ranked: number; excluded: Record<string, number> };
 
 export type EventContext = {
   /** ISO date of the event. */
@@ -78,22 +81,36 @@ function toCandidate(product: CatalogProduct, search: string): Candidate | null 
 }
 
 /** Runs every search of a card (or the sentence's searches) and merges the products by id; a product found twice keeps both search labels. */
-export async function searchCandidates(client: CatalogClient, searches: CardSearch[], ctx: EventContext, options: { limit?: number; sleepMs?: number } = {}): Promise<Candidate[]> {
+export async function searchCandidates(client: CatalogClient, searches: CardSearch[], ctx: EventContext, options: { limit?: number; pages?: number; sleepMs?: number; funnel?: Funnel } = {}): Promise<Candidate[]> {
   const merged = new Map<string, Candidate>();
   for (const s of searches) {
+    // The catalog reads the price ceiling in minor units (cents), the same unit it returns prices in.
     const filters: Record<string, unknown> = { ships_to: { country: ctx.venue.country, region: ctx.venue.region, postal_code: ctx.venue.postal_code }, ships_from: [{ country: ctx.venue.country }], available: true };
     if (s.categories?.length) filters.categories = s.categories;
-    if (ctx.budget_cents !== null) filters.price = { max: ctx.budget_cents / 100 };
-    const result = await client.searchCatalog({ query: s.query, filters: filters as never, context: { address_country: ctx.venue.country, address_region: ctx.venue.region, postal_code: ctx.venue.postal_code } as never, pagination: { limit: options.limit ?? 25 } });
-    for (const product of result.products ?? []) {
-      const c = toCandidate(product, s.categories?.length ? `${s.query} [${s.categories.join(",")}]` : s.query);
-      if (!c) continue;
-      const seen = merged.get(c.product_id);
-      if (seen) seen.searches.push(...c.searches);
-      else merged.set(c.product_id, c);
+    if (ctx.budget_cents !== null) filters.price = { max: ctx.budget_cents };
+    let cursor: string | undefined;
+    let returned = 0;
+    let total: number | null = null;
+    for (let page = 0; page < (options.pages ?? 1); page++) {
+      const result = await client.searchCatalog({ query: s.query, filters: filters as never, context: { address_country: ctx.venue.country, address_region: ctx.venue.region, postal_code: ctx.venue.postal_code } as never, pagination: { limit: options.limit ?? 50, ...(cursor ? { cursor } : {}) } });
+      const pg = result.pagination as { has_next_page?: boolean; cursor?: string; next_cursor?: string; total_count?: number } | undefined;
+      total = pg?.total_count ?? total;
+      for (const product of result.products ?? []) {
+        returned++;
+        const c = toCandidate(product, s.categories?.length ? `${s.query} [${s.categories.join(",")}]` : s.query);
+        if (!c) continue;
+        const seen = merged.get(c.product_id);
+        if (seen) seen.searches.push(...c.searches);
+        else merged.set(c.product_id, c);
+      }
+      cursor = pg?.next_cursor ?? pg?.cursor;
+      if (!pg?.has_next_page || !cursor) break;
+      if (options.sleepMs) await new Promise((r) => setTimeout(r, options.sleepMs));
     }
+    options.funnel?.searches.push({ query: s.query, categories: s.categories, returned, total });
     if (options.sleepMs) await new Promise((r) => setTimeout(r, options.sleepMs));
   }
+  if (options.funnel) options.funnel.merged = merged.size;
   return [...merged.values()];
 }
 
@@ -121,16 +138,17 @@ export async function withDetail(client: CatalogClient, candidate: Candidate): P
 
 export async function withDelivery(candidate: Candidate, ctx: EventContext, fetchImpl: typeof fetch = fetch): Promise<Candidate> {
   const variant = candidate.variants.find((v) => v.available) ?? candidate.variants[0];
-  if (!variant) return { ...candidate, delivery: { window: null, text: null, confidence: "unknown", error: "the product has no variant to price" } };
+  if (!variant) return { ...candidate, delivery: { window: null, text: null, confidence: "unknown", verdict: "unknown", error: "the product has no variant to price" } };
   const probe: CheckoutProbe = await probeCheckout(candidate.shop_domain, { variantId: variant.id, destination: { address_locality: ctx.venue.city, address_region: ctx.venue.region, postal_code: ctx.venue.postal_code, address_country: ctx.venue.country, street_address: ctx.venue.line1 || undefined }, quantity: 1 }, fetchImpl);
-  if (probe.error) return { ...candidate, delivery: { window: null, text: null, confidence: "unknown", error: probe.error } };
+  const { verdict, detail } = deliveryVerdict(probe);
+  if (!probe.payload) return { ...candidate, delivery: { window: null, text: null, confidence: "unknown", verdict: "unknown", error: probe.error ?? detail } };
   const titles = checkoutOptions(probe.payload);
   for (const title of titles) {
     const window = parseArrivalWindow(title, ctx.today);
-    if (window) return { ...candidate, delivery: { window: { earliest: window.arrival_min ?? window.arrival_max, latest: window.arrival_max }, text: title, confidence: window.duration ? "duration" : "dated", error: null } };
+    if (window) return { ...candidate, delivery: { window: { earliest: window.arrival_min ?? window.arrival_max, latest: window.arrival_max }, text: title, confidence: window.duration ? "duration" : "dated", verdict: "quoted", error: null } };
   }
   const policy = shippingPolicyUrl(probe.payload);
-  return { ...candidate, delivery: { window: null, text: titles[0] ?? null, confidence: "unknown", error: policy ? null : (titles.length ? null : "the checkout returned no delivery option") } };
+  return { ...candidate, delivery: { window: null, text: titles[0] ?? detail, confidence: "unknown", verdict, error: verdict === "refused" ? detail : policy || titles.length ? null : (detail ?? "the checkout returned no delivery option") } };
 }
 
 /* ---- Stage 1: eligibility ---- */
@@ -139,7 +157,7 @@ export type Verdict = { eligible: boolean; rule: string | null; reason: string |
 
 /** Each rule names its source (PRD Section 10). A product passes when every rule holds; the first failing rule is the reason. */
 export function eligibility(c: Candidate, ctx: EventContext, config = cardsConfig()): Verdict {
-  if (c.delivery?.error && /country|ship|destination/i.test(c.delivery.error)) return { eligible: false, rule: "ships_to_venue", reason: `The checkout refused the venue: ${c.delivery.error}.` };
+  if (c.delivery?.verdict === "refused") return { eligible: false, rule: "ships_to_venue", reason: `The shop's checkout refused the venue: ${c.delivery.error ?? c.delivery.text ?? "no delivery to the address"}.` };
   if (c.delivery?.window) {
     const latest = addCalendarDays(c.delivery.window.latest, config.delivery_buffer_days);
     if (!isOnOrBefore(latest, ctx.event_date)) return { eligible: false, rule: "delivery", reason: `Delivery by ${c.delivery.window.latest} plus ${config.delivery_buffer_days} days falls after the event.` };
@@ -171,7 +189,18 @@ export function score(c: Candidate, ctx: EventContext, config = cardsConfig(), c
 }
 
 /** The eligible candidates by score, best first; the excluded ones follow with their rule, so the assistant can say why a product is missing. */
-export function rank(candidates: Candidate[], ctx: EventContext, config = cardsConfig()): { ranked: Scored[]; excluded: Scored[] } {
+export function rank(candidates: Candidate[], ctx: EventContext, config = cardsConfig(), funnel?: Funnel): { ranked: Scored[]; excluded: Scored[] } {
   const scored = candidates.map((c) => score(c, ctx, config));
-  return { ranked: scored.filter((s) => s.verdict.eligible).sort((a, b) => b.score - a.score), excluded: scored.filter((s) => !s.verdict.eligible) };
+  const ranked = scored.filter((s) => s.verdict.eligible).sort((a, b) => b.score - a.score);
+  const excluded = scored.filter((s) => !s.verdict.eligible);
+  if (funnel) {
+    funnel.ranked = ranked.length;
+    funnel.excluded = {};
+    for (const e of excluded) funnel.excluded[e.verdict.rule ?? "other"] = (funnel.excluded[e.verdict.rule ?? "other"] ?? 0) + 1;
+  }
+  return { ranked, excluded };
+}
+
+export function emptyFunnel(): Funnel {
+  return { searches: [], merged: 0, probed: 0, ranked: 0, excluded: {} };
 }

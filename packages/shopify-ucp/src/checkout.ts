@@ -26,6 +26,26 @@ export type CheckoutPayload = {
 };
 export type CheckoutProbe = { payload: CheckoutPayload | null; error?: string; placeholders_used: CheckoutPlaceholder[] };
 
+/** What a checkout reply says about delivery to the destination, read from its messages and status. */
+export type DeliveryVerdict = "quoted" | "refused" | "needs_buyer" | "unknown";
+
+/**
+ * Reads the reply's messages: a code or content that says the shop cannot deliver to the
+ * destination is a refusal; an account, address-detail, or extension requirement is a step a
+ * buyer completes and says nothing about delivery; a quoted option is a quote.
+ */
+export function deliveryVerdict(probe: CheckoutProbe): { verdict: DeliveryVerdict; detail: string | null } {
+  const payload = probe.payload;
+  if (!payload) return { verdict: "unknown", detail: probe.error ?? null };
+  if (checkoutOptions(payload).length > 0) return { verdict: "quoted", detail: null };
+  const messages = payload.messages ?? [];
+  const refusal = messages.find((m) => /delivery_unavailable|shipping_unavailable|no_shipping|not_available|does_not_ship|country/i.test(m.code ?? "") || /(does not|doesn't|cannot|can't|no) (ship|deliver)|not available (in|to|for)|no shipping (rates|methods|options)/i.test(m.content ?? ""));
+  if (refusal) return { verdict: "refused", detail: refusal.content ?? refusal.code ?? null };
+  const buyer = messages.find((m) => /required|sign in|account|extension|detail_changed|address/i.test(`${m.code ?? ""} ${m.content ?? ""}`));
+  if (buyer) return { verdict: "needs_buyer", detail: buyer.content ?? buyer.code ?? null };
+  return { verdict: "unknown", detail: messages[0]?.content ?? payload.status ?? null };
+}
+
 /** The fulfillment option titles in the reply, in order; empty when the reply carried none. */
 export function checkoutOptions(payload: CheckoutPayload | null): string[] {
   const out: string[] = [];
@@ -66,9 +86,18 @@ export async function probeCheckout(
     const envelope = (await res.json()) as { result?: { content?: { text?: string }[]; structuredContent?: CheckoutPayload; isError?: boolean }; error?: { message?: string } };
     if (envelope.error) return { payload: null, error: envelope.error.message ?? "rpc error", placeholders_used: used };
     const text = envelope.result?.content?.[0]?.text;
-    if (envelope.result?.isError) return { payload: null, error: text ?? "tool error", placeholders_used: used };
-    const payload = envelope.result?.structuredContent ?? (text ? (JSON.parse(text) as CheckoutPayload) : null);
-    return { payload, placeholders_used: used };
+    let parsed: CheckoutPayload | null = envelope.result?.structuredContent ?? null;
+    if (!parsed && text) {
+      try {
+        parsed = JSON.parse(text) as CheckoutPayload;
+      } catch {
+        parsed = null;
+      }
+    }
+    // A tool result marked isError still carries the checkout when the shop answered with one
+    // (status requires_escalation, a sign-in step); only a bare message is an error.
+    if (envelope.result?.isError && !(parsed && typeof parsed === "object" && ("status" in parsed || "messages" in parsed))) return { payload: null, error: text ?? "tool error", placeholders_used: used };
+    return { payload: parsed, ...(envelope.result?.isError ? { error: undefined } : {}), placeholders_used: used };
   } catch (e) {
     return { payload: null, error: (e as Error).message, placeholders_used: used };
   }

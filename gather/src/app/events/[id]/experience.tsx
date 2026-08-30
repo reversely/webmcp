@@ -8,7 +8,7 @@ import { dateOnly, dateTime, money } from "../../../lib/format";
 import type { VendorUpdate } from "../../../domain/types";
 
 type Step = "pick" | "results" | "recipients" | "mapping" | "list";
-export type SearchReply = { searches: { query: string; categories?: string[] }[]; found: number; probed: number; ranked: Scored[]; excluded: { product_id: string; title: string; shop_name: string; rule: string | null; reason: string | null }[]; duration_ms: number };
+export type SearchReply = { funnel?: { searches: { query: string; categories?: string[]; returned: number; total: number | null }[]; merged: number; probed: number; ranked: number; excluded: Record<string, number> }; searches: { query: string; categories?: string[] }[]; found: number; probed: number; ranked: Scored[]; excluded: { product_id: string; title: string; shop_name: string; rule: string | null; reason: string | null }[]; duration_ms: number };
 type Recipients = "going" | "going_maybe" | "everyone";
 const RECIPIENT_FILTERS: Record<Recipients, { field: string; op: string; value?: unknown }[]> = { going: [{ field: "status", op: "eq", value: "going" }], going_maybe: [{ field: "status", op: "in", value: ["going", "maybe"] }], everyone: [] };
 const RECIPIENT_LABEL: Record<Recipients, string> = { going: "Guests going", going_maybe: "Going and maybe", everyone: "Everyone invited" };
@@ -209,7 +209,19 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
         {step === "results" && reply && (
           <section aria-labelledby="gx-results">
             <h1 className="title" id="gx-results">{Math.min(shown, reply.ranked.length)} that fit</h1>
-            <p className="lead">{reply.found} products came back from {reply.searches.length} {reply.searches.length === 1 ? "search" : "searches"}; {reply.probed} were checked for delivery to the venue. Ranked by delivery, price, and what the shop states.</p>
+            <p className="lead">{reply.found} products came back from {reply.searches.length} {reply.searches.length === 1 ? "search" : "searches"}; {reply.probed} were checked for delivery to the venue; {reply.excluded.length} were excluded. Ranked by delivery, price, and what the shop states.</p>
+            {reply.funnel && (
+              <div className="list" style={{ marginBottom: 24 }} data-testid="funnel">
+                {reply.funnel.searches.map((s, i) => (
+                  <div className="row" key={i} style={{ gridTemplateColumns: "1fr auto" }}><span>"{s.query}"{s.categories?.length ? ` in ${s.categories.join(", ")}` : ""}</span><span className="type">{s.returned} of {s.total ?? "?"} in the catalog</span></div>
+                ))}
+                <div className="row" style={{ gridTemplateColumns: "1fr auto" }}><span>Distinct products</span><span className="type">{reply.funnel.merged}</span></div>
+                <div className="row" style={{ gridTemplateColumns: "1fr auto" }}><span>Checked for delivery to the venue</span><span className="type">{reply.funnel.probed}</span></div>
+                {Object.entries(reply.funnel.excluded).map(([rule, n]) => (
+                  <div className="row" key={rule} style={{ gridTemplateColumns: "1fr auto" }}><span>Excluded by the {rule.replace(/_/g, " ")} rule</span><span className="type">{n}</span></div>
+                ))}
+              </div>
+            )}
             <div className="results" data-testid="results">
               {reply.ranked.slice(0, shown).map((p) => (
                 <button key={p.product_id} type="button" className="prod" onClick={() => pick(p)} data-testid="result">

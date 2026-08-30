@@ -92,6 +92,13 @@ export const TOOLS: ToolDefinition[] = [
     route: { method: "GET", path: "/api/events/:eventId/changes", query: (a) => ({ since: str(a.since_seq ?? 0) }) }
   },
   {
+    name: "search_gifts",
+    description: "Searches Shopify's catalog for a gift for the guests: a card (gift_sets, food_drink, apparel, stationery) or a sentence, shipping to the venue, under the cost per person, with delivery to the venue checked for each candidate. Returns the ranked products, the excluded ones with the rule that excluded each, and the funnel per search.",
+    inputSchema: { type: "object", properties: { card: { type: "string", description: "A card key", enum: ["gift_sets", "food_drink", "apparel", "stationery"] }, sentence: { type: "string", description: "The gift in the organizer's words, when no card fits" } }, additionalProperties: false },
+    scopes: ["organizer"],
+    route: { method: "POST", path: "/api/events/:eventId/search", body: (a) => ({ card: a.card, sentence: a.sentence }) }
+  },
+  {
     name: "set_gift_plan",
     description: "Replaces a gift's plan: the ordered rules that assign a product to guests by filter. The first rule whose filter matches a guest wins.",
     inputSchema: { type: "object", properties: { gift_id: { type: "string", description: "The gift's id" }, rules: { type: "array", description: "Rules as {filter, product_id} in order", items: { type: "object" } } }, required: ["gift_id", "rules"], additionalProperties: false },

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkoutOptions, probeCheckout } from "./checkout";
+import { checkoutOptions, deliveryVerdict, probeCheckout } from "./checkout";
 
 describe("probeCheckout", () => {
   it("posts create_checkout for the variant and destination, fills the slots it lacks, and reads the option titles", async () => {
@@ -21,5 +21,21 @@ describe("probeCheckout", () => {
     expect((await probeCheckout("shop.myshopify.com", { variantId: "v", destination: { address_locality: "C", postal_code: "0", address_country: "CA" } }, failing)).error).toBe("HTTP 429");
     const toolError: typeof fetch = async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "no shipping to that country" }], isError: true } }), { headers: { "Content-Type": "application/json" } });
     expect((await probeCheckout("shop.myshopify.com", { variantId: "v", destination: { address_locality: "C", postal_code: "0", address_country: "CA" } }, toolError)).error).toBe("no shipping to that country");
+  });
+});
+
+describe("deliveryVerdict", () => {
+  it("reads a quote, a refusal, a buyer step, and an unknown from the reply", async () => {
+    const reply = (payload: unknown, isError = false): typeof fetch => async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify(payload) }], isError } }), { headers: { "Content-Type": "application/json" } });
+    const dest = { address_locality: "C", postal_code: "0", address_country: "CA" };
+    const quoted = await probeCheckout("s.myshopify.com", { variantId: "v", destination: dest }, reply({ status: "incomplete", fulfillment: { methods: [{ groups: [{ options: [{ title: "Standard (3 to 5 days)" }] }] }] } }));
+    expect(deliveryVerdict(quoted).verdict).toBe("quoted");
+    const refused = await probeCheckout("s.myshopify.com", { variantId: "v", destination: dest }, reply({ status: "incomplete", fulfillment: { methods: [] }, messages: [{ type: "error", code: "delivery_unavailable", content: "We do not ship to this address." }] }, true));
+    expect(deliveryVerdict(refused)).toEqual({ verdict: "refused", detail: "We do not ship to this address." });
+    const step = await probeCheckout("s.myshopify.com", { variantId: "v", destination: dest }, reply({ status: "requires_escalation", fulfillment: { methods: [] }, messages: [{ type: "error", code: "customer_account_required", content: "You must sign in to continue." }] }, true));
+    expect(step.payload).not.toBeNull();
+    expect(deliveryVerdict(step).verdict).toBe("needs_buyer");
+    const bare = await probeCheckout("s.myshopify.com", { variantId: "v", destination: dest }, async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "no such variant" }], isError: true } }), { headers: { "Content-Type": "application/json" } }));
+    expect(deliveryVerdict(bare)).toEqual({ verdict: "unknown", detail: "no such variant" });
   });
 });

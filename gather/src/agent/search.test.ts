@@ -29,7 +29,7 @@ describe("searchCandidates", () => {
     expect(out[0].searches).toEqual(["gift sets [bu]", "party favors [ae-2-1]"]);
     expect(out[0]).toMatchObject({ shop_domain: "a.myshopify.com", price_cents: 1500, option_names: ["Flavour"] });
     const first = client.calls[0] as { filters: Record<string, unknown> };
-    expect(first.filters).toMatchObject({ ships_to: { country: "CA", postal_code: "00000" }, ships_from: [{ country: "CA" }], categories: ["bu"], price: { max: 20 }, available: true });
+    expect(first.filters).toMatchObject({ ships_to: { country: "CA", postal_code: "00000" }, ships_from: [{ country: "CA" }], categories: ["bu"], price: { max: 2000 }, available: true });
   });
   it("maps a sentence to itself plus the cards it names", () => {
     const searches = searchesForSentence("a small dessert box of food each guest can take home");
@@ -57,8 +57,12 @@ describe("withDelivery, eligibility, and rank", () => {
     const unknown = await withDelivery(base(), CTX, failing);
     expect(unknown.delivery).toMatchObject({ confidence: "unknown", error: "HTTP 429" });
     expect(eligibility(unknown, CTX).eligible).toBe(true);
-    const refused = await withDelivery(base(), CTX, async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: "no shipping rates to that country" }], isError: true } }), { headers: { "Content-Type": "application/json" } }));
+    const refused = await withDelivery(base(), CTX, async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify({ status: "incomplete", fulfillment: { methods: [] }, messages: [{ type: "error", code: "delivery_unavailable", content: "We do not ship to this address." }] }) }], isError: true } }), { headers: { "Content-Type": "application/json" } }));
     expect(eligibility(refused, CTX)).toMatchObject({ eligible: false, rule: "ships_to_venue" });
+    // A sign-in step or an escalation is not a refusal: the product stays, delivery unknown.
+    const step = await withDelivery(base(), CTX, async () => new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [{ type: "text", text: JSON.stringify({ status: "requires_escalation", fulfillment: { methods: [] }, messages: [{ type: "error", code: "customer_account_required", content: "You must sign in to continue." }] }) }], isError: true } }), { headers: { "Content-Type": "application/json" } }));
+    expect(step.delivery?.verdict).toBe("needs_buyer");
+    expect(eligibility(step, CTX).eligible).toBe(true);
   });
   it("excludes a price above the budget and ranks dated, cheaper, better-documented sellers first", async () => {
     const dated = await withDelivery(base({ product_id: "dated", price_cents: 1000 }), CTX, checkoutWith(["Arrives Dec 28 to Jan 2"]));

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { catalogClient } from "@webmcp/shopify-ucp";
 import { BadRequestError, errorResponse, requireEvent } from "../../../../../server/api";
 import { guestsFor } from "../../../../../domain/store";
-import { cardsConfig, rank, searchCandidates, searchesForSentence, withDelivery, withDetail, type EventContext } from "../../../../../agent/search";
+import { cardsConfig, emptyFunnel, rank, searchCandidates, searchesForSentence, withDelivery, withDetail, type EventContext } from "../../../../../agent/search";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -24,14 +24,19 @@ export async function POST(request: Request, { params }: Params) {
     const ctx: EventContext = { event_date: event.starts_at.slice(0, 10), venue: event.venue, budget_cents: event.cost_per_person_cents, quantity: going, today: new Date().toISOString().slice(0, 10) };
     const started = Date.now();
     const client = catalogClient();
-    const found = await searchCandidates(client, searches, ctx, { limit: 25, sleepMs: 1500 });
-    // The cheapest dozen by price get the detail and the probe; the rest rank with delivery unknown.
-    const shortlist = [...found].sort((a, b) => (a.price_cents ?? Infinity) - (b.price_cents ?? Infinity)).slice(0, Math.max(1, Math.min(body.probe ?? 12, 25)));
-    const probed = await Promise.all(shortlist.map(async (c) => withDelivery(await withDetail(client, c), ctx)));
+    const funnel = emptyFunnel();
+    const found = await searchCandidates(client, searches, ctx, { limit: 50, pages: 2, sleepMs: 1500, funnel });
+    // Every candidate with a price under the budget gets the detail and a delivery probe, a few
+    // shops at a time; the probe cap keeps a broad search inside a minute.
+    const cap = Math.max(1, Math.min(body.probe ?? 30, 60));
+    const shortlist = [...found].filter((c) => ctx.budget_cents === null || c.price_cents === null || c.price_cents <= ctx.budget_cents).sort((a, b) => (b.variants.length - a.variants.length) || ((a.price_cents ?? Infinity) - (b.price_cents ?? Infinity))).slice(0, cap);
+    const probed: typeof shortlist = [];
+    for (let i = 0; i < shortlist.length; i += 6) probed.push(...(await Promise.all(shortlist.slice(i, i + 6).map(async (c) => withDelivery(await withDetail(client, c), ctx)))));
+    funnel.probed = probed.length;
     const probedIds = new Set(probed.map((c) => c.product_id));
     const all = [...probed, ...found.filter((c) => !probedIds.has(c.product_id))];
-    const { ranked, excluded } = rank(all, ctx, config);
-    return NextResponse.json({ searches, context: ctx, found: found.length, probed: probed.length, ranked: ranked.slice(0, 10), excluded: excluded.map((e) => ({ product_id: e.product_id, title: e.title, shop_name: e.shop_name, rule: e.verdict.rule, reason: e.verdict.reason })), duration_ms: Date.now() - started });
+    const { ranked, excluded } = rank(all, ctx, config, funnel);
+    return NextResponse.json({ searches, context: ctx, funnel, found: found.length, probed: probed.length, ranked: ranked.slice(0, 15), excluded: excluded.map((e) => ({ product_id: e.product_id, title: e.title, shop_name: e.shop_name, rule: e.verdict.rule, reason: e.verdict.reason })), duration_ms: Date.now() - started });
   } catch (e) {
     return errorResponse(e);
   }
