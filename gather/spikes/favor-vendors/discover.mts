@@ -39,7 +39,7 @@
  * and a failed search waits 10, 20, then 30 s before trying again.
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { catalogClient, storefrontEndpoint } from "../../../3droom-concept/src/commerce/index.ts";
+import { catalogClient, storefrontEndpoint } from "@webmcp/shopify-ucp";
 
 const DIR = "gather/spikes/favor-vendors";
 

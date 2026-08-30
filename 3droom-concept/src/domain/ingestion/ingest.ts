@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { CatalogClient, CatalogProduct } from "../../commerce";
-import { storefrontEndpoint } from "../../commerce";
+import type { CatalogClient, CatalogProduct } from "@webmcp/shopify-ucp";
+import { storefrontEndpoint } from "@webmcp/shopify-ucp";
 import { regenerateBom } from "../bom";
 import type { Budget, DomainEvent } from "../bom";
 import type { ProjectStore } from "../bom";

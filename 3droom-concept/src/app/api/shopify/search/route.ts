@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { appState } from "../../../../server/state";
 import { withProject } from "../../../../server/trace";
 import { normalizeCatalogProduct } from "../../../../domain/products/normalize";
-import { CatalogError } from "../../../../commerce";
+import { CatalogError } from "@webmcp/shopify-ucp";
 import { catalogDestination, shipsToFor } from "../../../../agent/catalog";
 import { inferKind } from "../../../../agent/kinds";
 

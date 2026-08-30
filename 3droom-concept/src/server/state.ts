@@ -3,7 +3,7 @@
  * BOM store does not own (spaces, requirements, board documents, chat messages). Kept on
  * `globalThis` so Next.js dev-server module reloads do not wipe it. Postgres replaces this (#15).
  */
-import { catalogClient, GLOBAL_CATALOG_ENDPOINT, type CatalogCallHook, type CatalogClient } from "../commerce";
+import { catalogClient, GLOBAL_CATALOG_ENDPOINT, type CatalogCallHook, type CatalogClient } from "@webmcp/shopify-ucp";
 import { createInMemoryStore, type AgentRunStore } from "../domain/agent-run";
 import { calculateBudget, regenerateBom, renameItem, renameItemInRule, replaceBomItem, ProjectStore, type Budget, type DomainEvent, type RenameResult, type ReplaceResult } from "../domain/bom";
 import { startModelGeneration } from "../domain/ingestion/hooks";

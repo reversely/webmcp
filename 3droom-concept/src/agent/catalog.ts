@@ -3,7 +3,7 @@
  * Global Catalog, and the upsert that turns a raw catalog object into a Product row plus a project
  * Candidate without selecting it (selection is the ranking's job).
  */
-import { CatalogError, type BuyerContext, type CatalogClient, type ShipsTo } from "../commerce";
+import { CatalogError, type BuyerContext, type CatalogClient, type ShipsTo } from "@webmcp/shopify-ucp";
 import { normalizeCatalogProduct } from "../domain/products/normalize";
 import type { Box, Candidate, Category, Kind, Product, Project } from "../domain/types";
 import { appState } from "../server/state";

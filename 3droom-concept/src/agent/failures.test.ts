@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { POST as compilePost } from "../app/api/projects/[id]/compile/route";
 import { POST as messagesPost } from "../app/api/projects/[id]/messages/route";
 import { POST as roomEstimatePost } from "../app/api/projects/[id]/room-estimate/route";
-import { CatalogError, catalogClient } from "../commerce";
+import { CatalogError, catalogClient } from "@webmcp/shopify-ucp";
 import { startModelGeneration } from "../domain/ingestion/hooks";
 import { appState, snapshot } from "../server/state";
 import type { ThreeDDeps } from "../server/three-d";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogClient } from "../../commerce";
+import { catalogClient } from "@webmcp/shopify-ucp";
 import { PROJECT_ID, demoStore } from "../bom/fixture";
 import { ingestProductUrl } from "./ingest";
 

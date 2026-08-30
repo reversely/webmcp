@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {};
+/** The shared client ships as TypeScript source from the workspace, so Next transpiles it. */
+const nextConfig: NextConfig = { transpilePackages: ["@webmcp/shopify-ucp"] };
 
 export default nextConfig;

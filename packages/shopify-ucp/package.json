@@ -1,0 +1,23 @@
+{
+  "name": "@webmcp/shopify-ucp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Client for Shopify's agent interface (UCP over MCP): the Global Catalog and any shop's own endpoint, with recorded fixtures",
+  "exports": {
+    ".": "./src/index.ts",
+    "./fixtures/*": "./fixtures/*"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.11"
+  }
+}

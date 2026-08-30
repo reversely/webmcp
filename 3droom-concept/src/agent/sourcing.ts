@@ -4,7 +4,7 @@
  * the run checkpoints before the first delivery check so a missing address can pause it
  * (PRD 5.2, 10) and a later message can resume it from the delivery step.
  */
-import { CatalogError } from "../commerce";
+import { CatalogError } from "@webmcp/shopify-ucp";
 import { formatMoney } from "../domain/money";
 import { checkpoint, complete, failRecoverable, requestInput, startRun } from "../domain/agent-run";
 import { calculateBudget, regenerateBom, type Budget } from "../domain/bom";

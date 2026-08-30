@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { CatalogError, catalogClient, DEFAULT_AGENT_PROFILE_URL, GLOBAL_CATALOG_ENDPOINT, storefrontEndpoint } from "./index";
-import floydGetProduct from "./fixtures/floyd-get-product.json";
-import floydSearch from "./fixtures/floyd-search-sofa.json";
-import globalLookup from "./fixtures/global-lookup-floyd-bedside-table.json";
-import globalSearch from "./fixtures/global-search-three-seat-sofa.json";
+import floydGetProduct from "../fixtures/floyd-get-product.json";
+import floydSearch from "../fixtures/floyd-search-sofa.json";
+import globalLookup from "../fixtures/global-lookup-floyd-bedside-table.json";
+import globalSearch from "../fixtures/global-search-three-seat-sofa.json";
 
 /** Real error envelopes recorded from the Global endpoint. */
 const shipsToStringError = {

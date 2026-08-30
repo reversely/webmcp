@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "workspaces": [
+    "packages/shopify-ucp",
     "3droom-concept",
     "app-template",
     "gather"

@@ -5,7 +5,7 @@
 // are fetched per category (default 1). Every discovered seller then gets a storefront probe and a
 // create_checkout call, so depth multiplies runtime.
 import { writeFileSync } from "node:fs";
-import { catalogClient, storefrontEndpoint } from "../../src/commerce";
+import { catalogClient, storefrontEndpoint } from "@webmcp/shopify-ucp";
 import { parseDimensions } from "../../src/domain/products/dimensions";
 
 const CATEGORIES: Record<string, string> = {

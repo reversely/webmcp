@@ -1,0 +1,3 @@
+# @webmcp/shopify-ucp
+
+The client both apps use for Shopify's agent interface: JSON-RPC `tools/call` against the Global Catalog (`catalog.shopify.com/api/ucp/mcp`) or a shop's own endpoint (`storefrontEndpoint(host)`), carrying the public agent profile in every call and needing no key. `catalogClient()` gives `searchCatalog`, `lookupCatalog`, `getProduct`, and `withEndpoint(url)` for a shop; `CatalogError` carries the HTTP status (`code: 429` for the catalog's rate limit). `fixtures/` holds recorded replies the tests and the planner's ingestion tests read. `live.test.ts` runs only with `LIVE_SHOPIFY=1`.

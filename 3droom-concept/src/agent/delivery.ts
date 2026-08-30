@@ -3,7 +3,7 @@
  * `create_checkout`, whose shipping option titles carry the window a shopper sees; the shipping
  * policy page and the product description follow. The checkout is never completed.
  */
-import { DEFAULT_AGENT_PROFILE_URL, storefrontEndpoint } from "../commerce";
+import { DEFAULT_AGENT_PROFILE_URL, storefrontEndpoint } from "@webmcp/shopify-ucp";
 import { normalizeDeliveryEvidence, parseArrivalWindow, type DeliveryEvidence, type DeliveryStatusValue } from "../domain/delivery";
 import { stripHtml } from "../domain/products/normalize";
 import type { DeliveryAddress, Product } from "../domain/types";

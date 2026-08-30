@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import globalLookup from "../../commerce/fixtures/global-lookup-floyd-bedside-table.json";
-import globalMissModway from "../../commerce/fixtures/global-lookup-miss-modway-ollie.json";
-import modwayGetProduct from "../../commerce/fixtures/modway-get-product-ollie.json";
-import modwayHandleJson from "../../commerce/fixtures/modway-products-ollie-handle.json";
-import { catalogClient, GLOBAL_CATALOG_ENDPOINT } from "../../commerce";
+import globalLookup from "@webmcp/shopify-ucp/fixtures/global-lookup-floyd-bedside-table.json";
+import globalMissModway from "@webmcp/shopify-ucp/fixtures/global-lookup-miss-modway-ollie.json";
+import modwayGetProduct from "@webmcp/shopify-ucp/fixtures/modway-get-product-ollie.json";
+import modwayHandleJson from "@webmcp/shopify-ucp/fixtures/modway-products-ollie-handle.json";
+import { catalogClient, GLOBAL_CATALOG_ENDPOINT } from "@webmcp/shopify-ucp";
 import { PRICES, PROJECT_ID, demoStore, rows } from "../bom/fixture";
 import { regenerateBom } from "../bom";
 import { InvalidProductUrlError, ProductNotFoundError, ingestProductUrl } from "./index";

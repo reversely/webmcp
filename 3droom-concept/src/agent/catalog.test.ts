@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { catalogClient } from "../commerce";
+import { catalogClient } from "@webmcp/shopify-ucp";
 import type { DeliveryAddress } from "../domain/types";
 import { catalogDestination, RATE_LIMIT_WAITS_MS, searchProducts, shipsToFor } from "./catalog";
 

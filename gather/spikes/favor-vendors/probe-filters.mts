@@ -4,7 +4,7 @@
 // Run from the repo root after discover.mts: npx tsx gather/spikes/favor-vendors/probe-filters.mts
 // Writes card-categories.csv and appends a section to results.md.
 import { appendFileSync, writeFileSync } from "node:fs";
-import { catalogClient } from "../../../3droom-concept/src/commerce/index.ts";
+import { catalogClient } from "@webmcp/shopify-ucp";
 
 const DIR = "gather/spikes/favor-vendors";
 const [SHIP_COUNTRY, SHIP_REGION, SHIP_POSTAL] = (process.env.SHIP_TO ?? "US:NY:10003").split(":");
