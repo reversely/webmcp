@@ -35,8 +35,9 @@ import {
   writeValue,
   type EventInput
 } from "../domain/store";
-import { Constraints, EventSettings, Guest, GuestStatus, Segment, UpdateKind, ValueType, Venue, type AttributeDefinition, type VendorUpdate } from "../domain/types";
+import { Constraints, EventSettings, FilterSchema, GiftOverride, GiftRule, Guest, GuestStatus, MissingValueFallback, PostLockCancellation, Segment, UpdateKind, ValueType, Variant, VariantMappingRow, Venue, type AttributeDefinition, type Batch, type VendorUpdate } from "../domain/types";
 import { matches } from "../domain/filter";
+import { createGift, getGift, giftsFor, manifest, quantities, removeGift, setGiftOverride, unservable, updateGift, type GiftInput } from "../domain/gifts";
 
 export class NotFoundError extends Error {}
 export class BadRequestError extends Error {}
@@ -119,9 +120,9 @@ export function replaceDefinitions(eventId: string, body: unknown) {
 /* ---- Snapshot and follow-ups ---- */
 
 /** A follow-up names its kind and the guests it covers; the page composes the sentence and the action from the kind. */
-export type FollowUp = { kind: "missing_value" | "unresolved" | "no_reply"; definition_id: string | null; status: GuestStatus | null; guest_ids: string[]; deadline: string | null };
+export type FollowUp = { kind: "missing_value" | "unresolved" | "no_reply" | "unservable"; definition_id: string | null; status: GuestStatus | null; guest_ids: string[]; deadline: string | null; gift_id?: string };
 
-/** The Overview's follow-ups (PRD Section 5): a required value missing per definition, unresolved maybes, and non-responders. */
+/** The Overview's follow-ups (PRD Section 5): a required value missing per definition, unresolved maybes, non-responders, and guests a gift cannot serve. */
 export function followUps(eventId: string): FollowUp[] {
   const event = getEvent(eventId);
   const out: FollowUp[] = [];
@@ -135,6 +136,7 @@ export function followUps(eventId: string): FollowUp[] {
   if (maybes.length) out.push({ kind: "unresolved", definition_id: null, status: "maybe", guest_ids: maybes.map((g) => g.id), deadline: event.rsvp_deadline });
   const silent = listGuests(eventId, [{ field: "status", op: "eq", value: "no_reply" }]);
   if (silent.length) out.push({ kind: "no_reply", definition_id: null, status: "no_reply", guest_ids: silent.map((g) => g.id), deadline: event.rsvp_deadline });
+  for (const entry of unservable(eventId)) out.push({ kind: "unservable", definition_id: null, status: null, guest_ids: entry.guests.map((g) => g.guest_id), deadline: getGift(entry.gift_id).cutoff, gift_id: entry.gift_id });
   return out;
 }
 
@@ -143,7 +145,84 @@ export function snapshot(eventId: string) {
   const guests = guestsFor(eventId).map((g) => ({ ...g, values: valuesFor(g) }));
   const counts = { going: 0, maybe: 0, cant_go: 0, no_reply: 0 };
   for (const g of guests) counts[g.status] += 1;
-  return { event, definitions: definitionsFor(eventId), guests, counts, follow_ups: followUps(eventId), library: library().questions, seq: currentSeq() };
+  const gifts = giftsFor(eventId).map((g) => ({ ...g, quantities: quantities(g) }));
+  return { event, definitions: definitionsFor(eventId), guests, counts, follow_ups: followUps(eventId), gifts, library: library().questions, seq: currentSeq() };
+}
+
+/* ---- Gifts ---- */
+
+const GOING: Filter = [{ field: "status", op: "eq", value: "going" }];
+
+export const GiftBody = z.object({
+  product_id: z.string().min(1),
+  shop_domain: z.string().default(""),
+  product_title: z.string().default(""),
+  recipients: FilterSchema.default(GOING),
+  mapping: z.array(VariantMappingRow).default([]),
+  default_variant_id: z.string().nullable().default(null),
+  variants: z.array(Variant).default([]),
+  missing_value_fallback: MissingValueFallback.default("default"),
+  post_lock_cancellation: PostLockCancellation.default("keep"),
+  cutoff: z.string().nullable().default(null),
+  cart_id: z.string().nullable().default(null),
+  checkout_id: z.string().nullable().default(null),
+  order_id: z.string().nullable().default(null),
+  rules: z.array(GiftRule).optional()
+});
+
+function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) throw new BadRequestError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
+  return parsed.data;
+}
+
+export function requireGift(eventId: string, giftId: string): Batch {
+  let gift: Batch;
+  try {
+    gift = getGift(giftId);
+  } catch {
+    throw new NotFoundError(`No gift ${giftId}.`);
+  }
+  if (gift.event_id !== eventId) throw new NotFoundError(`No gift ${giftId} on event ${eventId}.`);
+  return gift;
+}
+
+/** Stores a plan (set_gift_plan); the default plan carries one rule that sends the product to every going guest. */
+export function createGiftFromBody(eventId: string, body: unknown) {
+  requireEvent(eventId);
+  const data = parseBody(GiftBody, body);
+  const input: GiftInput = { ...data, rules: data.rules ?? [{ filter: GOING, product_id: data.product_id }] };
+  return giftView(eventId, createGift(eventId, input).id);
+}
+
+export function updateGiftFromBody(eventId: string, giftId: string, body: unknown) {
+  requireGift(eventId, giftId);
+  const patch = parseBody(GiftBody.partial(), body);
+  return giftView(eventId, updateGift(giftId, patch as Partial<GiftInput>).id);
+}
+
+export function deleteGift(eventId: string, giftId: string) {
+  requireGift(eventId, giftId);
+  removeGift(giftId);
+  return { id: giftId };
+}
+
+/** The gift with its derived quantities and manifest, recomputed on every read. */
+export function giftView(eventId: string, giftId: string) {
+  const gift = requireGift(eventId, giftId);
+  return { ...gift, quantities: quantities(gift), manifest: manifest(gift) };
+}
+
+export function manifestView(eventId: string, giftId: string) {
+  return { gift_id: giftId, rows: manifest(requireGift(eventId, giftId)) };
+}
+
+/** The organizer's decision for one guest; an empty body clears it. */
+export function setOverride(eventId: string, giftId: string, guestId: string, body: unknown) {
+  requireGift(eventId, giftId);
+  requireGuest(eventId, guestId);
+  setGiftOverride(giftId, guestId, parseBody(GiftOverride, body ?? {}));
+  return giftView(eventId, giftId);
 }
 
 /* ---- Invite and RSVP ---- */

@@ -5,7 +5,7 @@
  * sequence number; readers poll `changesSince`.
  */
 import { matches, type Filter, type Subject } from "./filter";
-import type { AttributeDefinition, AttributeValue, CallerToken, ChangeEntry, Event, Guest, GuestStatus, Party, VendorUpdate } from "./types";
+import type { AttributeDefinition, AttributeValue, Batch, CallerToken, ChangeEntry, Event, Guest, GuestStatus, Party, VendorUpdate } from "./types";
 import { aggregate, validateValue, type Aggregate } from "./values";
 import libraryData from "./library.json";
 
@@ -17,6 +17,7 @@ export type State = {
   /** Keyed by subject type, subject id, and definition id joined with `|`. */
   values: Map<string, AttributeValue>;
   updates: Map<string, VendorUpdate>;
+  gifts: Map<string, Batch>;
   tokens: Map<string, CallerToken>;
   changes: ChangeEntry[];
   seq: number;
@@ -29,7 +30,7 @@ declare global {
 }
 
 function freshState(): State {
-  return { events: new Map(), parties: new Map(), guests: new Map(), definitions: new Map(), values: new Map(), updates: new Map(), tokens: new Map(), changes: [], seq: 0, ids: 0 };
+  return { events: new Map(), parties: new Map(), guests: new Map(), definitions: new Map(), values: new Map(), updates: new Map(), gifts: new Map(), tokens: new Map(), changes: [], seq: 0, ids: 0 };
 }
 
 export function state(): State {

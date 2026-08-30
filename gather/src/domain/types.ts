@@ -5,6 +5,7 @@
  * Money is in cents; dates are ISO strings.
  */
 import { z } from "zod";
+import { OPS } from "./filter";
 
 export const ValueType = z.enum(["text", "number", "boolean", "enum", "multi_enum", "date", "file", "reference"]);
 export type ValueType = z.infer<typeof ValueType>;
@@ -160,3 +161,61 @@ export const ChangeEntry = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("update"), seq: z.number().int(), at: z.string(), event_id: z.string(), update_id: z.string(), gift_id: z.string(), update_kind: UpdateKind, caller: z.string() })
 ]);
 export type ChangeEntry = z.infer<typeof ChangeEntry>;
+
+/* ---- Gifts ---- */
+
+/** One clause of the filter grammar (filter.ts) as a schema, so a stored rule validates on write. */
+export const FilterClauseSchema = z.object({ field: z.string(), op: z.enum(OPS), value: z.unknown().optional() });
+export const FilterSchema = z.array(FilterClauseSchema);
+
+export const Variant = z.object({ id: z.string(), title: z.string(), price_cents: z.number().int(), currency: z.string() });
+export type Variant = z.infer<typeof Variant>;
+
+/** One value of one definition sends the guest to one variant; the organizer's rows are the source of truth. */
+export const VariantMappingRow = z.object({ definition_id: z.string(), value: z.string(), variant_id: z.string() });
+export type VariantMappingRow = z.infer<typeof VariantMappingRow>;
+
+export const MissingValueFallback = z.enum(["default", "blank", "hold"]);
+export type MissingValueFallback = z.infer<typeof MissingValueFallback>;
+
+export const PostLockCancellation = z.enum(["keep", "reassign", "drop"]);
+export type PostLockCancellation = z.infer<typeof PostLockCancellation>;
+
+export const UnitStatus = z.enum(["open", "locked", "unservable", "held", "cancelled_reassignable", "cancelled_sunk", "excluded"]);
+export type UnitStatus = z.infer<typeof UnitStatus>;
+
+/** A plan rule: the first rule whose filter matches a guest assigns the product. */
+export const GiftRule = z.object({ filter: FilterSchema, product_id: z.string() });
+export type GiftRule = z.infer<typeof GiftRule>;
+
+/** The organizer's per-guest decision; it wins over the computed variant and survives every recompute. */
+export const GiftOverride = z.object({ variant_id: z.string().optional(), excluded: z.boolean().optional() });
+export type GiftOverride = z.infer<typeof GiftOverride>;
+
+export const Batch = z.object({
+  id: z.string(),
+  event_id: z.string(),
+  product_id: z.string(),
+  shop_domain: z.string(),
+  product_title: z.string(),
+  recipients: FilterSchema,
+  mapping: z.array(VariantMappingRow),
+  default_variant_id: z.string().nullable(),
+  variants: z.array(Variant),
+  missing_value_fallback: MissingValueFallback,
+  post_lock_cancellation: PostLockCancellation,
+  cutoff: z.string().nullable(),
+  cart_id: z.string().nullable(),
+  checkout_id: z.string().nullable(),
+  order_id: z.string().nullable(),
+  rules: z.array(GiftRule),
+  overrides: z.record(z.string(), GiftOverride),
+  /** Set by the lock: the date and the guests whose units the checkout carries. */
+  locked_at: z.string().nullable(),
+  locked_guest_ids: z.array(z.string())
+});
+export type Batch = z.infer<typeof Batch>;
+
+/** A synonym row proposes a mapping when a variant title matches the pattern for an option label; the table ships empty. */
+export const SynonymRow = z.object({ option_label_pattern: z.string(), variant_title_pattern: z.string() });
+export type SynonymRow = z.infer<typeof SynonymRow>;

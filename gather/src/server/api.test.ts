@@ -3,7 +3,8 @@ import { lockValue, resetState, upsertDefinition } from "../domain/store";
 import { GET as getSnapshot } from "../app/api/events/[id]/route";
 import { POST as postEvent } from "../app/api/events/route";
 import { PATCH as patchGuest } from "../app/api/events/[id]/rsvp/[guestId]/route";
-import { changes, counts, createEventFromBody, followUps, inviteView, patchRsvp, postUpdate, snapshot, submitRsvp, summary, updatesFor } from "./api";
+import { changes, counts, createEventFromBody, createGiftFromBody, deleteGift, followUps, giftView, inviteView, manifestView, patchRsvp, postUpdate, setOverride, snapshot, submitRsvp, summary, updateGiftFromBody, updatesFor } from "./api";
+import { PUT as putOverride } from "../app/api/events/[id]/gifts/[giftId]/overrides/[guestId]/route";
 import { publishEvent } from "../domain/store";
 
 const BODY = {
@@ -99,6 +100,39 @@ describe("the API operations", () => {
     expect(((await res.json()) as { event: { title: string } }).event.title).toBe(BODY.title);
     const missing = await getSnapshot(new Request("http://x"), { params: Promise.resolve({ id: "evt_none" }) });
     expect(missing.status).toBe(404);
+  });
+
+  it("stores a gift plan with the default rule and serves its quantities, manifest, and follow-up", () => {
+    const { event, dietary, guestIds } = seed();
+    const gift = createGiftFromBody(event.id, {
+      product_id: "prod_1",
+      mapping: [{ definition_id: dietary.id, value: "a", variant_id: "var_a" }],
+      default_variant_id: "var_plain"
+    });
+    expect(gift.rules).toEqual([{ filter: [{ field: "status", op: "eq", value: "going" }], product_id: "prod_1" }]);
+    expect(gift.quantities).toEqual(expect.arrayContaining([{ product_id: "prod_1", variant_id: "var_a", quantity: 1 }]));
+    expect(gift.manifest.find((r) => r.guest_id === guestIds[1])).toMatchObject({ unit_status: "unservable" });
+    expect(followUps(event.id).find((f) => f.kind === "unservable")).toEqual({ kind: "unservable", definition_id: null, status: null, guest_ids: [guestIds[1]], deadline: null, gift_id: gift.id });
+    expect(snapshot(event.id).gifts.map((g) => g.id)).toEqual([gift.id]);
+    expect(manifestView(event.id, gift.id).rows).toHaveLength(2);
+    const patched = updateGiftFromBody(event.id, gift.id, { mapping: [...gift.mapping, { definition_id: dietary.id, value: "none", variant_id: "var_plain" }] });
+    expect(patched.quantities.reduce((n, q) => n + q.quantity, 0)).toBe(2);
+    expect(() => createGiftFromBody(event.id, {})).toThrow(/product_id/);
+    expect(() => giftView(event.id, "gift_none")).toThrow(/No gift/);
+    deleteGift(event.id, gift.id);
+    expect(() => giftView(event.id, gift.id)).toThrow(/No gift/);
+  });
+
+  it("sets and clears an override through the route", async () => {
+    const { event, guestIds } = seed();
+    const gift = createGiftFromBody(event.id, { product_id: "prod_1", default_variant_id: "var_plain" });
+    const params = { params: Promise.resolve({ id: event.id, giftId: gift.id, guestId: guestIds[0] }) };
+    const res = await putOverride(new Request("http://x", { method: "PUT", body: JSON.stringify({ excluded: true }) }), params);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { quantities: { quantity: number }[] }).quantities).toEqual([{ product_id: "prod_1", variant_id: "var_plain", quantity: 1 }]);
+    const cleared = await putOverride(new Request("http://x", { method: "PUT" }), params);
+    expect(((await cleared.json()) as { overrides: object }).overrides).toEqual({});
+    expect(() => setOverride(event.id, gift.id, "guest_none", {})).toThrow(/No guest/);
   });
 
   it("keeps one thread per gift with a change-log entry per post", () => {
