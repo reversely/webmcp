@@ -208,7 +208,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
 
         {step === "results" && reply && (
           <section aria-labelledby="gx-results">
-            <h1 className="title" id="gx-results">{Math.min(shown, reply.ranked.length)} that fit</h1>
+            <h1 className="title" id="gx-results">{reply.funnel?.ranked ?? reply.ranked.length} fit; the best {Math.min(shown, reply.ranked.length)} below</h1>
             <p className="lead">{reply.found} products came back from {reply.searches.length} {reply.searches.length === 1 ? "search" : "searches"}; {reply.probed} were checked for delivery to the venue; {reply.excluded.length} were excluded. Ranked by delivery, price, and what the shop states.</p>
             {reply.funnel && (
               <div className="list" style={{ marginBottom: 24 }} data-testid="funnel">

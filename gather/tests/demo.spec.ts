@@ -129,7 +129,7 @@ test("Scene 3: Food & drink; the catalog is searched and delivery to the venue i
   await expect(organizer.getByTestId("result").first()).toBeVisible({ timeout: LIVE_MS });
   const count = await organizer.getByTestId("result").count();
   expect(count).toBeGreaterThan(0);
-  await caption(`Scene 3. ${count} products fit: delivery by the date, price under $18, in stock`);
+  await caption("Scene 3. The funnel: what each search returned, how many were checked for delivery, what was excluded and why");
   await rest(organizer, 4000);
 });
 
