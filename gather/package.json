@@ -13,9 +13,11 @@
     "test:webmcp": "playwright test tests/webmcp.spec.ts"
   },
   "dependencies": {
+    "@webmcp/shopify-ucp": "*",
     "next": "^16.3.3",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",
