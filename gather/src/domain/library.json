@@ -1,0 +1,14 @@
+{
+  "questions": [
+    { "key": "printed_name", "label": "Name for printing", "scope": "guest", "value_type": "text", "constraints": { "max_length": 40 }, "required_rule": "going", "seed": true },
+    { "key": "dietary", "label": "Allergies and dietary restrictions", "scope": "guest", "value_type": "multi_enum", "constraints": { "options": [] }, "required_rule": "going", "seed": true },
+    { "key": "plus_ones", "label": "Plus-ones", "scope": "party", "value_type": "number", "constraints": { "min": 0, "max": 4 }, "required_rule": "never", "seed": false },
+    { "key": "accessibility", "label": "Accessibility needs", "scope": "guest", "value_type": "text", "constraints": { "max_length": 200 }, "required_rule": "never", "seed": false },
+    { "key": "arrival_date", "label": "Arrival date", "scope": "party", "value_type": "date", "constraints": {}, "required_rule": "never", "seed": false }
+  ],
+  "event_defaults": {
+    "type": "event",
+    "response_options": ["going", "maybe", "cant_go"],
+    "settings": { "guest_approval": false, "reminders": true, "reask_on_change": true, "order_approval": true }
+  }
+}

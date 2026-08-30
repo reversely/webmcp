@@ -7,6 +7,7 @@
 import { matches, type Filter, type Subject } from "./filter";
 import type { AttributeDefinition, AttributeValue, CallerToken, ChangeEntry, Event, Guest, GuestStatus, Party, VendorUpdate } from "./types";
 import { aggregate, validateValue, type Aggregate } from "./values";
+import libraryData from "./library.json";
 
 export type State = {
   events: Map<string, Event>;
@@ -67,24 +68,22 @@ export class InvalidValueError extends Error {}
 
 /* ---- Events and definitions ---- */
 
-/** The two questions every event starts with (PRD Section 6). */
+/**
+ * The question library (library.json): rows the organizer picks from on the draft page, edits, or
+ * replaces. Entries flagged `seed` are added to a new event; their options list starts empty and
+ * the organizer fills it, so no dietary vocabulary lives in code.
+ */
+export type LibraryQuestion = { key: string; label: string; scope: AttributeDefinition["scope"]; value_type: AttributeDefinition["value_type"]; constraints: AttributeDefinition["constraints"]; required_rule: AttributeDefinition["required_rule"]; seed: boolean };
+export type Library = { questions: LibraryQuestion[]; event_defaults: { type: string; response_options: GuestStatus[]; settings: Event["settings"] } };
+
+export function library(): Library {
+  return libraryData as Library;
+}
+
 export function seedDefinitions(eventId: string): AttributeDefinition[] {
-  return [
-    { id: newId("def"), event_id: eventId, namespace: "core", key: "printed_name", label: "Name for printing", scope: "guest", value_type: "text", constraints: { max_length: 40 }, default_visibility: [], required_rule: "going", creator: "gather" },
-    {
-      id: newId("def"),
-      event_id: eventId,
-      namespace: "core",
-      key: "dietary",
-      label: "Allergies and dietary restrictions",
-      scope: "guest",
-      value_type: "multi_enum",
-      constraints: { options: [{ value: "vegan", label: "Vegan" }, { value: "gluten_free", label: "Gluten-free" }, { value: "nut_allergy", label: "Nut allergy" }, { value: "none", label: "None" }] },
-      default_visibility: [],
-      required_rule: "going",
-      creator: "gather"
-    }
-  ];
+  return library()
+    .questions.filter((q) => q.seed)
+    .map((q) => ({ id: newId("def"), event_id: eventId, namespace: "core", key: q.key, label: q.label, scope: q.scope, value_type: q.value_type, constraints: q.constraints, default_visibility: [], required_rule: q.required_rule, creator: "library" }));
 }
 
 export type EventInput = Omit<Event, "id" | "definition_ids" | "status" | "invite_code" | "created_at">;
@@ -116,7 +115,8 @@ export function updateEvent(id: string, patch: Partial<EventInput>): Event {
   return event;
 }
 
-const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // pragma: allowlist secret (an invite-code alphabet)
+/** Invite codes use letters and digits that read unambiguously (no 0, O, 1, I). */
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // pragma: allowlist secret
 export function publishEvent(id: string): Event {
   const s = state();
   const event = getEvent(id);

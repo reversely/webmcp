@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { lockValue, resetState } from "../domain/store";
+import { lockValue, resetState, upsertDefinition } from "../domain/store";
 import { GET as getSnapshot } from "../app/api/events/[id]/route";
 import { POST as postEvent } from "../app/api/events/route";
 import { PATCH as patchGuest } from "../app/api/events/[id]/rsvp/[guestId]/route";
@@ -7,27 +7,28 @@ import { changes, counts, createEventFromBody, followUps, inviteView, patchRsvp,
 import { publishEvent } from "../domain/store";
 
 const BODY = {
-  title: "Lexi's 25th birthday",
-  host: "Shereen",
-  starts_at: "2026-10-17T19:00:00-04:00",
-  venue: { name: "Paradise Grapevine", line1: "218 Geary Ave", city: "Toronto", region: "ON", postal_code: "M6H 2A8", country: "CA" },
-  spots: 80,
-  cost_per_person_cents: 1800,
-  rsvp_deadline: "2026-10-10"
+  title: "Test event",
+  host: "Host",
+  starts_at: "2030-01-10T19:00:00Z",
+  venue: { name: "Venue", line1: "1 Street", city: "City", region: "RG", postal_code: "00000", country: "CA" },
+  spots: 10,
+  cost_per_person_cents: 1000,
+  rsvp_deadline: "2030-01-03"
 };
+const OPTIONS = [{ value: "a", label: "Option A" }, { value: "none", label: "None" }];
 
 function seed() {
   const event = publishEvent(createEventFromBody(BODY).id);
   const snap = snapshot(event.id);
   const name = snap.definitions.find((d) => d.key === "printed_name")!;
-  const dietary = snap.definitions.find((d) => d.key === "dietary")!;
+  const dietary = upsertDefinition(event.id, { ...snap.definitions.find((d) => d.key === "dietary")!, constraints: { options: OPTIONS } });
   const reply = submitRsvp(event.id, {
-    party: { contact: { email: "ana@example.com" } },
+    party: { contact: { email: "one@example.com" } },
     guests: [
-      { display_name: "Ana Ruiz", status: "going", answers: { [name.id]: "Ana", [dietary.id]: ["vegan"] } },
-      { display_name: "Marcus Lee", status: "going", answers: { [dietary.id]: ["none"] } },
-      { display_name: "Dev Patel", status: "maybe" },
-      { display_name: "Theo B." }
+      { display_name: "Guest One", status: "going", answers: { [name.id]: "One", [dietary.id]: ["a"] } },
+      { display_name: "Guest Two", status: "going", answers: { [dietary.id]: ["none"] } },
+      { display_name: "Guest Three", status: "maybe" },
+      { display_name: "Guest Four" }
     ]
   });
   return { event, name, dietary, guestIds: reply.guest_ids };
@@ -51,26 +52,26 @@ describe("the API operations", () => {
     expect(() => submitRsvp(event.id, { guests: [{ display_name: "Ana" }] })).toThrow(/not published/);
     publishEvent(event.id);
     const dietary = snapshot(event.id).definitions[1];
-    expect(() => submitRsvp(event.id, { guests: [{ display_name: "Ana", answers: { [dietary.id]: ["halal"] } }] })).toThrow(/takes any of/);
+    expect(() => submitRsvp(event.id, { guests: [{ display_name: "Guest", answers: { [dietary.id]: ["zzz"] } }] })).toThrow(/takes any of/);
   });
 
   it("builds the snapshot with counts and follow-ups from the records", () => {
-    const { event } = seed();
+    const { event, name, dietary, guestIds } = seed();
     const snap = snapshot(event.id);
     expect(snap.counts).toEqual({ going: 2, maybe: 1, cant_go: 0, no_reply: 1 });
-    expect(followUps(event.id).map((f) => f.text)).toEqual([
-      "1 guest going has no name for printing",
-      "1 guest is Maybe; resolve to Can't go on 2026-10-10",
-      "1 guest has not replied"
+    expect(followUps(event.id)).toEqual([
+      { kind: "missing_value", definition_id: name.id, status: "going", guest_ids: [guestIds[1]], deadline: null },
+      { kind: "unresolved", definition_id: null, status: "maybe", guest_ids: [guestIds[2]], deadline: "2030-01-03" },
+      { kind: "no_reply", definition_id: null, status: "no_reply", guest_ids: [guestIds[3]], deadline: "2030-01-03" }
     ]);
-    expect(snap.guests.find((g) => g.display_name === "Ana Ruiz")!.values).toMatchObject({ [snap.definitions[1].id]: ["vegan"] });
+    expect(snap.guests.find((g) => g.display_name === "Guest One")!.values).toMatchObject({ [dietary.id]: ["a"] });
   });
 
   it("counts, summarizes, and lists changes since a sequence number", () => {
     const { event, dietary, guestIds } = seed();
     const c = counts(event.id, dietary.id, [{ field: "status", op: "eq", value: "going" }]);
     if (c.value_type !== "multi_enum") throw new Error();
-    expect(c.counts.map((x) => [x.option.value, x.count])).toEqual([["vegan", 1], ["gluten_free", 0], ["nut_allergy", 0], ["none", 1]]);
+    expect(c.counts.map((x) => [x.option.value, x.count])).toEqual([["a", 1], ["none", 1]]);
     const s = summary(event.id, [dietary.id], []);
     expect(s.status).toEqual({ going: 2, maybe: 1, cant_go: 0, no_reply: 1 });
     const before = changes(event.id, 0).seq;
@@ -86,7 +87,7 @@ describe("the API operations", () => {
     const res = await patchGuest(new Request("http://x", { method: "PATCH", body: JSON.stringify({ answers: { [name.id]: "Anna" } }) }), { params: Promise.resolve({ id: event.id, guestId: guestIds[0] }) });
     expect(res.status).toBe(409);
     const body = (await res.json()) as { locked: { batch_id: string; label: string } };
-    expect(body.locked).toMatchObject({ batch_id: "gift_1", label: "Name for printing" });
+    expect(body.locked).toMatchObject({ batch_id: "gift_1", definition_id: name.id });
   });
 
   it("creates through the route and reads the snapshot through the route", async () => {
@@ -103,8 +104,8 @@ describe("the API operations", () => {
   it("keeps one thread per gift with a change-log entry per post", () => {
     const { event } = seed();
     const before = changes(event.id, 0).seq;
-    const posted = postUpdate(event.id, "gift_1", "token:vendor_1", { kind: "confirmed", text: "We can do 52 by Oct 15.", expected_date: "2026-10-15" });
-    postUpdate(event.id, "gift_1", "organizer", { kind: "reply", text: "Thanks." });
+    const posted = postUpdate(event.id, "gift_1", "token:vendor_1", { kind: "confirmed", text: "Confirmed.", expected_date: "2030-01-08" });
+    postUpdate(event.id, "gift_1", "organizer", { kind: "reply", text: "Reply." });
     expect(updatesFor(event.id, "gift_1").map((u) => u.kind)).toEqual(["confirmed", "reply"]);
     expect(updatesFor(event.id, "gift_1", posted.seq)).toHaveLength(1);
     expect(changes(event.id, before).entries.map((c) => c.kind)).toEqual(["update", "update"]);

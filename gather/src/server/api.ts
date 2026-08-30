@@ -19,6 +19,7 @@ import {
   getGuest,
   guestsFor,
   InvalidValueError,
+  library,
   listGuests,
   listMissing,
   LockedValueError,
@@ -41,8 +42,9 @@ export class BadRequestError extends Error {}
 
 /* ---- Events ---- */
 
+const defaults = library().event_defaults;
 export const EventBody = z.object({
-  type: z.string().default("event"),
+  type: z.string().default(defaults.type),
   title: z.string().min(1),
   host: z.string().default(""),
   starts_at: z.string(),
@@ -52,8 +54,8 @@ export const EventBody = z.object({
   rsvp_deadline: z.string().nullable().default(null),
   description: z.string().default(""),
   invite_extras: z.array(z.string()).default([]),
-  response_options: z.array(GuestStatus).default(["going", "maybe", "cant_go"]),
-  settings: EventSettings.default({ guest_approval: false, reminders: true, reask_on_change: true, order_approval: true }),
+  response_options: z.array(GuestStatus).default(defaults.response_options),
+  settings: EventSettings.default(defaults.settings),
   segments: z.array(Segment).default([])
 });
 
@@ -90,24 +92,23 @@ export function requireGuest(eventId: string, guestId: string): Guest {
 
 /* ---- Snapshot and follow-ups ---- */
 
-export type FollowUp = { key: string; text: string; guest_ids: string[]; action: string };
+/** A follow-up names its kind and the guests it covers; the page composes the sentence and the action from the kind. */
+export type FollowUp = { kind: "missing_value" | "unresolved" | "no_reply"; definition_id: string | null; status: GuestStatus | null; guest_ids: string[]; deadline: string | null };
 
-/** The Overview's follow-ups (PRD Section 5): each names the guests it covers and one action. */
+/** The Overview's follow-ups (PRD Section 5): a required value missing per definition, unresolved maybes, and non-responders. */
 export function followUps(eventId: string): FollowUp[] {
-  const defs = definitionsFor(eventId);
-  const name = defs.find((d) => d.key === "printed_name");
-  const dietary = defs.find((d) => d.key === "dietary");
-  const going: Filter = [{ field: "status", op: "eq", value: "going" }];
+  const event = getEvent(eventId);
   const out: FollowUp[] = [];
-  const noName = name ? listMissing(eventId, name.id, going) : [];
-  if (noName.length) out.push({ key: "missing_name", text: `${noName.length} ${noName.length === 1 ? "guest" : "guests"} going ${noName.length === 1 ? "has" : "have"} no name for printing`, guest_ids: noName.map((g) => g.id), action: "Send reminder" });
-  const noDiet = dietary ? listMissing(eventId, dietary.id, going) : [];
-  if (noDiet.length) out.push({ key: "missing_dietary", text: `${noDiet.length} ${noDiet.length === 1 ? "guest" : "guests"} going skipped dietary restrictions`, guest_ids: noDiet.map((g) => g.id), action: "Send reminder" });
+  for (const def of definitionsFor(eventId)) {
+    if (def.required_rule === "never") continue;
+    const filter: Filter = def.required_rule === "going" ? [{ field: "status", op: "eq", value: "going" }] : [{ field: "status", op: "neq", value: "no_reply" }];
+    const guests = listMissing(eventId, def.id, filter);
+    if (guests.length) out.push({ kind: "missing_value", definition_id: def.id, status: def.required_rule === "going" ? "going" : null, guest_ids: guests.map((g) => g.id), deadline: null });
+  }
   const maybes = listGuests(eventId, [{ field: "status", op: "eq", value: "maybe" }]);
-  const deadline = getEvent(eventId).rsvp_deadline;
-  if (maybes.length) out.push({ key: "maybes", text: `${maybes.length} ${maybes.length === 1 ? "guest is" : "guests are"} Maybe${deadline ? `; resolve to Can't go on ${deadline}` : ""}`, guest_ids: maybes.map((g) => g.id), action: "Nudge" });
+  if (maybes.length) out.push({ kind: "unresolved", definition_id: null, status: "maybe", guest_ids: maybes.map((g) => g.id), deadline: event.rsvp_deadline });
   const silent = listGuests(eventId, [{ field: "status", op: "eq", value: "no_reply" }]);
-  if (silent.length) out.push({ key: "no_reply", text: `${silent.length} ${silent.length === 1 ? "guest has" : "guests have"} not replied`, guest_ids: silent.map((g) => g.id), action: "Remind all" });
+  if (silent.length) out.push({ kind: "no_reply", definition_id: null, status: "no_reply", guest_ids: silent.map((g) => g.id), deadline: event.rsvp_deadline });
   return out;
 }
 
@@ -116,7 +117,7 @@ export function snapshot(eventId: string) {
   const guests = guestsFor(eventId).map((g) => ({ ...g, values: valuesFor(g) }));
   const counts = { going: 0, maybe: 0, cant_go: 0, no_reply: 0 };
   for (const g of guests) counts[g.status] += 1;
-  return { event, definitions: definitionsFor(eventId), guests, counts, follow_ups: followUps(eventId), seq: currentSeq() };
+  return { event, definitions: definitionsFor(eventId), guests, counts, follow_ups: followUps(eventId), library: library().questions, seq: currentSeq() };
 }
 
 /* ---- Invite and RSVP ---- */
