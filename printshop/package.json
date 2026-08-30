@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "test:webmcp": "playwright test"
+    "test:webmcp": "playwright test",
+    "test:demo": "playwright test tests/demo.spec.ts"
   },
   "dependencies": {
     "@webmcp/shopify-ucp": "^0.1.0",
