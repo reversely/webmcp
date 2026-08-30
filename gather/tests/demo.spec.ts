@@ -15,7 +15,7 @@ test.describe.configure({ mode: "serial" });
  * docs/demo-event.json (gitignored), or the path in DEMO_EVENT. tests/demo-event.example.json
  * shows the shape. Without the file the suite skips.
  */
-type DemoEvent = { title: string; host: string; starts_at: string; venue: { name: string; line1: string; city: string; region: string; postal_code: string; country: string }; spots: string; cost: string; deadline: string; needed_by: string; choices: string[]; guests: { name: string; choice: string }[]; card: string };
+type DemoEvent = { title: string; host: string; starts_at: string; venue: { name: string; line1: string; city: string; region: string; postal_code: string; country: string }; spots: string; cost: string; deadline: string; needed_by: string; choices: string[]; guests: { name: string; choice: string }[]; card: string; guest_list?: string[] };
 const DEMO_PATH = process.env.DEMO_EVENT ?? "docs/demo-event.json";
 const DEMO: DemoEvent | null = existsSync(DEMO_PATH) ? (JSON.parse(readFileSync(DEMO_PATH, "utf8")) as DemoEvent) : null;
 test.skip(!DEMO, `No demo event at ${DEMO_PATH}; copy tests/demo-event.example.json there and fill it in.`);
@@ -98,6 +98,10 @@ test("Scene 1: the organizer sets up the event, adds the dietary choices, and pu
     await choiceInput.press("Enter");
   }
   await expect(organizer.getByTestId("invite-preview")).toContainText(CHOICES[0]);
+  if (EVENT.guest_list?.length) {
+    await caption("Scene 1: the guest list");
+    await organizer.getByTestId("guest-list").fill(EVENT.guest_list.filter(Boolean).join("\n"));
+  }
   await rest(organizer);
   await organizer.getByTestId("publish").click();
   await organizer.waitForURL(/\/events\/evt_/);
@@ -159,6 +163,7 @@ test("Scene 4: the organizer picks one, chooses who receives it, and confirms th
   await caption("Scene 4: one product chosen");
   await results.nth(best).click();
   await expect(organizer.getByTestId("recipients")).toContainText(`Guests going (${GUESTS.length})`);
+  if (EVENT.guest_list?.length) await expect(organizer.getByTestId("recipients")).toContainText(`Everyone invited (${Math.max(EVENT.guest_list.filter(Boolean).length, GUESTS.length)})`);
   await caption("Scene 4: recipients");
   await rest(organizer);
   await organizer.getByTestId("next").click();
