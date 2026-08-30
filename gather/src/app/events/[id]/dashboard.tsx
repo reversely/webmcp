@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { snapshot } from "../../../server/api";
 import { Overview } from "./overview";
+import { Experience, type SearchReply } from "./experience";
 import { WebMcpProvider } from "../../webmcp-provider";
 
 export type Snapshot = ReturnType<typeof snapshot>;
@@ -13,6 +14,8 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
   const [tab, setTab] = useState<Tab>("overview");
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState("");
+  /** The last catalog search, kept across tab switches so the ask bar can answer from it. */
+  const [lastSearch, setLastSearch] = useState<SearchReply | null>(null);
   const event = snap.event;
 
   useEffect(() => {
@@ -58,12 +61,7 @@ export function Dashboard({ initial }: { initial: Snapshot }) {
         {tab === "overview" ? (
           <Overview snap={snap} invite={invite} onChanged={() => window.dispatchEvent(new Event("event:changed"))} />
         ) : (
-          <div className="wrap">
-            <div>
-              <h1 className="title">Gifts for your guests</h1>
-              <p className="lead">Choosing gifts from the replies opens here once the search behind the cards is in place.</p>
-            </div>
-          </div>
+          <Experience snap={snap} onChanged={() => window.dispatchEvent(new Event("event:changed"))} lastSearch={lastSearch} setLastSearch={setLastSearch} />
         )}
       </main>
     </>
