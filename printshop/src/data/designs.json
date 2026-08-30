@@ -1,0 +1,53 @@
+[
+  {
+    "id": "thank-you-flat-a2",
+    "title": "Thank you flat card",
+    "format": "flat",
+    "size": "A2 (4.25 x 5.5 in)",
+    "paper": "120 lb cotton",
+    "print_method": "digital",
+    "colours": ["white", "cream"],
+    "price_bands": [{ "min_quantity": 10, "unit_cents": 320 }, { "min_quantity": 50, "unit_cents": 240 }, { "min_quantity": 100, "unit_cents": 190 }],
+    "lead_time_business_days": 4,
+    "minimum_quantity": 10,
+    "fields": [
+      { "key": "name", "label": "Name", "kind": "name", "max_length": 32, "required": true },
+      { "key": "line", "label": "Line", "kind": "text", "max_length": 90, "required": false }
+    ],
+    "template": { "width": 425, "height": 550, "background": "#fbf8f1", "ink": "#14213d", "heading": "Thank you", "name_y": 300, "line_y": 380 },
+    "image": null
+  },
+  {
+    "id": "note-card-folded-a6",
+    "title": "Folded note card",
+    "format": "folded",
+    "size": "A6 (4.5 x 6.25 in)",
+    "paper": "100 lb matte",
+    "print_method": "letterpress",
+    "colours": ["white"],
+    "price_bands": [{ "min_quantity": 25, "unit_cents": 410 }, { "min_quantity": 100, "unit_cents": 330 }],
+    "lead_time_business_days": 7,
+    "minimum_quantity": 25,
+    "fields": [
+      { "key": "name", "label": "Name", "kind": "name", "max_length": 28, "required": true },
+      { "key": "monogram", "label": "Monogram", "kind": "monogram", "max_length": 3, "required": false }
+    ],
+    "template": { "width": 450, "height": 625, "background": "#ffffff", "ink": "#0b3d6e", "heading": "", "name_y": 340, "line_y": 420 },
+    "image": null
+  },
+  {
+    "id": "place-card-tent",
+    "title": "Place card",
+    "format": "tent",
+    "size": "3.5 x 2 in",
+    "paper": "110 lb smooth",
+    "print_method": "digital",
+    "colours": ["white", "kraft"],
+    "price_bands": [{ "min_quantity": 10, "unit_cents": 95 }, { "min_quantity": 100, "unit_cents": 70 }],
+    "lead_time_business_days": 3,
+    "minimum_quantity": 10,
+    "fields": [{ "key": "name", "label": "Name", "kind": "name", "max_length": 24, "required": true }],
+    "template": { "width": 350, "height": 200, "background": "#ffffff", "ink": "#14213d", "heading": "", "name_y": 110, "line_y": 150 },
+    "image": null
+  }
+]

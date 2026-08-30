@@ -1,0 +1,13 @@
+{
+  "name": "Printshop",
+  "address": { "name": "Printshop", "line1": "1 Print Lane", "city": "Toronto", "region": "ON", "postal_code": "M5V 1A1", "country": "CA" },
+  "currency": "CAD",
+  "tax_rate": 0.13,
+  "ships_to_countries": ["CA", "US"],
+  "profile_url": "https://shopify.dev/ucp/agent-profiles/2026-04-08/valid-with-capabilities.json",
+  "stages": [
+    { "status": "printing", "after_minutes": 1, "text": "Printing started" },
+    { "status": "shipped", "after_minutes": 3, "text": "Shipped", "reference_prefix": "PS-" },
+    { "status": "delivered", "after_minutes": 6, "text": "Delivered" }
+  ]
+}
