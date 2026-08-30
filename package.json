@@ -4,7 +4,8 @@
   "private": true,
   "workspaces": [
     "3droom-concept",
-    "app-template"
+    "app-template",
+    "gather"
   ],
   "scripts": {
     "setup": "bash scripts/setup.sh",
