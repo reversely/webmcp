@@ -254,19 +254,65 @@ export const RsvpBody = z.object({
 });
 
 /** One party replies: guests, statuses, and answers, each answer validated by its definition. */
+/**
+ * The guest list (PRD Section 5): one guest per line as "Name", "Name <email>", or "Name, email".
+ * Each line becomes a party with that contact and a guest with no reply, so "everyone invited"
+ * counts the list and a reply from a listed guest updates their row.
+ */
+export function importGuests(eventId: string, body: unknown) {
+  requireEvent(eventId);
+  const parsed = z.object({ lines: z.array(z.string()).optional(), text: z.string().optional() }).safeParse(body);
+  if (!parsed.success) throw new BadRequestError("Send lines or text.");
+  const lines = (parsed.data.lines ?? parsed.data.text?.split(/\r?\n/) ?? []).map((l) => l.trim()).filter(Boolean);
+  const existing = guestsFor(eventId);
+  const added: Guest[] = [];
+  for (const line of lines) {
+    const m = line.match(/^(.*?)\s*(?:<([^>]+)>|,\s*(\S+@\S+))?\s*$/);
+    const display_name = (m?.[1] ?? line).trim();
+    const email = (m?.[2] ?? m?.[3] ?? "").trim() || null;
+    if (!display_name) continue;
+    if (existing.some((g) => g.display_name.toLowerCase() === display_name.toLowerCase()) || added.some((g) => g.display_name.toLowerCase() === display_name.toLowerCase())) continue;
+    const party = createParty(eventId, { contact: { email } });
+    added.push(createGuest(eventId, party.id, { display_name }));
+  }
+  return { added: added.length, guest_ids: added.map((g) => g.id) };
+}
+
+/** An invited guest with no reply whose name or party email matches the reply. */
+function invitedMatch(eventId: string, displayName: string, email: string | null | undefined): Guest | undefined {
+  const s = state();
+  return guestsFor(eventId).find((g) => {
+    if (g.status !== "no_reply") return false;
+    if (g.display_name.toLowerCase() === displayName.trim().toLowerCase()) return true;
+    const party = s.parties.get(g.party_id);
+    return !!email && !!party?.contact.email && party.contact.email.toLowerCase() === email.toLowerCase();
+  });
+}
+
 export function submitRsvp(eventId: string, body: unknown) {
   const event = requireEvent(eventId);
   if (event.status !== "published") throw new BadRequestError("The event is not published yet.");
   const parsed = RsvpBody.safeParse(body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
-  const party = createParty(eventId, parsed.data.party);
+  const email = parsed.data.party.contact?.email ?? null;
+  const created: { party: ReturnType<typeof createParty> | null } = { party: null };
   const guests = parsed.data.guests.map((g) => {
-    const guest = createGuest(eventId, party.id, { display_name: g.display_name, role: g.role, status: g.status, attendance: g.attendance });
+    const invited = invitedMatch(eventId, g.display_name, email);
+    let guest: Guest;
+    if (invited) {
+      // A listed guest replies: their row takes the status and the answers; the party keeps its contact.
+      guest = g.status ? setGuestStatus(invited.id, g.status, "guest") : invited;
+      for (const [segment, present] of Object.entries(g.attendance ?? {})) guest = setGuestAttendance(guest.id, segment, present);
+      if (email) { const p = state().parties.get(guest.party_id); if (p && !p.contact.email) state().parties.set(p.id, { ...p, contact: { ...p.contact, email } }); }
+    } else {
+      created.party ??= createParty(eventId, parsed.data.party);
+      guest = createGuest(eventId, created.party.id, { display_name: g.display_name, role: g.role, status: g.status, attendance: g.attendance });
+    }
     for (const [definitionId, raw] of Object.entries(g.answers ?? {})) writeAnswer(eventId, guest, definitionId, raw, "guest");
     return guest;
   });
   afterRsvpWrite(eventId);
-  return { party_id: party.id, guest_ids: guests.map((g) => g.id) };
+  return { party_id: created.party?.id ?? guests[0]?.party_id ?? null, guest_ids: guests.map((g) => g.id) };
 }
 
 function writeAnswer(eventId: string, guest: Guest, definitionId: string, raw: unknown, source: string) {

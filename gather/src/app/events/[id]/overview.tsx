@@ -27,6 +27,12 @@ export function Overview({ snap, invite, onChanged }: { snap: Snapshot; invite: 
   const { event, guests, counts, definitions, follow_ups } = snap;
   const [only, setOnly] = useState<string[] | null>(null);
   const [editing, setEditing] = useState(false);
+  const [moreGuests, setMoreGuests] = useState("");
+  async function addGuests() {
+    if (!moreGuests.trim()) return;
+    const res = await fetch(`/api/events/${event.id}/guests/import`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: moreGuests }) });
+    if (res.ok) { setMoreGuests(""); onChanged(); }
+  }
   const shown = only ? guests.filter((g) => only.includes(g.id)) : guests;
   const guestDefs = definitions.filter((d) => d.scope === "guest");
   const going = counts.going;
@@ -67,8 +73,9 @@ export function Overview({ snap, invite, onChanged }: { snap: Snapshot; invite: 
 
         <section className="block" aria-labelledby="guests">
           <div className="labelrow"><h2 id="guests">Guests</h2><span className="eyebrow">{shown.length} shown{only ? ` of ${guests.length}` : ""}</span></div>
+          <div className="field"><label htmlFor="more-guests">Add guests one per line</label><div className="row" style={{ gridTemplateColumns: "1fr auto", padding: 0, border: 0, gap: 8 }}><textarea id="more-guests" rows={2} value={moreGuests} onChange={(e) => setMoreGuests(e.target.value)} data-testid="more-guests" /><button type="button" className="btn ghost small" onClick={addGuests} disabled={!moreGuests.trim()} data-testid="add-guests">Add</button></div></div>
           {guests.length === 0 ? (
-            <p className="hint" style={{ color: "var(--muted)" }} data-testid="guests-empty">No replies yet</p>
+            <p className="hint" style={{ color: "var(--muted)" }} data-testid="guests-empty">No guests yet</p>
           ) : (
             <div className="list" style={{ overflowX: "auto" }}>
               <table className="guests" data-testid="guests">

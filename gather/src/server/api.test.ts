@@ -3,7 +3,7 @@ import { lockValue, resetState, upsertDefinition } from "../domain/store";
 import { GET as getSnapshot } from "../app/api/events/[id]/route";
 import { POST as postEvent } from "../app/api/events/route";
 import { PATCH as patchGuest } from "../app/api/events/[id]/rsvp/[guestId]/route";
-import { changes, counts, createEventFromBody, createGiftFromBody, deleteGift, followUps, giftView, inviteView, manifestView, patchRsvp, postUpdate, setOverride, snapshot, submitRsvp, summary, updateGiftFromBody, updatesFor } from "./api";
+import { changes, counts, createEventFromBody, createGiftFromBody, deleteGift, followUps, giftView, inviteView, manifestView, patchRsvp, postUpdate, setOverride, snapshot, submitRsvp, summary, updateGiftFromBody, updatesFor, importGuests } from "./api";
 import { PUT as putOverride } from "../app/api/events/[id]/gifts/[giftId]/overrides/[guestId]/route";
 import { publishEvent } from "../domain/store";
 
@@ -143,5 +143,20 @@ describe("the API operations", () => {
     expect(updatesFor(event.id, "gift_1").map((u) => u.kind)).toEqual(["confirmed", "reply"]);
     expect(updatesFor(event.id, "gift_1", posted.seq)).toHaveLength(1);
     expect(changes(event.id, before).entries.map((c) => c.kind)).toEqual(["update", "update"]);
+  });
+
+  it("imports a guest list and matches a reply to a listed guest by name or email", () => {
+    const event = publishEvent(createEventFromBody(BODY).id);
+    const imported = importGuests(event.id, { text: "Guest One <one@example.com>\nGuest Two, two@example.com\nGuest Three\n\nGuest One" });
+    expect(imported.added).toBe(3);
+    expect(snapshot(event.id).counts).toEqual({ going: 0, maybe: 0, cant_go: 0, no_reply: 3 });
+    const byName = submitRsvp(event.id, { guests: [{ display_name: "guest two", status: "going" }] });
+    expect(byName.guest_ids).toEqual([imported.guest_ids[1]]);
+    const byEmail = submitRsvp(event.id, { party: { contact: { email: "ONE@example.com" } }, guests: [{ display_name: "G. One", status: "maybe" }] });
+    expect(byEmail.guest_ids).toEqual([imported.guest_ids[0]]);
+    const stranger = submitRsvp(event.id, { guests: [{ display_name: "Guest Four", status: "going" }] });
+    expect(imported.guest_ids).not.toContain(stranger.guest_ids[0]);
+    expect(snapshot(event.id).counts).toEqual({ going: 2, maybe: 1, cant_go: 0, no_reply: 1 });
+    expect(snapshot(event.id).guests).toHaveLength(4);
   });
 });

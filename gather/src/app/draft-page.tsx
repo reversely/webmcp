@@ -59,6 +59,7 @@ export function DraftPage({ library }: { library: Library }) {
   const [questions, setQuestions] = useState<DraftQuestion[]>(library.questions.filter((q) => q.seed).map(fromLibrary));
   const [extraDraft, setExtraDraft] = useState("");
   const [customDraft, setCustomDraft] = useState("");
+  const [guestList, setGuestList] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -118,6 +119,10 @@ export function DraftPage({ library }: { library: Library }) {
         })
       });
       if (!defs.ok) throw new Error(((await defs.json()) as { error: string }).error);
+      if (guestList.trim()) {
+        const imported = await fetch(`/api/events/${id}/guests/import`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: guestList }) });
+        if (!imported.ok) throw new Error(((await imported.json()) as { error: string }).error);
+      }
       const published = await fetch(`/api/events/${id}/publish`, { method: "POST" });
       if (!published.ok) throw new Error(((await published.json()) as { error: string }).error);
       router.push(`/events/${id}`);
@@ -243,6 +248,11 @@ export function DraftPage({ library }: { library: Library }) {
                 ))}
                 <span className="chip"><input aria-label="A question in your words" placeholder="A question in your words" value={customDraft} onChange={(e) => setCustomDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addCustom()} /></span>
               </div>
+            </section>
+
+            <section className="block" aria-labelledby="guestlist">
+              <div className="labelrow"><h2 id="guestlist">Guest list</h2></div>
+              <div className="field"><label htmlFor="guest-list">One guest per line as Name or Name &lt;email&gt;</label><textarea id="guest-list" rows={5} value={guestList} onChange={(e) => setGuestList(e.target.value)} data-testid="guest-list" /></div>
             </section>
 
             <section className="block" aria-labelledby="settings">
