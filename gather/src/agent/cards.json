@@ -1,0 +1,11 @@
+{
+  "cards": [
+    { "key": "gift_sets", "label": "Gift sets", "searches": [{ "query": "gift sets", "categories": ["bu"] }, { "query": "party favors", "categories": ["ae-2-1"] }] },
+    { "key": "food_drink", "label": "Food & drink", "searches": [{ "query": "dessert box gift", "categories": ["fb"] }, { "query": "cookie favors", "categories": ["fb"] }, { "query": "chocolate favor box", "categories": ["fb"] }] },
+    { "key": "apparel", "label": "Apparel", "searches": [{ "query": "tote bag gift", "categories": ["aa"] }, { "query": "t-shirt favors", "categories": ["aa"] }] },
+    { "key": "stationery", "label": "Stationery", "searches": [{ "query": "sticker sheet", "categories": ["os"] }, { "query": "stationery gifts", "categories": ["os"] }, { "query": "personalized stationery", "categories": ["os"] }] }
+  ],
+  "delivery_buffer_days": 3,
+  "lead_time_cap_days": 14,
+  "weights": { "coverage": 30, "lead_time": 25, "price_headroom": 20, "delivery_confidence": 15, "cancellation_terms": 10, "seller_signal": 5 }
+}
