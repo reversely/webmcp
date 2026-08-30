@@ -15,6 +15,10 @@ function describe(f: Snapshot["follow_ups"][number], snap: Snapshot): string {
     return `${n} ${guests}${f.status ? ` ${STATUS_LABEL[f.status].toLowerCase()}` : ""} ${n === 1 ? "has" : "have"} not given ${label.toLowerCase()}`;
   }
   if (f.kind === "unresolved") return `${n} ${guests} ${n === 1 ? "is" : "are"} Maybe${f.deadline ? `; the deadline is ${dateOnly(f.deadline)}` : ""}`;
+  const gift = snap.gifts.find((g) => g.id === f.gift_id);
+  if (f.kind === "unservable") return `${n} ${guests} cannot be served by ${gift?.product_title ?? "a gift"}`;
+  if (f.kind === "vendor_question") return `The vendor of ${gift?.product_title ?? "a gift"} asked a question; it waits for your reply`;
+  if (f.kind === "vendor_issue") return `The vendor of ${gift?.product_title ?? "a gift"} reported an issue with ${n} ${n === 1 ? "unit" : "units"}`;
   return `${n} ${guests} ${n === 1 ? "has" : "have"} not replied`;
 }
 

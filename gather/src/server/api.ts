@@ -120,7 +120,7 @@ export function replaceDefinitions(eventId: string, body: unknown) {
 /* ---- Snapshot and follow-ups ---- */
 
 /** A follow-up names its kind and the guests it covers; the page composes the sentence and the action from the kind. */
-export type FollowUp = { kind: "missing_value" | "unresolved" | "no_reply" | "unservable"; definition_id: string | null; status: GuestStatus | null; guest_ids: string[]; deadline: string | null; gift_id?: string };
+export type FollowUp = { kind: "missing_value" | "unresolved" | "no_reply" | "unservable" | "vendor_question" | "vendor_issue"; definition_id: string | null; status: GuestStatus | null; guest_ids: string[]; deadline: string | null; gift_id?: string; update_id?: string };
 
 /** The Overview's follow-ups (PRD Section 5): a required value missing per definition, unresolved maybes, non-responders, and guests a gift cannot serve. */
 export function followUps(eventId: string): FollowUp[] {
@@ -137,6 +137,14 @@ export function followUps(eventId: string): FollowUp[] {
   const silent = listGuests(eventId, [{ field: "status", op: "eq", value: "no_reply" }]);
   if (silent.length) out.push({ kind: "no_reply", definition_id: null, status: "no_reply", guest_ids: silent.map((g) => g.id), deadline: event.rsvp_deadline });
   for (const entry of unservable(eventId)) out.push({ kind: "unservable", definition_id: null, status: null, guest_ids: entry.guests.map((g) => g.guest_id), deadline: getGift(entry.gift_id).cutoff, gift_id: entry.gift_id });
+  // A vendor's question stays a follow-up until the organizer replies after it; an issue naming a guest stays until that guest's unit changes.
+  for (const gift of giftsFor(eventId)) {
+    const thread = [...state().updates.values()].filter((u) => u.event_id === eventId && u.gift_id === gift.id).sort((a, b) => a.seq - b.seq);
+    for (const u of thread) {
+      if (u.kind === "question" && !thread.some((r) => r.kind === "reply" && r.seq > u.seq)) out.push({ kind: "vendor_question", definition_id: null, status: null, guest_ids: [], deadline: u.expected_date, gift_id: gift.id, update_id: u.id });
+      if (u.kind === "issue" && u.guest_id && !thread.some((r) => r.kind === "reply" && r.seq > u.seq)) out.push({ kind: "vendor_issue", definition_id: null, status: null, guest_ids: [u.guest_id], deadline: u.expected_date, gift_id: gift.id, update_id: u.id });
+    }
+  }
   return out;
 }
 
