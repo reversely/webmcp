@@ -6,7 +6,8 @@
     "packages/shopify-ucp",
     "3droom-concept",
     "app-template",
-    "gather"
+    "gather",
+    "printshop"
   ],
   "scripts": {
     "setup": "bash scripts/setup.sh",

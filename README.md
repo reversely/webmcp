@@ -5,6 +5,8 @@ A workspace of WebMCP apps: pages that expose their operations as tools through 
 | App | What it is | Port |
 | --- | --- | --- |
 | [`3droom-concept/`](3droom-concept/README.md) | two people furnish a room: shared whiteboard, planning agent sourcing real Shopify products, 2D plan and 3D room at merchant dimensions, bill of materials against a budget, delivery checks | 3000 (tests expect 3111) |
+| [`gather/`](gather/README.md) | RSVP records as tools: an organizer's agent shops for the guests at a Shopify store through Shopify's agent interface; vendors read and post through the same tools | 3113 |
+| [`printshop/`](printshop/README.md) | a personalized-stationery vendor whose tools take a name per unit: registered in its page and served from its server, so Gather's agent quotes, orders, and follows a batch | 3114 |
 | [`app-template/`](app-template/README.md) | the starting point for a new app: one page, one piece of state, two tools, a unit test, a Playwright test, an evals file | 3112 |
 
 ## Requirements
@@ -62,6 +64,9 @@ Check a key is present without printing it: `grep -cE '^OPENAI_API_KEY=.+' .env`
 
 ```
 3droom-concept/  the room planner (see its README for the layout inside)
+gather/          the RSVP app
+printshop/       the stationery vendor
+packages/        @webmcp/shopify-ucp, the shared Shopify client
 app-template/    the starting point for a new app
 scripts/         setup.sh
 pyproject.toml   the uv project: modal, pre-commit, detect-secrets, ruff
