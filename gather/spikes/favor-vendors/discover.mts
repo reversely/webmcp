@@ -41,7 +41,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { catalogClient, storefrontEndpoint } from "@webmcp/shopify-ucp";
 
-const DIR = "gather/spikes/favor-vendors";
+const DIR = process.env.SPIKE_DIR ?? "gather/spikes/favor-vendors";
 
 /**
  * "Ship to" condition: only products that can be delivered to this address. Set with the SHIP_TO

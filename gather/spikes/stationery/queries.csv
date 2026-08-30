@@ -1,0 +1,13 @@
+type,key,query,price_max_usd,ships_from,note
+category,thank_you_cards,thank you cards,,*,plain category noun
+category,stationery_cards,stationery cards,,*,plain category noun
+category,note_cards,note cards,,*,plain category noun
+personalization,thank_you_personalized,personalized thank you cards,,*,category plus a personalization word
+personalization,stationery_personalized,personalized stationery,,*,category plus a personalization word
+personalization,cards_custom_name,custom thank you cards with name,,*,category plus a personalization phrase
+personalization,monogram_notecards,monogrammed note cards,,*,category plus a personalization word
+personalization,foil_cards,foil pressed thank you cards,,*,a production method
+bulk,thank_you_bulk,thank you cards bulk 50,,*,category plus a quantity
+occasion,corporate_thank_you,corporate thank you cards,,*,occasion phrase
+occasion,event_thank_you,event thank you notes for attendees,,*,occasion phrase
+sentence,sentence_cards,a personalized thank you card for each guest after the event,,*,an organizer's sentence as typed

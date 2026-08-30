@@ -3,7 +3,7 @@
 // after a run. Run from the repo root: npx tsx gather/spikes/favor-vendors/summarize.mts us
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-const DIR = "gather/spikes/favor-vendors";
+const DIR = process.env.SPIKE_DIR ?? "gather/spikes/favor-vendors";
 const country = (process.argv[2] ?? "us").toLowerCase();
 
 /** A small CSV reader that honours quoted cells (the files quote titles with commas). */
