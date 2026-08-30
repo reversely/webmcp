@@ -93,7 +93,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
       const variants = editing ? editing.variants : chosen!.variants.map((v) => ({ id: v.id, title: v.title, price_cents: v.price_cents, currency: v.currency }));
       const rows = Object.entries(mapping).filter(([, variantId]) => variantId).map(([key, variantId]) => { const [definition_id, value] = key.split("|"); return { definition_id, value, variant_id: variantId! }; });
       const recipientsFilter = RECIPIENT_FILTERS[recipients];
-      const body = { product_id: editing ? editing.product_id : chosen!.product_id, shop_domain: editing ? editing.shop_domain : chosen!.shop_domain, product_title: editing ? editing.product_title : chosen!.title, recipients: recipientsFilter, rules: [{ filter: recipientsFilter, product_id: editing ? editing.product_id : chosen!.product_id }], mapping: rows, default_variant_id: defaultVariant, variants, missing_value_fallback: fallback, post_lock_cancellation: postLock };
+      const body = { product_id: editing ? editing.product_id : chosen!.product_id, shop_domain: editing ? editing.shop_domain : chosen!.shop_domain, product_title: editing ? editing.product_title : chosen!.title, recipients: recipientsFilter, rules: [{ filter: recipientsFilter, product_id: editing ? editing.product_id : chosen!.product_id }], mapping: rows, default_variant_id: defaultVariant, variants, missing_value_fallback: fallback, post_lock_cancellation: postLock, delivery_window: editing ? (editing.delivery_window ?? null) : (chosen!.delivery?.window ?? null) };
       const res = await fetch(editing ? `/api/events/${snap.event.id}/gifts/${editing.id}` : `/api/events/${snap.event.id}/gifts`, { method: editing ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
       setEditing(null);
@@ -255,7 +255,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
                   <div className="line" key={o.value}>
                     <span>{o.label}</span>
                     <select aria-label={`Variant for ${o.label}`} value={mapping[`${q.id}|${o.value}`] ?? ""} onChange={(e) => setMapping({ ...mapping, [`${q.id}|${o.value}`]: e.target.value || null })}>
-                      <option value="">No variant (unservable)</option>
+                      <option value="">Use the default variant</option>
                       {(editing ? editing.variants : chosen!.variants).map((v) => <option key={v.id} value={v.id}>{v.title}{v.price_cents !== null ? `, ${money(v.price_cents, v.currency ?? "CAD")}` : ""}</option>)}
                     </select>
                   </div>

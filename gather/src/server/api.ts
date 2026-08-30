@@ -35,7 +35,7 @@ import {
   writeValue,
   type EventInput
 } from "../domain/store";
-import { Constraints, EventSettings, FilterSchema, GiftOverride, GiftRule, Guest, GuestStatus, MissingValueFallback, PostLockCancellation, Segment, UpdateKind, ValueType, Variant, VariantMappingRow, Venue, type AttributeDefinition, type Batch, type VendorUpdate } from "../domain/types";
+import { Constraints, EventSettings, FilterSchema, GiftOverride, GiftRule, Guest, GuestStatus, MissingValueFallback, PostLockCancellation, Segment, UpdateKind, ValueType, Variant, VariantMappingRow, Venue, type AttributeDefinition, type Batch, type VendorUpdate, DeliveryWindow } from "../domain/types";
 import { matches } from "../domain/filter";
 import { createGift, getGift, giftsFor, manifest, quantities, removeGift, setGiftOverride, unservable, updateGift, type GiftInput } from "../domain/gifts";
 import { afterRsvpWrite } from "./hooks";
@@ -176,7 +176,9 @@ export const GiftBody = z.object({
   cart_id: z.string().nullable().default(null),
   checkout_id: z.string().nullable().default(null),
   order_id: z.string().nullable().default(null),
-  rules: z.array(GiftRule).optional()
+  rules: z.array(GiftRule).optional(),
+  /** The delivery window the search read for the product; approve derives the lock date from it. */
+  delivery_window: DeliveryWindow.nullable().optional()
 });
 
 function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
