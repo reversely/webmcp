@@ -163,3 +163,9 @@ table.guests .quiet { color: var(--muted); }
 .item { border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; display: grid; grid-template-columns: 1fr auto auto; gap: 20px; align-items: center; margin-bottom: 12px; }
 .item .m { color: var(--muted); font-size: 15px; }
 @media (max-width: 720px) { .item { grid-template-columns: 1fr; } }
+
+/* skeleton while the catalog answers */
+.skel-line { display: inline-block; height: 14px; border-radius: 7px; background: var(--skel); animation: skel 1.2s ease-in-out infinite; }
+.skel-card .ph { animation: skel 1.2s ease-in-out infinite; }
+@keyframes skel { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .skel-line, .skel-card .ph { animation: none; } }

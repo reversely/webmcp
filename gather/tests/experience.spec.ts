@@ -13,11 +13,12 @@ test("a category becomes a gift with a mapping, quantities follow the replies, a
   const choice = defs.find((d) => d.key === "dietary")!.id;
   await request.post(`/api/events/${id}/rsvp`, { data: { guests: [{ display_name: "Guest One", status: "going", answers: { [choice]: ["a"] } }, { display_name: "Guest Two", status: "going", answers: { [choice]: ["none"] } }, { display_name: "Guest Three", status: "maybe" }] } });
 
-  await page.route(`**/api/events/${id}/search`, (route) => route.fulfill({ json: { searches: [{ query: "q" }], found: 2, probed: 2, duration_ms: 1, ranked: [RESULT("p1", "Box A", 1500, [{ id: "v_a", title: "Choice A box" }, { id: "v_p", title: "Plain box" }]), RESULT("p2", "Box B", 1800, [{ id: "v_b", title: "Box" }])], excluded: [{ product_id: "p3", title: "Box C", shop_name: "Shop", rule: "price", reason: "The unit price is above the budget of 2000 cents." }] } }));
+  await page.route(`**/api/events/${id}/search`, async (route) => { await new Promise((r) => setTimeout(r, 800)); await route.fulfill({ json: { searches: [{ query: "q" }], found: 2, probed: 2, duration_ms: 1, ranked: [RESULT("p1", "Box A", 1500, [{ id: "v_a", title: "Choice A box" }, { id: "v_p", title: "Plain box" }]), RESULT("p2", "Box B", 1800, [{ id: "v_b", title: "Box" }])], excluded: [{ product_id: "p3", title: "Box C", shop_name: "Shop", rule: "price", reason: "The unit price is above the budget of 2000 cents." }] } }); });
 
   await page.goto(`/events/${id}`);
   await page.getByTestId("tab-experience").click();
   await page.getByTestId("card-food_drink").click();
+  await expect(page.getByTestId("results-skeleton")).toBeVisible();
   await expect(page.getByTestId("result")).toHaveCount(2);
   await page.getByTestId("result").first().click();
   await expect(page.getByTestId("recipients")).toContainText("Guests going (2)");

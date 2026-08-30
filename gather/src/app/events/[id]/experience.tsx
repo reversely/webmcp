@@ -55,20 +55,22 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
     if (res.ok) onChanged();
   }
 
+  const [searching, setSearching] = useState(false);
   async function search(body: { card?: string; sentence?: string }) {
     setSearchedFor(body.card ? (cards.cards.find((c) => c.key === body.card)?.label ?? body.card) : (body.sentence ?? ""));
-    setBusy("Searching the catalog and checking delivery");
+    setSearching(true);
+    setStep("results");
     setError(null);
     try {
       const res = await fetch(`/api/events/${snap.event.id}/search`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
       setReply((await res.json()) as SearchReply);
       setShown(5);
-      setStep("results");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setStep("pick");
     } finally {
-      setBusy(null);
+      setSearching(false);
     }
   }
 
@@ -225,7 +227,26 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
           </section>
         )}
 
-        {step === "results" && reply && (
+        {step === "results" && searching && (
+          <section aria-labelledby="gx-results" aria-busy="true" data-testid="results-skeleton">
+            <h1 className="title" id="gx-results">Results for {searchedFor}</h1>
+            <p className="lead">Searching the catalog and checking delivery</p>
+            <div className="list" style={{ marginBottom: 24 }}>
+              {[0, 1, 2, 3, 4].map((i) => <div className="row" key={i} style={{ gridTemplateColumns: "1fr auto" }}><span className="skel-line" style={{ width: `${40 + i * 8}%` }} /><span className="skel-line" style={{ width: 90 }} /></div>)}
+            </div>
+            <div className="results">
+              {[0, 1, 2, 3, 4, 5].map((i) => (
+                <div className="prod skel-card" key={i}>
+                  <span className="ph" />
+                  <span className="body"><span className="skel-line" style={{ width: "80%" }} /><span className="skel-line" style={{ width: "50%" }} /><span className="skel-line" style={{ width: "60%" }} /></span>
+                  <span className="act"><span className="skel-line" style={{ width: 48 }} /><span className="skel-line" style={{ width: 64 }} /></span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {step === "results" && !searching && reply && (
           <section aria-labelledby="gx-results">
             <h1 className="title" id="gx-results">Results for {searchedFor}</h1>
             <p className="lead">{Math.min(shown, reply.ranked.length)} of {reply.funnel?.ranked ?? reply.ranked.length} shown</p>
