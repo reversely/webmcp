@@ -5,6 +5,7 @@ import { guestsFor } from "../../../../../domain/store";
 import { deliveryTarget } from "../../../../../lib/delivery";
 import { DEFAULT_SOURCES, cardsConfig, emptyFunnel, priceFit, rank, searchCandidates, searchesForSentence, personalizedRequest, sourcesForSentence, withDelivery, withDetail, type Candidate, type EventContext, type Funnel } from "../../../../../agent/search";
 import { PRINTSHOP_SOURCE, printshopCandidates } from "../../../../../agent/printshop";
+import { CUSTOMSHOP_SOURCE, customshopCandidates } from "../../../../../agent/customshop";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -14,6 +15,16 @@ async function printshopRows(ctx: EventContext, funnel: Funnel): Promise<Candida
     return await printshopCandidates(ctx, undefined, funnel);
   } catch (e) {
     funnel.searches.push({ query: PRINTSHOP_SOURCE, returned: 0, total: null, error: (e as Error).message });
+    return [];
+  }
+}
+
+/** The custom shop's products beside the catalog's; a shop that does not answer leaves a funnel row naming the error and no candidates. */
+async function customshopRows(ctx: EventContext, funnel: Funnel): Promise<Candidate[]> {
+  try {
+    return await customshopCandidates(ctx, { funnel });
+  } catch (e) {
+    funnel.searches.push({ query: CUSTOMSHOP_SOURCE, returned: 0, total: null, error: (e as Error).message });
     return [];
   }
 }
@@ -44,6 +55,7 @@ export async function POST(request: Request, { params }: Params) {
     const funnel = emptyFunnel();
     const found = await searchCandidates(client, searches, ctx, { limit: 50, pages: 2, sleepMs: 1500, funnel });
     const designs = sources.includes(PRINTSHOP_SOURCE) ? await printshopRows(ctx, funnel) : [];
+    const custom = sources.includes(CUSTOMSHOP_SOURCE) ? await customshopRows(ctx, funnel) : [];
     // The candidates that use the budget best and offer the most variants get the detail and a
     // delivery probe, a few shops at a time; the probe cap keeps a broad search inside a minute.
     const cap = Math.max(1, Math.min(body.probe ?? 30, 60));
@@ -53,7 +65,7 @@ export async function POST(request: Request, { params }: Params) {
     for (let i = 0; i < shortlist.length; i += 6) probed.push(...(await Promise.all(shortlist.slice(i, i + 6).map(async (c) => withDelivery(await withDetail(client, c), ctx)))));
     funnel.probed = probed.length;
     const probedIds = new Set(probed.map((c) => c.product_id));
-    const all = [...probed, ...found.filter((c) => !probedIds.has(c.product_id)), ...designs];
+    const all = [...probed, ...found.filter((c) => !probedIds.has(c.product_id)), ...designs, ...custom];
     const { ranked, excluded } = rank(all, ctx, config, funnel);
     return NextResponse.json({ searches, sources, context: ctx, funnel, found: all.length, probed: probed.length, ranked: ranked.slice(0, 15), excluded: excluded.map((e) => ({ product_id: e.product_id, title: e.title, shop_name: e.shop_name, rule: e.verdict.rule, reason: e.verdict.reason })), duration_ms: Date.now() - started });
   } catch (e) {

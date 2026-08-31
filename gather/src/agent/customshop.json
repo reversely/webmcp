@@ -1,0 +1,12 @@
+{
+  "shop_name": "Customworks",
+  "products": {
+    "10242071789817": {
+      "fields": [
+        { "key": "star_map_location", "label": "Enter Location for Star Map 1", "kind": "location", "required": true },
+        { "key": "star_map_date", "label": "Pick a date for Star Map 1", "kind": "date", "required": true },
+        { "key": "caption", "label": "Text 2", "kind": "name", "required": true }
+      ]
+    }
+  }
+}

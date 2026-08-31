@@ -8,8 +8,8 @@ import { addCalendarDays, deliveryVerdict, isOnOrBefore, parseArrivalWindow, pro
 import cardsData from "./cards.json";
 
 export type CardSearch = { query: string; categories?: string[] };
-/** A search source: the Shopify catalog or the print shop; a card names its sources, and a card row without them searches the catalog alone. */
-export type Source = "shopify" | "printshop";
+/** A search source: the Shopify catalog, the print shop, or the configured custom shop; a card names its sources, and a card row without them searches the catalog alone. */
+export type Source = "shopify" | "printshop" | "customshop";
 export const DEFAULT_SOURCES: Source[] = ["shopify"];
 export type Card = { key: string; label: string; searches: CardSearch[]; sources?: Source[]; personalized?: boolean };
 export type CardsConfig = { cards: Card[]; delivery_buffer_days: number; lead_time_cap_days: number; weights: Record<ScoreTerm, number> };
@@ -39,7 +39,7 @@ export type Candidate = {
   option_names: string[];
   searches: string[];
   delivery: { window: { earliest: string; latest: string } | null; text: string | null; confidence: "dated" | "duration" | "unknown"; verdict: DeliveryVerdict; error: string | null } | null;
-  /** Set on a print-shop design: the fields each unit carries. */
+  /** Set on a print-shop design or a configured custom-shop product: the fields each unit carries. */
   personalization?: { fields: PersonalizationField[] };
 };
 
@@ -139,11 +139,12 @@ export function personalizedRequest(sentence: string): boolean {
   return /\bnames?\b|personali[sz]/i.test(sentence);
 }
 
-/** The sources a sentence searches: the catalog, plus the sources of every card it names, plus the print shop when it asks for cards. */
+/** The sources a sentence searches: the catalog, plus the sources of every card it names, plus the print shop when it asks for cards and the custom shop when it asks for sweatshirts. */
 export function sourcesForSentence(sentence: string, config = cardsConfig()): Source[] {
   const sources = new Set<Source>(DEFAULT_SOURCES);
   for (const card of cardsNamed(sentence, config)) for (const s of card.sources ?? []) sources.add(s);
   if (/\bcards?\b/i.test(sentence)) sources.add("printshop");
+  if (/\bsweatshirts?\b|\bcrewnecks?\b/i.test(sentence)) sources.add("customshop");
   return [...sources];
 }
 
