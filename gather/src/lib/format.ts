@@ -9,16 +9,25 @@ function noCommas(formatted: string): string {
   return formatted.replaceAll(", ", " ").replaceAll(",", " ");
 }
 
+/**
+ * Read the ISO's wall-clock parts as UTC so the server (UTC) and the client (its own zone) print
+ * the same string; a runtime-zone formatter diverged between the two paints and React warned of a
+ * hydration mismatch (issue #142). Any trailing Z or offset is dropped before the parts are pinned.
+ */
+function fixedDate(iso: string): Date {
+  return new Date(`${iso.replace(/(?:Z|[+-]\d{2}:?\d{2})$/, "")}Z`);
+}
+
 export function dateTime(iso: string | null | undefined): string {
   if (!iso) return "";
-  const d = new Date(iso);
+  const d = fixedDate(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return noCommas(new Intl.DateTimeFormat("en-CA", { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(d));
+  return noCommas(new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(d));
 }
 
 export function dateOnly(iso: string | null | undefined): string {
   if (!iso) return "";
-  const d = new Date(iso.length === 10 ? `${iso}T12:00:00` : iso);
+  const d = fixedDate(iso.length === 10 ? `${iso}T12:00:00` : iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return noCommas(new Intl.DateTimeFormat("en-CA", { month: "short", day: "numeric", year: "numeric" }).format(d));
+  return noCommas(new Intl.DateTimeFormat("en-CA", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }).format(d));
 }

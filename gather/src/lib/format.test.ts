@@ -33,6 +33,12 @@ describe("dateTime", () => {
   it("passes an unparseable string through", () => {
     expect(dateTime("not-a-date")).toBe("not-a-date");
   });
+  // #142: a UTC-stamped instant reads as its UTC wall clock on every machine, so the server and
+  // client paints match and React logs no hydration mismatch.
+  it("pins a zoned instant to its UTC wall clock regardless of the runtime zone", () => {
+    expect(dateTime("2030-01-10T19:00:00Z")).toMatch(/^Thu Jan 10 2030 7:00/);
+    expect(dateTime("2030-01-10T19:00:00Z")).toBe(dateTime("2030-01-10T19:00:00"));
+  });
 });
 
 it("no formatter output carries a comma", () => {
