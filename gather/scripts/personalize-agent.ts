@@ -222,10 +222,12 @@ const US_STATE_NAMES: Record<string, string> = { CA: "California", NY: "New York
  * null with the reason logged, so the caller keeps the placed order optional and the batch and cart
  * assertions still pass. The test store ships to Canada only, so a US event venue falls back to a
  * Canadian placeholder address for the ship-to (the batch's delivery object holds the real intent).
- * Known live limitation on 2026-08-31: the newer React checkout accepts the address, shipping rate,
- * and card number, but its expiry and security-code card iframes resist synthetic key input, so the
- * order does not reach the confirmation page under automation; the code is left ready for a checkout
- * that does accept the input, and the caller treats a null order as a non-failure.
+ * The newer React checkout renders each card field in its own cross-origin iframe. Playwright
+ * element input does not land there (#150, #124), so the card fields are driven at the CDP level: a
+ * trusted mouse click focuses each field, Input.insertText types it, and each value is read back
+ * before Pay. When a field will not fill, or Pay does not reach a confirmation, the caller logs the
+ * exact block or decline message and returns null, which the batch and cart assertions treat as a
+ * non-failure unless CUSTOMILY_REQUIRE_ORDER demands a placed order.
  */
 async function placeTestOrder(page: Page, checkoutUrl: string, event: EventContext): Promise<PlacedOrder | null> {
   try {
@@ -273,30 +275,71 @@ async function placeTestOrder(page: Page, checkoutUrl: string, event: EventConte
     await page.mouse.wheel(0, 2000).catch(() => undefined);
     await page.waitForTimeout(2_000);
 
-    // The Bogus Gateway renders each card field in its own iframe named card-fields-<field>. The
-    // newer checkout client-validates the number, so it takes a Luhn-valid test number (the classic
-    // Bogus "1" is rejected here) which the Bogus Gateway still treats as a test charge; the value is
-    // overridable for a decline path. Fill each field by its exact iframe name, best-effort.
+    // Each card field is a separate cross-origin iframe (name/title containing card-fields-<field>).
+    // The newer React checkout takes a Luhn-valid test number (the classic Bogus "1" is rejected),
+    // but its expiry and security-code iframes reject Playwright element input: focus/click +
+    // pressSequentially do not land and the number field does not auto-advance (#150, #124). So the
+    // fields are driven at the CDP level instead. A trusted mouse click at the iframe's on-page
+    // coordinates focuses the field's own input, then Input.insertText delivers a trusted text-input
+    // event; where insertText alone does not stick, the value is retyped digit by digit with
+    // Input.dispatchKeyEvent. Each field's value is read back before Pay so a field that would not
+    // fill is reported rather than silently sent.
     const card = process.env.CUSTOMILY_TEST_CARD || "4242424242424242";
-    const typeInCardFrame = async (namePart: string, value: string) => {
-      const input = page.frameLocator(`iframe[name*="${namePart}"]`).locator("input").first();
-      try {
-        await input.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
-        await input.click({ force: true, timeout: 8_000 });
-        await input.pressSequentially(value, { delay: 70, timeout: 12_000 });
-        return true;
-      } catch {
-        return false;
+    const cdp = await page.context().newCDPSession(page);
+    const cdpSend = (method: string, params: Record<string, unknown>) =>
+      (cdp as unknown as { send(m: string, p: Record<string, unknown>): Promise<unknown> }).send(method, params);
+
+    // Focuses one card iframe with a trusted click at its centre, types the value with
+    // Input.insertText, and, if the field did not take it, retypes it digit by digit. Returns the
+    // value the field holds afterward (empty when the field could not be filled).
+    const fillCardFrame = async (namePart: string, value: string): Promise<string> => {
+      const frameEl = page.locator(`iframe[name*="${namePart}"], iframe[title*="${namePart}"]`).first();
+      if (!(await frameEl.count())) return "";
+      await frameEl.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => undefined);
+      const box = await frameEl.boundingBox();
+      if (!box) return "";
+      const input = page.frameLocator(`iframe[name*="${namePart}"], iframe[title*="${namePart}"]`).locator("input").first();
+      const readValue = async () => (await input.inputValue().catch(() => "")) ?? "";
+
+      const focusAndType = async (text: string) => {
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        await cdpSend("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1, buttons: 1 });
+        await cdpSend("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1, buttons: 0 });
+        await page.waitForTimeout(150);
+        await cdpSend("Input.insertText", { text });
+        await page.waitForTimeout(200);
+      };
+
+      await focusAndType(value);
+      if ((await readValue()).replace(/\D/g, "").length < value.replace(/\D/g, "").length) {
+        // insertText did not stick; retype digit by digit as trusted key events.
+        for (const ch of value) {
+          await cdpSend("Input.dispatchKeyEvent", { type: "keyDown", text: ch, key: ch });
+          await cdpSend("Input.dispatchKeyEvent", { type: "char", text: ch, key: ch });
+          await cdpSend("Input.dispatchKeyEvent", { type: "keyUp", text: ch, key: ch });
+          await page.waitForTimeout(40);
+        }
+        await page.waitForTimeout(200);
       }
+      return readValue();
     };
-    const cardOk = await typeInCardFrame("card-fields-number", card);
-    await typeInCardFrame("card-fields-expiry", "1230");
-    await typeInCardFrame("card-fields-verification_value", "123");
-    await typeInCardFrame("card-fields-name", "Gather Vendor");
-    if (!cardOk) {
-      console.log("checkout: the Bogus Gateway card number field did not accept input; the checkout is blocking automation");
+
+    const numberVal = await fillCardFrame("card-fields-number", card);
+    const expiryVal = await fillCardFrame("card-fields-expiry", "1230");
+    const cvvVal = await fillCardFrame("card-fields-verification_value", "123");
+    await fillCardFrame("card-fields-name", "Gather Vendor");
+    // A field that would not hold its value is the true ceiling; report which one and stop.
+    const unfilled = [
+      numberVal.replace(/\D/g, "").length ? null : "number",
+      expiryVal.replace(/\D/g, "").length ? null : "expiry",
+      cvvVal.replace(/\D/g, "").length ? null : "security-code"
+    ].filter(Boolean);
+    if (unfilled.length) {
+      console.log(`checkout: the card ${unfilled.join(", ")} field(s) would not accept CDP input (number=${numberVal || "-"} expiry=${expiryVal || "-"} cvv=${cvvVal || "-"}); reporting the block`);
       return null;
     }
+    console.log(`checkout: card fields filled via CDP (number=${numberVal} expiry=${expiryVal} cvv=${cvvVal})`);
     await page.waitForTimeout(1_000);
 
     // Submit: the newer checkout labels the button "Pay now"; the classic one uses id continue_button.
@@ -304,8 +347,19 @@ async function placeTestOrder(page: Page, checkoutUrl: string, event: EventConte
     if (await pay.count()) await pay.click().catch(() => undefined);
     else await page.locator("#continue_button").click().catch(() => undefined);
 
-    // The thank-you page carries the order name in its heading and a /orders/ URL.
-    await page.waitForURL(/\/(thank[_-]?you|orders)\b|thank_you/i, { timeout: 60_000 });
+    // The thank-you page carries the order name in its heading and a /orders/ URL. If Pay does not
+    // reach it, capture any inline decline/error text so the true ceiling is reported, not swallowed.
+    try {
+      await page.waitForURL(/\/(thank[_-]?you|orders)\b|thank_you/i, { timeout: 60_000 });
+    } catch {
+      const decline = (await page
+        .locator('[role="alert"], [id*="error" i], [class*="error" i], [class*="banner" i]')
+        .first()
+        .textContent()
+        .catch(() => null))?.trim();
+      console.log(`checkout: Pay did not reach a confirmation (at ${page.url()})${decline ? `; message: ${decline}` : "; no inline message found"}`);
+      return null;
+    }
     await page.waitForTimeout(2_000);
     const heading = (await page.getByText(/order\s+#?\w+/i).first().textContent().catch(() => null)) ?? "";
     const match = heading.match(/#\s?\w+/) ?? (await page.title()).match(/#\s?\w+/);
