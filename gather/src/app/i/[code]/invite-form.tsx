@@ -72,12 +72,17 @@ export function InviteForm({ invite, guestId }: { invite: Invite; guestId: strin
   const [savedStatus, setSavedStatus] = useState<GuestStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(!guestId);
+  /** True when the link carries a guest id the event does not know, so the form stays blocked. */
+  const [badLink, setBadLink] = useState(false);
 
   useEffect(() => {
     if (!guestId) return;
     fetch(`/api/events/${event.id}/guests/${guestId}`)
       .then(async (r) => {
-        if (!r.ok) throw new Error("Reply link expired");
+        if (!r.ok) {
+          setBadLink(true);
+          return;
+        }
         const g = (await r.json()) as { display_name: string; status: GuestStatus; values: Answers };
         setName(g.display_name);
         setStatus(g.status === "no_reply" ? null : g.status);
@@ -148,6 +153,8 @@ export function InviteForm({ invite, guestId }: { invite: Invite; guestId: strin
 
             {!loaded ? (
               <p className="lead">Loading your reply</p>
+            ) : badLink ? (
+              <p className="error" role="alert" data-testid="bad-link">Unknown reply link</p>
             ) : (
               <>
                 <div className="field">

@@ -51,3 +51,12 @@ test("an unknown code is a 404", async ({ page }) => {
   const res = await page.goto("/i/ZZZZZZ");
   expect(res?.status()).toBe(404);
 });
+
+test("a bogus guest id blocks the form and names the unknown link (#145)", async ({ page, request }) => {
+  const { code } = await publishedEvent(request);
+  await page.goto(`/i/${code}?guest=guest_bogus`);
+  await expect(page.getByTestId("bad-link")).toHaveText("Unknown reply link");
+  // No form renders, so a reply cannot be filed.
+  await expect(page.getByTestId("guest-name")).toHaveCount(0);
+  await expect(page.getByTestId("send")).toHaveCount(0);
+});
