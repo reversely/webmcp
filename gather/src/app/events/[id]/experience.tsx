@@ -186,7 +186,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
       const missing = snap.follow_ups.filter((f) => f.kind === "missing_value");
       setAnswer(missing.length ? missing.map((f) => `${f.guest_ids.length} without ${snap.definitions.find((d) => d.id === f.definition_id)?.label.toLowerCase()}`).join(" / ") : "Every required answer given");
     } else if (/how many|count|quantit/.test(q)) {
-      setAnswer(gifts.length ? gifts.map((g) => `${g.product_title} ${g.quantities.reduce((s, x) => s + x.quantity, 0)} units`).join(" / ") : `${counts.going} going and no gift yet`);
+      setAnswer(gifts.length ? gifts.map((g) => { const n = g.quantities.reduce((s, x) => s + x.quantity, 0); return `${g.product_title} ${n} ${n === 1 ? "unit" : "units"}`; }).join(" / ") : `${counts.going} going and no gift yet`);
     } else {
       setAnswer("Ask why a product is missing or which gift locks first or who is missing a value or how many units");
     }
@@ -285,12 +285,13 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
     </section>
   );
 
+  const summaryUnits = gifts.reduce((s, g) => s + g.quantities.reduce((t, x) => t + x.quantity, 0), 0);
   const summaryCard = (
     <aside className="side">
       <div className="eyebrow" style={{ marginBottom: 12 }}>Order summary</div>
       <div className="dark-card" data-testid="order-summary">
         <div className="in">
-          <h2>{gifts.reduce((s, g) => s + g.quantities.reduce((t, x) => t + x.quantity, 0), 0)} gifts</h2>
+          <h2>{summaryUnits} {summaryUnits === 1 ? "gift" : "gifts"}</h2>
           <div className="when">Quantities follow the replies until the lock date</div>
           {gifts.map((g) => (
             <div key={g.id}>
@@ -453,7 +454,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
                   <div className="item" key={g.id} data-testid="gift">
                     <div>
                       <div style={{ fontWeight: 600 }}>{g.product_title}</div>
-                      <div className="m">{[g.shop_domain, `${units} units`, money(total, currency), g.cutoff ? `locks ${dateOnly(g.cutoff)}` : "lock date on approval", g.cart_id ? "priced at the shop" : "", g.locked_at ? "locked" : ""].filter(Boolean).join(" / ")}</div>
+                      <div className="m">{[g.shop_domain, `${units} ${units === 1 ? "unit" : "units"}`, money(total, currency), g.cutoff ? `locks ${dateOnly(g.cutoff)}` : "lock date on approval", g.cart_id ? "priced at the shop" : "", g.locked_at ? "locked" : ""].filter(Boolean).join(" / ")}</div>
                       <div className="m">{g.quantities.map((q) => `${g.variants.find((v) => v.id === q.variant_id)?.title ?? "Variant"} ${q.quantity}`).join(" / ") || "no units yet"}</div>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>

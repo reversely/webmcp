@@ -35,7 +35,7 @@ test("a category becomes a gift with a mapping, quantities follow the replies, a
   // A reply changes the quantity within a poll.
   const guests = (await (await request.get(`/api/events/${id}`)).json()) as { guests: { id: string; display_name: string }[]; gifts: { id: string }[] };
   await request.patch(`/api/events/${id}/rsvp/${guests.guests.find((g) => g.display_name === "Guest Two")!.id}`, { data: { status: "cant_go" } });
-  await expect(page.getByTestId("gift")).toContainText("1 units", { timeout: 8000 });
+  await expect(page.getByTestId("gift")).toContainText("1 unit", { timeout: 8000 });
 
   // The vendor posts through the endpoint; the thread and the follow-ups show it.
   const gift = guests.gifts[0].id;
