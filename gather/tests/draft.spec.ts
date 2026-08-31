@@ -44,3 +44,19 @@ test("a draft becomes a published event with the organizer's questions", async (
   expect(multi.constraints.options!.map((o) => o.label)).toEqual(["Choice one", "No preference"]);
   expect(snap.definitions.map((d) => d.label)).toContain("Anything else we should know?");
 });
+
+test("a case variant of a choice is rejected so the value stays unique (#138)", async ({ page }) => {
+  const warnings: string[] = [];
+  page.on("console", (m) => { if (m.type() === "warning" || m.type() === "error") warnings.push(m.text()); });
+  await page.goto("/");
+  const questions = page.getByTestId("questions");
+  const choiceInput = questions.getByLabel(/Add a choice to/).first();
+  await choiceInput.fill("Choice one");
+  await choiceInput.press("Enter");
+  await choiceInput.fill("choice one");
+  await choiceInput.press("Enter");
+  // Both variants slug to choice_one; only the first is kept, so no duplicate React key.
+  await expect(questions.getByRole("button", { name: /Remove choice one/i })).toHaveCount(1);
+  await expect(page.getByTestId("invite-preview").getByText("choice one", { exact: false })).toHaveCount(1);
+  expect(warnings.filter((w) => /same key|duplicate key/i.test(w))).toEqual([]);
+});

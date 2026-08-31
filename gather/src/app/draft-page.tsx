@@ -234,7 +234,7 @@ export function DraftPage({ library }: { library: Library }) {
                           <button key={o} type="button" className="chip on" onClick={() => updateQuestion(i, { options: q.options.filter((x) => x !== o) })} aria-label={`Remove ${o}`}>{o}</button>
                         ))}
                         <span className="chip">
-                          <input aria-label={`Add a choice to ${q.label}`} placeholder="Add a choice" onKeyDown={(e) => { const v = (e.target as HTMLInputElement).value.trim(); if (e.key === "Enter" && v && !q.options.includes(v)) { updateQuestion(i, { options: [...q.options, v] }); (e.target as HTMLInputElement).value = ""; } }} />
+                          <input aria-label={`Add a choice to ${q.label}`} placeholder="Add a choice" onKeyDown={(e) => { const v = (e.target as HTMLInputElement).value.trim(); if (e.key === "Enter" && v && !q.options.some((o) => slug(o) === slug(v))) { updateQuestion(i, { options: [...q.options, v] }); (e.target as HTMLInputElement).value = ""; } }} />
                         </span>
                         {q.options.length === 0 && <span className="hint">Choices for guests</span>}
                       </div>
