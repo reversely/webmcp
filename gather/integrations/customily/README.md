@@ -55,6 +55,18 @@ appear in `/cart.js`, and returns the cart line key, variant id, quantity, and l
 properties so the caller can tie the cart line to its recipient. The page holds one live
 Customily configuration at a time, so configure and add one unit before configuring the next.
 
+## Vendor execution
+
+`gather/scripts/personalize-agent.ts` runs the handoff end to end: it reads the personalized
+manifest from Gather's tokenized MCP endpoint, opens the product page under Playwright with the
+polyfill and this adapter injected, produces one unit per ready row through the four tools,
+posts each unit's outcome back through `post_update` with the Gather `guest_id` as the recipient
+reference, and stops before checkout. The cart accumulates in one browser session per run.
+
+```sh
+npx tsx scripts/personalize-agent.ts <base url> <event id> <token id> <gift id> [product url]
+```
+
 ## Testing
 
 `gather/tests/customily-live.spec.ts` smoke-tests the adapter against the live storefront. It
@@ -63,3 +75,8 @@ runs only with `LIVE_CUSTOMILY=1` and stops short of the cart:
 ```sh
 LIVE_CUSTOMILY=1 npx playwright test tests/customily-live.spec.ts
 ```
+
+`gather/tests/customily-personalize-live.spec.ts` runs the three spec experiments behind the
+same guard: per-guest lettering, the event-level star map, and mixed personalization where the
+guest's size answer picks the Shopify variant. Each experiment builds its own event through the
+dev server's API and adds three real lines to the test shop's cart.
