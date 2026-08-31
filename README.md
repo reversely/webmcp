@@ -5,7 +5,7 @@ A workspace of WebMCP apps: pages that expose their operations as tools through 
 | App | What it is | Port |
 | --- | --- | --- |
 | [`3droom-concept/`](3droom-concept/README.md) | two people furnish a room: shared whiteboard, planning agent sourcing real Shopify products, 2D plan and 3D room at merchant dimensions, bill of materials against a budget, delivery checks | 3000 (tests expect 3111) |
-| [`gather/`](gather/README.md) | RSVP records as tools: an organizer's agent shops for the guests at a Shopify store through Shopify's agent interface; vendors read and post through the same tools | 3113 |
+| [`gather/`](gather/README.md) | RSVP records as tools: an organizer's agent shops for the guests at a Shopify store, the print shop, and a Customily shop, and maps RSVP answers into personalization fields; vendors read and post through the same tools | 3113 |
 | [`printshop/`](printshop/README.md) | a personalized-stationery vendor whose tools take a name per unit: registered in its page and served from its server, so Gather's agent quotes, orders, and follows a batch | 3114 |
 | [`app-template/`](app-template/README.md) | the starting point for a new app: one page, one piece of state, two tools, a unit test, a Playwright test, an evals file | 3112 |
 
@@ -17,7 +17,7 @@ A workspace of WebMCP apps: pages that expose their operations as tools through 
 | npm | 11 | workspaces; `npm ci` reproduces `package-lock.json` |
 | Chromium for Playwright | `npx playwright install chromium` | the apps' Playwright suites |
 | `uv` and Python 3.13 | uv 0.11 | the Python side: the commit hooks and the room planner's Modal client, pinned in `pyproject.toml` and `uv.lock` |
-| OpenAI API key | access to `gpt-5.6-terra` | the room planner's agent; the template needs none |
+| OpenAI API key | access to `gpt-5.6-terra` and `gpt-5.6-luna` | the room planner's planning agent and gather's curation agent; the template needs none |
 | Modal account (optional) | `uv run modal token new` | the room planner's image-to-3D endpoint |
 | Aeonik font files (optional) | `Aeonik-Light/Regular/Medium.ttf` | the house typeface; the CSS falls back to Helvetica Neue and Arial |
 
@@ -36,8 +36,10 @@ npm run dev -w 3droom-concept   # or: npm run dev -w app-template -- -p 3112
 
 | Variable | Used by | Meaning |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | 3droom-concept | every model call |
+| `OPENAI_API_KEY` | 3droom-concept, gather | every model call |
 | `MODAL_IMAGE_TO_3D_URL` | 3droom-concept | the deployed Modal endpoint; absent means colour proxies |
+| `PRINTSHOP_URL` | gather | the print shop's base URL; absent means `http://localhost:3114` |
+| `CUSTOMILY_SHOP_URL` | gather | the Customily-fronted shop's base URL; absent means the custom-shop source returns nothing |
 | `NEXT_PUBLIC_WEBMCP_POLYFILL` | every app | `1` loads Chrome's WebMCP polyfill for browsers without `document.modelContext`; the suites pass `?webmcp=polyfill` in the URL instead |
 
 Check a key is present without printing it: `grep -cE '^OPENAI_API_KEY=.+' .env` prints `1`.
