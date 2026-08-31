@@ -28,6 +28,7 @@ import {
   setGuestAttendance,
   setGuestStatus,
   state,
+  transactionally,
   subjectFor,
   updateEvent,
   upsertDefinition,
@@ -317,6 +318,8 @@ export function submitRsvp(eventId: string, body: unknown) {
   if (event.status !== "published") throw new BadRequestError("The event is not published yet.");
   const parsed = RsvpBody.safeParse(body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
+  // One transaction over the whole party: a later guest's invalid answer rolls back every earlier write.
+  return transactionally(() => {
   const email = parsed.data.party.contact?.email ?? null;
   const created: { party: ReturnType<typeof createParty> | null } = { party: null };
   const used = new Set<string>();
@@ -338,6 +341,7 @@ export function submitRsvp(eventId: string, body: unknown) {
   });
   afterRsvpWrite(eventId);
   return { party_id: created.party?.id ?? guests[0]?.party_id ?? null, guest_ids: guests.map((g) => g.id) };
+  });
 }
 
 function writeAnswer(eventId: string, guest: Guest, definitionId: string, raw: unknown, source: string) {
@@ -359,11 +363,14 @@ export function patchRsvp(eventId: string, guestId: string, body: unknown) {
   const parsed = RsvpPatch.safeParse(body);
   if (!parsed.success) throw new BadRequestError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   let guest = requireGuest(eventId, guestId);
+  // One transaction over the edit: a later invalid answer rolls back every earlier write.
+  return transactionally(() => {
   for (const [definitionId, raw] of Object.entries(parsed.data.answers ?? {})) writeAnswer(eventId, guest, definitionId, raw, parsed.data.source);
   for (const [segment, present] of Object.entries(parsed.data.attendance ?? {})) guest = setGuestAttendance(guestId, segment, present);
   if (parsed.data.status) guest = setGuestStatus(guestId, parsed.data.status, parsed.data.source);
   afterRsvpWrite(eventId);
   return { ...guest, values: valuesFor(guest) };
+  });
 }
 
 /* ---- Reads the tools map onto ---- */

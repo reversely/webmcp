@@ -168,4 +168,18 @@ describe("the API operations", () => {
     expect(snapshot(event.id).guests).toHaveLength(1);
     expect(snapshot(event.id).counts).toEqual({ going: 0, maybe: 0, cant_go: 1, no_reply: 0 });
   });
+
+  it("rolls back the whole RSVP when a later guest carries an invalid answer", () => {
+    const event = publishEvent(createEventFromBody(BODY).id);
+    const name = snapshot(event.id).definitions.find((d) => d.key === "printed_name")!;
+    expect(() =>
+      submitRsvp(event.id, {
+        guests: [
+          { display_name: "Guest One", status: "going", answers: { [name.id]: "One" } },
+          { display_name: "Guest Two", status: "going", answers: { [name.id]: "x".repeat(50) } }
+        ]
+      })
+    ).toThrow(/40/);
+    expect(snapshot(event.id).guests).toHaveLength(0);
+  });
 });

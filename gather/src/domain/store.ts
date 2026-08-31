@@ -46,6 +46,23 @@ export function resetState(): void {
   globalThis.__gatherState = freshState();
 }
 
+/**
+ * Runs fn as one unit: on a throw, every store map and counter returns to the pre-call snapshot, so
+ * a multi-write operation (an RSVP over several guests) never leaves earlier writes committed behind
+ * a later item's error. Each write replaces a value rather than mutating it in place, so a shallow
+ * clone of each map is a sufficient snapshot.
+ */
+export function transactionally<T>(fn: () => T): T {
+  const s = state();
+  const snapshot: State = { events: new Map(s.events), parties: new Map(s.parties), guests: new Map(s.guests), definitions: new Map(s.definitions), values: new Map(s.values), updates: new Map(s.updates), gifts: new Map(s.gifts), tokens: new Map(s.tokens), changes: [...s.changes], seq: s.seq, ids: s.ids };
+  try {
+    return fn();
+  } catch (e) {
+    Object.assign(s, snapshot);
+    throw e;
+  }
+}
+
 export function newId(prefix: string): string {
   const s = state();
   s.ids += 1;
