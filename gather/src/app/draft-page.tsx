@@ -65,7 +65,9 @@ export function DraftPage({ library }: { library: Library }) {
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
   const setVenue = (key: keyof Draft["venue"], value: string) => setDraft((d) => ({ ...d, venue: { ...d.venue, [key]: value } }));
-  const canPublish = draft.title.trim() && draft.starts_at && draft.venue.city.trim() && draft.venue.country.trim();
+  // A required choice question with no options is unsatisfiable on the invite, so publish waits for its choices.
+  const emptyRequiredChoice = questions.find((q) => (q.value_type === "enum" || q.value_type === "multi_enum") && q.required_rule !== "never" && q.options.length === 0);
+  const canPublish = draft.title.trim() && draft.starts_at && draft.venue.city.trim() && draft.venue.country.trim() && !emptyRequiredChoice;
 
   function toggleStatus(status: GuestStatus) {
     set("response_options", draft.response_options.includes(status) ? draft.response_options.filter((s) => s !== status) : [...draft.response_options, status]);
@@ -269,6 +271,7 @@ export function DraftPage({ library }: { library: Library }) {
               <p className="note">Publish to create the invite link</p>
               <button className="btn primary" type="button" onClick={publish} disabled={!canPublish || publishing}>{publishing ? "Publishing" : "Publish"}</button>
             </div>
+            {emptyRequiredChoice && <p className="hint" style={{ color: "var(--muted)" }} data-testid="publish-blocker">Add a choice to {emptyRequiredChoice.label}</p>}
             {error && <p className="error" role="alert">{error}</p>}
           </div>
 

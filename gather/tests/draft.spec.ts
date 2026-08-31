@@ -60,3 +60,19 @@ test("a case variant of a choice is rejected so the value stays unique (#138)", 
   await expect(page.getByTestId("invite-preview").getByText("choice one", { exact: false })).toHaveCount(1);
   expect(warnings.filter((w) => /same key|duplicate key/i.test(w))).toEqual([]);
 });
+
+test("publish waits for a required choice question to have options (#139)", async ({ page }) => {
+  await page.goto("/");
+  await page.getByTestId("title").fill("Team offsite");
+  await page.getByTestId("starts_at").fill("2030-01-10T19:00");
+  await page.getByTestId("city").fill("City");
+  await page.getByTestId("country").fill("CA");
+  // The seeded dietary question is required when going but ships with no options, so publish is blocked.
+  await expect(page.getByTestId("publish-blocker")).toBeVisible();
+  await expect(page.getByTestId("publish")).toBeDisabled();
+  const choiceInput = page.getByTestId("questions").getByLabel(/Add a choice to/).first();
+  await choiceInput.fill("No preference");
+  await choiceInput.press("Enter");
+  await expect(page.getByTestId("publish-blocker")).toHaveCount(0);
+  await expect(page.getByTestId("publish")).toBeEnabled();
+});
