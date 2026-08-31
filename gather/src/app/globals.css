@@ -28,9 +28,9 @@ a { color: var(--sky-dark); }
 :focus-visible { outline: 2px solid var(--sky); outline-offset: 2px; }
 
 /* the band and the sheet */
-.band { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 48px; background: var(--night); color: var(--night-text); position: sticky; top: 0; z-index: 5; }
+.band { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 22px 48px; background: var(--night); color: var(--night-text); position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
 .band .brand { font-family: var(--font-display), "Zilla Slab", serif; font-weight: 600; font-size: 24px; color: var(--white); text-decoration: none; }
-.band .right { display: flex; align-items: center; gap: 12px; }
+.band .right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
 .pill { font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; background: var(--night-2); color: var(--night-muted); border: 1px solid var(--night-line); }
 .pill.live { background: #e6f7ec; color: #1d6b3a; border-color: transparent; }
 .sheet { background: var(--white); border-radius: var(--r-xl) var(--r-xl) 0 0; min-height: calc(100vh - 80px); }
