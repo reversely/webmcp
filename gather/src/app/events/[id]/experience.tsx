@@ -7,8 +7,12 @@ import type { AttributeDefinition, Batch, GuestStatus } from "../../../domain/ty
 import { dateOnly, dateTime, money } from "../../../lib/format";
 import { deliveryTarget } from "../../../lib/delivery";
 import type { VendorUpdate } from "../../../domain/types";
+import type { CurationProposal } from "../../../agent/curation-agent";
 
 type Step = "pick" | "results" | "recipients" | "mapping" | "list";
+/** What the curate endpoint returns (#120); the stream wraps it as { kind: "done", ...reply }. */
+type CurateReply = { response: string; proposal?: CurationProposal; tool_calls: { tool: string; label: string }[] };
+type CurateLine = { kind: "tool"; label: string } | { kind: "error"; error: string } | ({ kind: "done" } & CurateReply);
 export type SearchReply = { funnel?: { searches: { query: string; categories?: string[]; returned: number; total: number | null }[]; merged: number; probed: number; ranked: number; excluded: Record<string, number> }; searches: { query: string; categories?: string[] }[]; found: number; probed: number; ranked: Scored[]; excluded: { product_id: string; title: string; shop_name: string; rule: string | null; reason: string | null }[]; duration_ms: number };
 type Recipients = "going" | "going_maybe" | "everyone";
 const RECIPIENT_FILTERS: Record<Recipients, { field: string; op: string; value?: unknown }[]> = { going: [{ field: "status", op: "eq", value: "going" }], going_maybe: [{ field: "status", op: "in", value: ["going", "maybe"] }], everyone: [] };
@@ -16,6 +20,23 @@ const RECIPIENT_LABEL: Record<Recipients, string> = { going: "Guests going", goi
 const STATUS_LABEL: Record<GuestStatus, string> = { going: "Going", maybe: "Maybe", cant_go: "Can't go", no_reply: "No reply" };
 
 type GiftWithQuantities = Snapshot["gifts"][number];
+
+/** A mapping row's source in plain words for the proposal card. */
+function sourceLabel(m: CurationProposal["personalization_mapping"][number], definitions: AttributeDefinition[]): string {
+  const source = m.source;
+  const base =
+    source.type === "definition"
+      ? `From ${definitions.find((d) => d.id === source.definition_id)?.label ?? source.definition_id}`
+      : source.type === "event"
+        ? (source.key === "starts_at" ? "From the event date" : source.key === "venue" ? "From the venue" : "From the event title")
+        : `Fixed value ${String(source.value)}`;
+  return m.transform ? `${base} via ${m.transform.replace(/_/g, " ")}` : base;
+}
+
+/** The vendor field's label from the proposed product's schema. */
+function fieldLabel(key: string, proposal: CurationProposal): string {
+  return proposal.product.personalization?.fields.find((f) => f.key === key)?.label ?? key;
+}
 
 /** The variant whose title contains the option's label, case-insensitively; the organizer corrects it on the screen. */
 function proposeVariant(label: string, variants: Scored["variants"]): string | null {
@@ -44,6 +65,10 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
   const [thread, setThread] = useState<{ giftId: string; updates: VendorUpdate[] } | null>(null);
   const [replyText, setReplyText] = useState("");
   const [answer, setAnswer] = useState<string | null>(null);
+  const [curateMessage, setCurateMessage] = useState("");
+  const [curating, setCurating] = useState<string | null>(null);
+  const [curation, setCuration] = useState<CurateReply | null>(null);
+  const [curateError, setCurateError] = useState<string | null>(null);
 
   const choiceQuestions = useMemo(() => snap.definitions.filter((d) => d.scope === "guest" && (d.value_type === "enum" || d.value_type === "multi_enum") && (d.constraints.options?.length ?? 0) > 0), [snap.definitions]);
   const counts = { going: snap.counts.going, going_maybe: snap.counts.going + snap.counts.maybe, everyone: snap.guests.length };
@@ -167,6 +192,99 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
     }
   }
 
+  /** One curation turn over the streaming endpoint; each tool line names the running activity. */
+  async function curate() {
+    const message = curateMessage.trim();
+    if (!message) return;
+    setCurating("Sending the request");
+    setCurateError(null);
+    setCuration(null);
+    try {
+      const res = await fetch(`/api/events/${snap.event.id}/curate?stream=1`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
+      if (!res.ok) throw new Error(((await res.json()) as { error: string }).error);
+      if (!res.body) throw new Error("The run returned nothing");
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const raw of lines) {
+          if (!raw.trim()) continue;
+          const line = JSON.parse(raw) as CurateLine;
+          if (line.kind === "tool") setCurating(line.label);
+          else if (line.kind === "error") throw new Error(line.error);
+          else {
+            setCuration({ response: line.response, proposal: line.proposal, tool_calls: line.tool_calls });
+            onChanged();
+          }
+        }
+      }
+    } catch (e) {
+      setCurateError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCurating(null);
+    }
+  }
+
+  /** The run already created the gift and stored the mappings; approval continues into the existing gift flow. */
+  function approveCuration() {
+    setCuration(null);
+    setCurateMessage("");
+    setStep("list");
+    onChanged();
+  }
+
+  const curateBlock = (
+    <section className="block" aria-labelledby="gx-curate" style={{ marginTop: 40 }}>
+      <div className="labelrow"><h2 id="gx-curate" style={{ fontSize: 22 }}>Curated experience</h2></div>
+      <div className="ask" style={{ marginBottom: 16 }}>
+        <input aria-label="Describe the curated experience" placeholder="Describe the curated experience" value={curateMessage} onChange={(e) => setCurateMessage(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !curating && curate()} data-testid="curate" />
+        <button type="button" className="btn primary small" onClick={curate} disabled={!!curating || !curateMessage.trim()} data-testid="curate-run">Curate</button>
+      </div>
+      {curating && <p className="hint" style={{ color: "var(--muted)" }} data-testid="curate-busy">{curating}</p>}
+      {curateError && <p className="error" role="alert" data-testid="curate-error">{curateError}</p>}
+      {curation && (
+        <div>
+          <p className="lead" style={{ marginBottom: 16 }} data-testid="curate-response">{curation.response}</p>
+          {curation.proposal && (
+            <>
+              <div className="list" style={{ marginBottom: 16 }} data-testid="curate-proposal">
+                <div className="row" style={{ gridTemplateColumns: "1fr auto" }}>
+                  <span style={{ fontWeight: 600 }}>{curation.proposal.product.title}</span>
+                  <span className="type">{curation.proposal.product.shop_name}{curation.proposal.product.price_cents !== null ? ` / ${money(curation.proposal.product.price_cents, curation.proposal.product.currency ?? "CAD")}` : ""}</span>
+                </div>
+                {curation.proposal.personalization_mapping.map((m) => (
+                  <div className="row" key={m.vendor_field_key} style={{ gridTemplateColumns: "1fr auto" }} data-testid="curate-mapping">
+                    <span>{fieldLabel(m.vendor_field_key, curation.proposal!)}</span>
+                    <span className="type">{sourceLabel(m, snap.definitions)}</span>
+                  </div>
+                ))}
+                <div className="row" style={{ gridTemplateColumns: "1fr auto" }} data-testid="curate-coverage">
+                  <span>Coverage</span>
+                  <span className="type">{curation.proposal.manifest_summary.ready} ready / {curation.proposal.manifest_summary.incomplete} incomplete / {curation.proposal.manifest_summary.excluded} excluded</span>
+                </div>
+                {curation.proposal.issues.map((issue, i) => (
+                  <div className="row" key={`${issue.vendor_field_key}-${i}`} style={{ gridTemplateColumns: "1fr auto" }} data-testid="curate-issue">
+                    <span>{issue.message}</span>
+                    <span className="type">{fieldLabel(issue.vendor_field_key, curation.proposal!)}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button type="button" className="btn primary" onClick={approveCuration} data-testid="curate-approve">Approve and continue</button>
+                <button type="button" className="btn ghost" onClick={() => setCuration(null)} data-testid="curate-revise">Revise the request</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+
   const summaryCard = (
     <aside className="side">
       <div className="eyebrow" style={{ marginBottom: 12 }}>Order summary</div>
@@ -223,6 +341,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
               <input aria-label="Describe the gift" placeholder="Or describe it" value={sentence} onChange={(e) => setSentence(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sentence.trim() && search({ sentence })} data-testid="sentence" />
               <button type="button" className="btn primary small" onClick={() => sentence.trim() && search({ sentence })} disabled={!!busy || !sentence.trim() || !target.needed_by}>Search</button>
             </div>
+            {curateBlock}
             {gifts.length > 0 && <button type="button" className="btn ghost" onClick={() => setStep("list")}>Back to the gifts</button>}
           </section>
         )}
@@ -374,6 +493,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
               </div>
             </div>
             {answer && <p className="lead" style={{ marginTop: 16 }} data-testid="answer">{answer}</p>}
+            {curateBlock}
           </section>
         )}
 
