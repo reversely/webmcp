@@ -230,7 +230,10 @@ export function updateGiftFromBody(eventId: string, giftId: string, body: unknow
 }
 
 export function deleteGift(eventId: string, giftId: string) {
-  requireGift(eventId, giftId);
+  const gift = requireGift(eventId, giftId);
+  // A placed order or a lock is a committed record; removing it would drop the local trace of a real order.
+  if (gift.order_id) throw new BadRequestError("An ordered gift cannot be removed.");
+  if (gift.locked_at || gift.cutoff) throw new BadRequestError("A locked gift cannot be removed.");
   removeGift(giftId);
   return { id: giftId };
 }

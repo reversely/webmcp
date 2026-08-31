@@ -5,7 +5,9 @@ import { POST as postEvent } from "../app/api/events/route";
 import { PATCH as patchGuest } from "../app/api/events/[id]/rsvp/[guestId]/route";
 import { changes, counts, createEventFromBody, createGiftFromBody, deleteGift, followUps, giftView, inviteView, manifestView, patchRsvp, postUpdate, setOverride, snapshot, submitRsvp, summary, updateGiftFromBody, updatesFor, importGuests } from "./api";
 import { PUT as putOverride } from "../app/api/events/[id]/gifts/[giftId]/overrides/[guestId]/route";
+import { DELETE as deleteGiftRoute } from "../app/api/events/[id]/gifts/[giftId]/route";
 import { publishEvent } from "../domain/store";
+import { lockGift } from "../domain/gifts";
 
 const BODY = {
   title: "Test event",
@@ -130,6 +132,23 @@ describe("the API operations", () => {
     expect(() => giftView(event.id, "gift_none")).toThrow(/No gift/);
     deleteGift(event.id, gift.id);
     expect(() => giftView(event.id, gift.id)).toThrow(/No gift/);
+  });
+
+  it("refuses to remove a locked or ordered gift and still removes an open one", async () => {
+    const { event } = seed();
+    const locked = createGiftFromBody(event.id, { product_id: "prod_1", default_variant_id: "var_plain" });
+    lockGift(locked.id, "2030-01-05");
+    expect(() => deleteGift(event.id, locked.id)).toThrow(/locked/);
+    expect(() => giftView(event.id, locked.id)).not.toThrow();
+
+    const ordered = createGiftFromBody(event.id, { product_id: "prod_2", order_id: "ord_9" });
+    const res = await deleteGiftRoute(new Request("http://x", { method: "DELETE" }), { params: Promise.resolve({ id: event.id, giftId: ordered.id }) });
+    expect(res.status).toBe(400);
+    expect(() => giftView(event.id, ordered.id)).not.toThrow();
+
+    const open = createGiftFromBody(event.id, { product_id: "prod_3", default_variant_id: "var_plain" });
+    expect(deleteGift(event.id, open.id)).toEqual({ id: open.id });
+    expect(() => giftView(event.id, open.id)).toThrow(/No gift/);
   });
 
   it("sets and clears an override through the route", async () => {
