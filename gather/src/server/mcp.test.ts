@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { createGift, updateGift } from "../domain/gifts";
 import { publishEvent, resetState, upsertDefinition } from "../domain/store";
 import { createEventFromBody, snapshot, submitRsvp } from "./api";
-import { createToken, handleRpc, tokenFrom } from "./mcp";
+import { createToken, handleRpc, tokenFrom, type RpcRequest } from "./mcp";
 import { TOOLS } from "../webmcp/tools";
 import { cartOperations } from "./registry";
 
@@ -41,6 +41,15 @@ const isError = (r: Record<string, unknown>) => (r.result as { isError?: boolean
 
 describe("the MCP endpoint", () => {
   beforeEach(resetState);
+
+  it("returns a JSON-RPC error for a non-object body rather than a 500 (issue #132)", async () => {
+    const { event, organizer } = seed();
+    for (const bad of [null, 42]) {
+      const r = await handleRpc(event.id, organizer, bad as unknown as RpcRequest);
+      expect((r.error as { code: number }).code).toBe(-32600);
+      expect(r.result).toBeUndefined();
+    }
+  });
 
   it("lists only the tools a token may call, and refuses without a token", async () => {
     const { event, organizer, vendor } = seed();

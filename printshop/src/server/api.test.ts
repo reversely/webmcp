@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { designs, resetState, shop } from "../domain/store";
 import { getBatch } from "../domain/store";
 import { approveProof, batchView, createBatch, orderBatch, postMessage, quote, updateBatch } from "./api";
-import { handleRpc } from "./mcp";
+import { handleRpc, type RpcRequest } from "./mcp";
 import { TOOLS } from "../webmcp/tools";
 
 const d = () => designs()[0];
@@ -71,6 +71,13 @@ describe("the endpoint", () => {
     expect(isError(await call("approve_proof", { batch_id: id }))).toBe(false);
     const feed = payload(await call("get_changes", { since_seq: 0 })).entries as { kind: string }[];
     expect(feed.map((e) => e.kind)).toEqual(["quoted", "ordered", "proof", "approved"]);
+  });
+  it("returns a JSON-RPC error for a non-object body rather than a 500 (issue #132)", async () => {
+    for (const bad of [null, 42]) {
+      const r = await handleRpc(bad as unknown as RpcRequest);
+      expect((r.error as { code: number }).code).toBe(-32600);
+      expect(r.result).toBeUndefined();
+    }
   });
   it("refuses a batch-scoped call that carries no buyer email (issue #128)", async () => {
     const design = d();

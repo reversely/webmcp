@@ -181,6 +181,9 @@ async function searchOperation(eventId: string, args: ToolArgs): Promise<unknown
 export type RpcRequest = { jsonrpc?: string; id?: string | number | null; method: string; params?: Record<string, unknown> };
 
 export async function handleRpc(eventId: string, token: CallerToken | null, rpc: RpcRequest): Promise<Record<string, unknown>> {
+  // A non-object body (null, a number, a string) parses as JSON but carries no method, so it is a
+  // malformed request, not a server fault (issue #132).
+  if (rpc === null || typeof rpc !== "object" || Array.isArray(rpc)) return { jsonrpc: "2.0", id: null, error: { code: -32600, message: "The request is not a JSON-RPC object." } };
   const reply = (result: unknown) => ({ jsonrpc: "2.0", id: rpc.id ?? null, result });
   const error = (code: number, message: string) => ({ jsonrpc: "2.0", id: rpc.id ?? null, error: { code, message } });
   try {

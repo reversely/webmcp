@@ -42,6 +42,9 @@ async function dispatch(name: string, args: ToolArgs, email: string | null): Pro
 }
 
 export async function handleRpc(rpc: RpcRequest): Promise<Record<string, unknown>> {
+  // A non-object body (null, a number, a string) parses as JSON but carries no method, so it is a
+  // malformed request, not a server fault (issue #132).
+  if (rpc === null || typeof rpc !== "object" || Array.isArray(rpc)) return { jsonrpc: "2.0", id: null, error: { code: -32600, message: "The request is not a JSON-RPC object" } };
   const reply = (result: unknown) => ({ jsonrpc: "2.0", id: rpc.id ?? null, result });
   if (rpc.method === "initialize") return reply({ protocolVersion: "2025-06-18", serverInfo: { name: "printshop", version: "0.1.0" }, capabilities: { tools: {} } });
   if (rpc.method === "tools/list") return reply({ tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
