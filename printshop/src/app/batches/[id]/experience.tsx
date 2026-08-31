@@ -16,7 +16,8 @@ async function readJson<T>(url: string): Promise<T | { error: string }> {
  * (a tool's write). Order shows while no proof exists and Approve while a proof awaits approval; the
  * status text itself comes from the record and the shop's stages.
  */
-export function BatchExperience({ id }: { id: string }) {
+export function BatchExperience({ id, email }: { id: string; email: string }) {
+  const scope = email ? `?email=${encodeURIComponent(email)}` : "";
   const [batch, setBatch] = useState<Batch | null>(null);
   const [design, setDesign] = useState<Design | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -24,10 +25,10 @@ export function BatchExperience({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
-    const b = await readJson<Batch>(`/api/batches/${id}`);
+    const b = await readJson<Batch>(`/api/batches/${id}${scope}`);
     if ("error" in b) return setError(b.error);
     setBatch(b);
-  }, [id]);
+  }, [id, scope]);
 
   useEffect(() => {
     refresh();
@@ -44,7 +45,7 @@ export function BatchExperience({ id }: { id: string }) {
   async function act(path: string, body?: unknown) {
     setBusy(true);
     setError(null);
-    const res = await fetch(`/api/batches/${id}/${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+    const res = await fetch(`/api/batches/${id}/${path}${scope}`, { method: "POST", headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
     const data = await res.json();
     if (res.ok) setBatch(data as Batch);
     else setError(String(data.error ?? res.statusText));

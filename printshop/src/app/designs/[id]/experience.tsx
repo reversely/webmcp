@@ -48,7 +48,7 @@ export function DesignExperience({ design, shop, earliest }: Props) {
     setBatchError(null);
     const units = lines.map((line, i) => ({ recipient_ref: `unit-${i + 1}`, values: { ...values, [nameKey]: line } }));
     const r = await post<{ id: string }>("/api/batches", { design_id: design.id, units, address, needed_by: neededBy, buyer: { name: buyerName, email: buyerEmail, phone: null } });
-    if (r.ok) router.push(`/batches/${r.data.id}`);
+    if (r.ok) router.push(`/batches/${r.data.id}?email=${encodeURIComponent(buyerEmail)}`);
     else setBatchError(r.reason);
     setBusy(false);
   }

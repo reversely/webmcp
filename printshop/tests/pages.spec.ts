@@ -76,8 +76,8 @@ test("Add to batch opens the batch page where Order shows the proofs and Approve
   await page.getByTestId("buyer-name").fill("Buyer");
   await page.getByTestId("buyer-email").fill("buyer@example.com");
   await page.getByTestId("add-to-batch").click();
-  await expect(page).toHaveURL(/\/batches\/batch_\d+$/);
-  const id = page.url().split("/").pop()!;
+  await expect(page).toHaveURL(/\/batches\/batch_\d+\?email=/);
+  const id = new URL(page.url()).pathname.split("/").pop()!;
 
   await expect(page.getByTestId("unit")).toHaveCount(names.length);
   if (lineField) await expect(page.getByTestId("units")).toContainText("With thanks");
@@ -99,7 +99,7 @@ test("Add to batch opens the batch page where Order shows the proofs and Approve
 
   const last = shop.stages[shop.stages.length - 1];
   const at = new Date(Date.now() + (last.after_minutes + 1) * 60_000).toISOString();
-  const advanced = await page.request.post(`/api/batches/${id}/advance`, { data: { at } });
+  const advanced = await page.request.post(`/api/batches/${id}/advance?email=buyer@example.com`, { data: { at } });
   expect(advanced.ok()).toBe(true);
   await page.evaluate(() => window.dispatchEvent(new Event("shop:changed")));
   await expect(page.getByTestId("batch-status")).toHaveText(last.status);

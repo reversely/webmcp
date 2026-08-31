@@ -7,7 +7,8 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(request: Request, { params }: Params) {
   try {
     const body = (await request.json().catch(() => ({}))) as { at?: string };
-    return NextResponse.json(advance(requireBatch((await params).id, null), body.at ? new Date(body.at) : new Date()));
+    const email = new URL(request.url).searchParams.get("email");
+    return NextResponse.json(advance(requireBatch((await params).id, email), body.at ? new Date(body.at) : new Date()));
   } catch (e) {
     return errorResponse(e);
   }
