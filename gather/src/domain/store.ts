@@ -87,14 +87,14 @@ export function seedDefinitions(eventId: string): AttributeDefinition[] {
     .map((q) => ({ id: newId("def"), event_id: eventId, namespace: "core", key: q.key, label: q.label, scope: q.scope, value_type: q.value_type, constraints: q.constraints, default_visibility: [], required_rule: q.required_rule, creator: "library" }));
 }
 
-export type EventInput = Omit<Event, "id" | "definition_ids" | "status" | "invite_code" | "created_at">;
+export type EventInput = Omit<Event, "id" | "definition_ids" | "status" | "invite_code" | "created_at" | "contact"> & { contact?: Event["contact"] };
 
 export function createEvent(input: EventInput): Event {
   const s = state();
   const id = newId("evt");
   const defs = seedDefinitions(id);
   for (const d of defs) s.definitions.set(d.id, d);
-  const event: Event = { ...input, id, definition_ids: defs.map((d) => d.id), status: "draft", invite_code: null, created_at: now() };
+  const event: Event = { ...input, contact: input.contact ?? { email: null, phone: null }, id, definition_ids: defs.map((d) => d.id), status: "draft", invite_code: null, created_at: now() };
   s.events.set(id, event);
   return event;
 }
@@ -102,8 +102,10 @@ export function createEvent(input: EventInput): Event {
 export function getEvent(id: string): Event {
   const event = state().events.get(id);
   if (!event) throw new Error(`No event ${id}.`);
-  // An event stored before the delivery choice existed reads as "to the venue, no date yet".
-  return event.delivery ? event : { ...event, delivery: { destination: "venue", address: null, needed_by: null } };
+  // An event stored before the delivery choice or the contact existed reads with the field's default.
+  const delivery = event.delivery ?? { destination: "venue", address: null, needed_by: null };
+  const contact = event.contact ?? { email: null, phone: null };
+  return event.delivery && event.contact ? event : { ...event, delivery, contact };
 }
 
 export function eventByCode(code: string): Event | undefined {

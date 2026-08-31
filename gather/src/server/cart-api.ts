@@ -6,7 +6,8 @@
 import { z } from "zod";
 import { approveGift, CartStateError, liveDeps, lockAndCheckout, lockIsDue, pollOrder, refreshCart, sendGift, syncGift, type CartDeps, type ShortLine } from "../agent/cart";
 import * as printshop from "../agent/printshop-cart";
-import { CartBuyer, DeliveryWindow } from "../domain/types";
+import { getEvent } from "../domain/store";
+import { CartBuyer, DeliveryWindow, type Batch } from "../domain/types";
 import { BadRequestError, giftView, requireGift } from "./api";
 
 let deps: CartDeps = liveDeps;
@@ -44,11 +45,21 @@ async function step<T>(run: () => Promise<T>): Promise<T> {
 
 const SendBody = z.object({ buyer: CartBuyer.nullable().default(null) });
 
+/** The shop keeps a batch under the buyer's email, so a send without one takes the event's contact. */
+function printshopBuyer(eventId: string, gift: Batch, buyer: CartBuyer | null): CartBuyer | null {
+  if (buyer?.email || gift.buyer?.email) return buyer;
+  const { contact } = getEvent(eventId);
+  if (!contact.email) throw new BadRequestError("Set the event's contact email before sending.");
+  return { ...buyer, email: contact.email };
+}
+
 /** POST .../send: the cart at the shop, priced (or the print shop's batch, quoted and ordered); the proposal comes back on the gift view. */
 export async function sendGiftOp(eventId: string, giftId: string, body: unknown) {
   const gift = requireGift(eventId, giftId);
-  const { buyer } = parseBody(SendBody, body);
-  const send = printshop.isPrintshopGift(gift) ? printshop.sendGift : sendGift;
+  const parsed = parseBody(SendBody, body);
+  const shop = printshop.isPrintshopGift(gift);
+  const buyer = shop ? printshopBuyer(eventId, gift, parsed.buyer) : parsed.buyer;
+  const send = shop ? printshop.sendGift : sendGift;
   const proposal = await step(() => send(eventId, giftId, deps, buyer));
   return { ...giftView(eventId, giftId), proposal };
 }

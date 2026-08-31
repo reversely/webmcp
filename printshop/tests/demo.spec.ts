@@ -124,6 +124,9 @@ test("Scene 1: the organizer publishes the event and the guests answer with the 
   await organizer.getByTestId("publish").click();
   await organizer.waitForURL(/\/events\/evt_/);
   eventId = organizer.url().split("/events/")[1];
+  // The print-shop send takes the event's contact email as the buyer and the setup form carries no email field, so the demo writes it through the event API.
+  const contact = await organizer.request.patch(`${GATHER}/api/events/${eventId}`, { data: { contact: { email: EVENT.email } } });
+  expect(contact.ok(), await contact.text()).toBe(true);
   await organizer.goto(`${GATHER}/events/${eventId}?webmcp=polyfill`);
   await expect(organizer.getByTestId("status")).toHaveText("Published");
   await expect(organizer.getByTestId("webmcp-status")).toHaveAttribute("data-status", "ready", { timeout: 20_000 });
@@ -185,12 +188,12 @@ test("Scene 4: send validates the units and creates and orders the batch and the
   await caption("Scene 4: send to the vendor");
   const snap = (await (await organizer.request.get(`${GATHER}/api/events/${eventId}`)).json()) as { gifts: { id: string }[] };
   giftId = snap.gifts[0].id;
-  // The shop keeps a batch under the buyer's email; the send carries the organizer's from the file.
-  const sent = await organizer.request.post(`${GATHER}/api/events/${eventId}/gifts/${giftId}/send`, { data: { buyer: { email: EVENT.email } } });
-  expect(sent.ok(), await sent.text()).toBe(true);
-  const { cart_id } = (await sent.json()) as { cart_id: string };
-  batchId = cart_id;
+  // The send takes the event's contact email as the buyer, so the button posts no body.
+  await organizer.getByTestId("send-gift").click();
   await expect(organizer.getByTestId("gift")).toContainText("priced at the shop", { timeout: 20_000 });
+  const sent = (await (await organizer.request.get(`${GATHER}/api/events/${eventId}`)).json()) as { gifts: { id: string; cart_id: string | null }[] };
+  batchId = sent.gifts[0].cart_id!;
+  expect(batchId).toBeTruthy();
   await caption("Scene 4: the batch quoted and ordered at the shop");
   await rest(organizer);
   await shopPage.goto(`${SHOP}/batches/${batchId}`);

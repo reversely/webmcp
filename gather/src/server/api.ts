@@ -61,6 +61,7 @@ export const EventBody = z.object({
   response_options: z.array(GuestStatus).default(defaults.response_options),
   settings: EventSettings.default(defaults.settings),
   delivery: Delivery.default({ destination: "venue", address: null, needed_by: null }),
+  contact: z.object({ email: z.string().nullable().default(null), phone: z.string().nullable().default(null) }).default({ email: null, phone: null }),
   segments: z.array(Segment).default([])
 });
 

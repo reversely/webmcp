@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { LockedValueError, publishEvent, resetState } from "../domain/store";
 import { getGift } from "../domain/gifts";
 import { createEventFromBody, createGiftFromBody, patchRsvp, snapshot, submitRsvp, updatesFor } from "../server/api";
-import { cartView, setCartDeps } from "../server/cart-api";
+import { cartView, sendGiftOp, setCartDeps } from "../server/cart-api";
 import type { CartDeps } from "./cart";
 import { bandPrice, printshopCandidates, printshopClient, printshopHost, type Design, type ShopBatch } from "./printshop";
 import { approveGift, isPrintshopGift, pollBatch, refreshCart, sendGift, syncGift, unitsFor } from "./printshop-cart";
@@ -100,8 +100,8 @@ function fakeShop(designs: Design[] = [FLAT, FOLDED]) {
 }
 
 /** A published event with the seeded printed-name question, three guests (two going, one maybe), and a gift on the flat card. */
-function seed(names: (string | undefined)[] = ["Ada", "Ben"]) {
-  const event = publishEvent(createEventFromBody(EVENT).id);
+function seed(names: (string | undefined)[] = ["Ada", "Ben"], eventBody: Record<string, unknown> = EVENT) {
+  const event = publishEvent(createEventFromBody(eventBody).id);
   const printed = snapshot(event.id).definitions.find((d) => d.key === "printed_name")!;
   const reply = submitRsvp(event.id, {
     party: { contact: { email: BUYER.email } },
@@ -209,6 +209,26 @@ describe("a gift on a print-shop design", () => {
     expect(shop.of("order_batch")).toHaveLength(0);
     const { follow_ups } = await refreshCart(event.id, gift.id, shop.deps);
     expect(follow_ups.map((f) => [f.guest_ids[0], f.reason])).toEqual([[guestIds[1], "over 32"]]);
+  });
+
+  it("a send without a body reaches the shop under the event's contact email", async () => {
+    const shop = fakeShop();
+    setCartDeps(shop.deps);
+    const { event, gift } = seed(undefined, { ...EVENT, contact: { email: "host@example.com" } });
+    await sendGiftOp(event.id, gift.id, {});
+    const [create] = shop.of("create_batch");
+    expect(create.meta.buyer_email).toBe("host@example.com");
+    expect(create.args.buyer).toEqual({ name: "Host", email: "host@example.com", phone: null });
+    expect(getGift(gift.id).buyer).toEqual({ email: "host@example.com" });
+    expect(shop.of("order_batch")).toHaveLength(1);
+  });
+
+  it("a send without a body on an event with no contact email refuses naming the contact", async () => {
+    const shop = fakeShop();
+    setCartDeps(shop.deps);
+    const { event, gift } = seed();
+    await expect(sendGiftOp(event.id, gift.id, {})).rejects.toThrow(/contact email/);
+    expect(shop.of("create_batch")).toHaveLength(0);
   });
 
   it("approve needs an ordered batch, approves the proof at the shop, and locks the gift on the day", async () => {
