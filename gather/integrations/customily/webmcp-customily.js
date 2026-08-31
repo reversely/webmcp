@@ -413,7 +413,8 @@
         const button = q(adapter.cart.button);
         if (!button) return fail("Customily's add-to-cart button is not on this page", { selector: adapter.cart.button });
 
-        const before = await fetch("/cart.js", { signal: signal }).then(function (r) { return r.json(); });
+        const before = await fetch("/cart.js", { signal: signal }).then(function (r) { return r.json(); }).catch(function () { return null; });
+        if (!before) return fail("the cart did not answer with JSON before the add", { recipient_ref: args.recipient_ref });
         const beforeKeys = new Set(before.items.map(function (i) { return i.key; }));
         button.click();
         const added = await waitForAsync(function () {

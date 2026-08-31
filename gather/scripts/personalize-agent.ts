@@ -39,7 +39,7 @@ export type UnitOutcome = {
 
 export type CartLine = { key: string; variant_id: number; quantity: number; properties: Record<string, unknown> };
 
-export type RunResult = { rows: number; ready: number; units: UnitOutcome[]; cart: CartLine[] };
+export type RunResult = { rows: number; ready: number; units: UnitOutcome[]; cart: CartLine[]; video: string | null };
 
 export type RunOptions = {
   base: string;
@@ -48,17 +48,29 @@ export type RunOptions = {
   giftId: string;
   productUrl?: string;
   headless?: boolean;
+  /** A directory that receives a recording of the storefront session. */
+  videoDir?: string;
 };
 
 type GatherReply = { payload: Record<string, unknown>; isError: boolean };
 
 /** One JSON-RPC tools/call against Gather's tokenized endpoint, logged like vendor-agent.mts. */
-async function callGather(opts: RunOptions, name: string, args: Record<string, unknown>): Promise<GatherReply> {
-  const res = await fetch(`${opts.base}/api/events/${opts.eventId}/mcp`, {
+async function callGather(opts: RunOptions, name: string, args: Record<string, unknown>, attempt = 0): Promise<GatherReply> {
+  let res: Response;
+  try {
+    res = await fetch(`${opts.base}/api/events/${opts.eventId}/mcp`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${opts.token}` },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: { ...args, meta: { "ucp-agent": { profile: PROFILE } } } } })
-  });
+    });
+  } catch (error) {
+    // One retry covers a transient failure of the fetch itself before it counts as an error.
+    if (attempt === 0) {
+      await new Promise((r) => setTimeout(r, 3_000));
+      return callGather(opts, name, args, 1);
+    }
+    return { payload: { error: String(error) }, isError: true };
+  }
   const body = (await res.json()) as { result?: { content: { text: string }[]; isError?: boolean }; error?: { message: string } };
   if (body.error) return { payload: { error: body.error.message }, isError: true };
   const text = body.result?.content?.[0]?.text ?? "null";
@@ -69,7 +81,9 @@ async function callGather(opts: RunOptions, name: string, args: Record<string, u
 /** One WebMCP tool call on the storefront page through the polyfill's model context. */
 async function callPage(page: Page, name: string, args: Record<string, unknown>): Promise<GatherReply> {
   type Ctx = { getTools(): Promise<{ name: string }[]>; executeTool(tool: unknown, args: unknown): Promise<{ content: { text: string }[]; isError?: boolean }> };
-  const raw = await page.evaluate(
+  let raw: { text: string; isError: boolean };
+  try {
+    raw = await page.evaluate(
     async ({ name, args }) => {
       const ctx = document.modelContext as unknown as Ctx;
       const tool = (await ctx.getTools()).find((t) => t.name === name);
@@ -78,7 +92,11 @@ async function callPage(page: Page, name: string, args: Record<string, unknown>)
       return { text: result.content[0]?.text ?? "null", isError: result.isError === true };
     },
     { name, args }
-  );
+    );
+  } catch (error) {
+    // A storefront hiccup inside the page (a challenge page, a mid-navigation call) is a unit failure and never a crash.
+    return { payload: { error: String(error) }, isError: true };
+  }
   console.log(`> page ${name} ${JSON.stringify(args).slice(0, 200)}\n< ${raw.text.slice(0, 300)}${raw.text.length > 300 ? "..." : ""}`);
   return { payload: JSON.parse(raw.text) as Record<string, unknown>, isError: raw.isError };
 }
@@ -116,7 +134,14 @@ async function produceUnit(page: Page, row: ManifestRow): Promise<UnitOutcome> {
   const guest = row.guest_id;
   if (!row.variant_id) return { guest_id: guest, ok: false, error: "the manifest row names no variant" };
 
-  const schema = await callPage(page, "get_personalization_schema", {});
+  let schema = await callPage(page, "get_personalization_schema", {});
+  if (schema.isError && JSON.stringify(schema.payload).includes("no personalization adapter")) {
+    // A challenge page stands in for the product under rapid automation; one paced reload clears it.
+    await page.waitForTimeout(10_000);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await waitForTools(page);
+    schema = await callPage(page, "get_personalization_schema", {});
+  }
   if (schema.isError) return { guest_id: guest, ok: false, error: `get_personalization_schema failed: ${JSON.stringify(schema.payload)}` };
   const known = new Set(((schema.payload.fields as { key: string }[] | undefined) ?? []).map((f) => f.key));
   const values: Record<string, unknown> = {};
@@ -131,7 +156,12 @@ async function produceUnit(page: Page, row: ManifestRow): Promise<UnitOutcome> {
   const preview = await callPage(page, "get_personalization_preview", { recipient_ref: guest });
   if (preview.isError || preview.payload.ready !== true) return { guest_id: guest, ok: false, error: `preview not ready: ${JSON.stringify(preview.payload)}` };
 
-  const added = await callPage(page, "add_personalized_unit_to_cart", { recipient_ref: guest });
+  let added = await callPage(page, "add_personalized_unit_to_cart", { recipient_ref: guest });
+  if (added.isError && JSON.stringify(added.payload).includes("before the add")) {
+    // The refusal came before any click, so a paced retry cannot double a line.
+    await page.waitForTimeout(10_000);
+    added = await callPage(page, "add_personalized_unit_to_cart", { recipient_ref: guest });
+  }
   if (added.isError) return { guest_id: guest, ok: false, error: `add to cart failed: ${JSON.stringify(added.payload)}` };
   return {
     guest_id: guest,
@@ -158,9 +188,10 @@ export async function runPersonalization(opts: RunOptions): Promise<RunResult> {
   const browser = await chromium.launch({ headless: opts.headless ?? true });
   const units: UnitOutcome[] = [];
   let cart: CartLine[] = [];
+  let video: ReturnType<Page["video"]> = null;
   try {
     // One context so the storefront cart cookie accumulates every unit of this run.
-    const context = await browser.newContext();
+    const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(opts.videoDir ? { recordVideo: { dir: opts.videoDir, size: { width: 1440, height: 900 } } } : {}) });
     await context.addInitScript({ path: POLYFILL });
     await context.addInitScript({ path: ADAPTER });
     const page = await context.newPage();
@@ -181,11 +212,14 @@ export async function runPersonalization(opts: RunOptions): Promise<RunResult> {
       const data = (await res.json()) as { items: { key: string; variant_id: number; quantity: number; properties: Record<string, unknown> | null }[] };
       return data.items.map((i) => ({ key: i.key, variant_id: i.variant_id, quantity: i.quantity, properties: i.properties ?? {} }));
     });
+    video = page.video();
   } finally {
     await browser.close();
   }
+  const videoPath = video ? await video.path() : null;
   console.log(`produced ${units.filter((u) => u.ok).length} of ${ready.length} units and the cart holds ${cart.length} lines`);
-  return { rows: rows.length, ready: ready.length, units, cart };
+  if (videoPath) console.log(`video ${videoPath}`);
+  return { rows: rows.length, ready: ready.length, units, cart, video: videoPath };
 }
 
 /* ---- CLI ---- */

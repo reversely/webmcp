@@ -152,7 +152,7 @@ test("experiment 1: three guests' preferred names produce three distinct lettere
     defaultVariantId: variants[0].id
   });
 
-  const result = await runPersonalization({ base: baseURL!, eventId: ctx.eventId, token: ctx.tokenId, giftId: ctx.giftId, productUrl: PRODUCT_URL });
+  const result = await runPersonalization({ base: baseURL!, eventId: ctx.eventId, token: ctx.tokenId, giftId: ctx.giftId, productUrl: PRODUCT_URL, videoDir: process.env.CUSTOMILY_VIDEO || undefined });
   await expectCleanRun(request, ctx, result);
   for (const [i, guestId] of ctx.guestIds.entries()) expect(lineText(lineFor(result, guestId))).toContain(FIXTURE.guests[i].preferred_name.toLowerCase());
   expect(new Set(ctx.guestIds.map((id) => lineText(lineFor(result, id)))).size).toBe(3);
@@ -173,7 +173,7 @@ test("experiment 2: every unit carries the same event venue and event date on it
     defaultVariantId: variants[0].id
   });
 
-  const result = await runPersonalization({ base: baseURL!, eventId: ctx.eventId, token: ctx.tokenId, giftId: ctx.giftId, productUrl: PRODUCT_URL });
+  const result = await runPersonalization({ base: baseURL!, eventId: ctx.eventId, token: ctx.tokenId, giftId: ctx.giftId, productUrl: PRODUCT_URL, videoDir: process.env.CUSTOMILY_VIDEO || undefined });
   await expectCleanRun(request, ctx, result);
   const starMap = await starMapByGuest(request, ctx);
   for (const guestId of ctx.guestIds) expect(starMap.get(guestId)).toEqual({ location: "Griffith Observatory, Los Angeles, CA, US", date: FIXTURE.event.starts_at.slice(0, 10) });
@@ -204,7 +204,7 @@ test("experiment 3: mixed personalization maps venue and date and name and size 
     defaultVariantId: null
   });
 
-  const result = await runPersonalization({ base: baseURL!, eventId: ctx.eventId, token: ctx.tokenId, giftId: ctx.giftId, productUrl: PRODUCT_URL });
+  const result = await runPersonalization({ base: baseURL!, eventId: ctx.eventId, token: ctx.tokenId, giftId: ctx.giftId, productUrl: PRODUCT_URL, videoDir: process.env.CUSTOMILY_VIDEO || undefined });
   await expectCleanRun(request, ctx, result);
   const starMap = await starMapByGuest(request, ctx);
   for (const [i, guestId] of ctx.guestIds.entries()) {
