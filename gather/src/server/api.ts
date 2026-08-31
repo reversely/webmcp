@@ -470,6 +470,8 @@ export function updatesFor(eventId: string, giftId: string, since = 0): VendorUp
 /* ---- Errors to responses ---- */
 
 export function errorResponse(e: unknown): NextResponse {
+  // A malformed request body makes `request.json()` throw a SyntaxError; that is a client error, not a 500.
+  if (e instanceof SyntaxError) return NextResponse.json({ error: "The body is not JSON." }, { status: 400 });
   if (e instanceof NotFoundError) return NextResponse.json({ error: e.message }, { status: 404 });
   if (e instanceof BadRequestError) return NextResponse.json({ error: e.message }, { status: 400 });
   if (e instanceof LockedValueError) return NextResponse.json({ error: e.message, locked: { definition_id: e.definition.id, label: e.definition.label, ...e.lock } }, { status: 409 });

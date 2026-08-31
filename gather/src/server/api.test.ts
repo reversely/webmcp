@@ -113,6 +113,15 @@ describe("the API operations", () => {
     expect(missing.status).toBe(404);
   });
 
+  it("answers a malformed JSON body with 400 on the POST and PATCH routes", async () => {
+    const { event, guestIds } = seed();
+    const posted = await postEvent(new Request("http://x", { method: "POST", body: "{" }));
+    expect(posted.status).toBe(400);
+    expect((await posted.json()) as { error: string }).toHaveProperty("error");
+    const patched = await patchGuest(new Request("http://x", { method: "PATCH", body: "{" }), { params: Promise.resolve({ id: event.id, guestId: guestIds[0] }) });
+    expect(patched.status).toBe(400);
+  });
+
   it("stores a gift plan with the default rule and serves its quantities, manifest, and follow-up", () => {
     const { event, dietary, guestIds } = seed();
     const gift = createGiftFromBody(event.id, {

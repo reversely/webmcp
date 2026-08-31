@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { designs, resetState, shop } from "../domain/store";
 import { getBatch } from "../domain/store";
 import { approveProof, batchView, createBatch, orderBatch, postMessage, quote, updateBatch } from "./api";
+import { POST as postBatch } from "../app/api/batches/route";
 import { handleRpc, type RpcRequest } from "./mcp";
 import { TOOLS } from "../webmcp/tools";
 
@@ -87,5 +88,12 @@ describe("the endpoint", () => {
     expect(isError(await noEmail("get_batch", { batch_id: id }))).toBe(true);
     expect(isError(await noEmail("order_batch", { batch_id: id }))).toBe(true);
     expect(isError(await noEmail("post_message", { batch_id: id, text: "hi" }))).toBe(true);
+  });
+  it("answers a malformed JSON body with 400 on the POST route rather than a 500 (issue #133)", async () => {
+    const bad = await postBatch(new Request("http://x", { method: "POST", body: "{" }));
+    expect(bad.status).toBe(400);
+    expect((await bad.json()) as { error: string }).toHaveProperty("error");
+    const good = await postBatch(new Request("http://x", { method: "POST", body: JSON.stringify({ design_id: d().id, units: units(d().minimum_quantity), address: addr, needed_by: "2031-01-01", buyer }) }));
+    expect(good.status).toBe(201);
   });
 });

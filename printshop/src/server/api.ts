@@ -113,6 +113,8 @@ export function changes(since: number, email: string | null) {
 }
 
 export function errorResponse(e: unknown): NextResponse {
+  // A malformed request body makes `request.json()` throw a SyntaxError; that is a client error, not a 500.
+  if (e instanceof SyntaxError) return NextResponse.json({ error: "The body is not JSON" }, { status: 400 });
   if (e instanceof NotFoundError) return NextResponse.json({ error: e.message }, { status: 404 });
   if (e instanceof BadRequestError) return NextResponse.json({ error: e.message }, { status: 400 });
   throw e;
