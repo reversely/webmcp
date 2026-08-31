@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { LockedValueError, publishEvent, resetState } from "../domain/store";
 import { getGift } from "../domain/gifts";
-import { createEventFromBody, createGiftFromBody, patchRsvp, snapshot, submitRsvp, updatesFor } from "../server/api";
-import { cartView, sendGiftOp, setCartDeps } from "../server/cart-api";
+import { createEventFromBody, createGiftFromBody, followUps, patchRsvp, postUpdate, snapshot, submitRsvp, updatesFor } from "../server/api";
+import { cartView, forwardOrganizerReply, sendGiftOp, setCartDeps } from "../server/cart-api";
 import type { CartDeps } from "./cart";
 import { bandPrice, printshopCandidates, printshopClient, printshopHost, type Design, type ShopBatch } from "./printshop";
 import { approveGift, isPrintshopGift, pollBatch, refreshCart, sendGift, syncGift, unitsFor } from "./printshop-cart";
@@ -74,6 +74,11 @@ function fakeShop(designs: Design[] = [FLAT, FOLDED]) {
       }
       case "get_batch":
         return shop.batches.get(args.batch_id);
+      case "post_message": {
+        const batch = shop.batches.get(args.batch_id)!;
+        record(batch, "buyer", "message", args.text);
+        return batch;
+      }
       case "get_changes":
         return { since: args.since_seq, seq: shop.seq, entries: shop.changes.filter((c) => c.seq > args.since_seq) };
       default:
@@ -294,6 +299,45 @@ describe("a gift on a print-shop design", () => {
     expect(view.follow_ups).toEqual([]);
     expect(view.checkout_id).toBeNull();
     expect(shop.of("get_batch").length).toBeGreaterThan(0);
+  });
+
+  it("an organizer reply forwards to the shop's post_message once and the poll does not echo it back", async () => {
+    const shop = fakeShop();
+    setCartDeps(shop.deps);
+    const { event, gift } = seed();
+    await sendGift(event.id, gift.id, shop.deps, BUYER);
+    await pollBatch(event.id, gift.id, shop.deps);
+    const update = postUpdate(event.id, gift.id, "organizer", { kind: "reply", text: "Use the side door" });
+    await forwardOrganizerReply(event.id, gift.id, update);
+    expect(shop.of("post_message")).toHaveLength(1);
+    expect(shop.of("post_message")[0].args).toEqual({ batch_id: "batch_1", text: "Use the side door" });
+    expect(shop.of("post_message")[0].meta.buyer_email).toBe(BUYER.email);
+    expect(shop.batch("batch_1").thread.at(-1)).toMatchObject({ from: "buyer", kind: "message", text: "Use the side door" });
+    expect(await pollBatch(event.id, gift.id, shop.deps)).toEqual([]);
+    expect(updatesFor(event.id, gift.id).map((u) => [u.caller, u.kind])).toEqual([["printshop", "proof"], ["organizer", "reply"]]);
+  });
+
+  it("a reply on a Shopify gift and a vendor token's posts forward nothing", async () => {
+    const shop = fakeShop();
+    setCartDeps(shop.deps);
+    const { event, gift } = seed();
+    await sendGift(event.id, gift.id, shop.deps, BUYER);
+    const shopify = createGiftFromBody(event.id, { product_id: "p1", shop_domain: "a.myshopify.com" });
+    await forwardOrganizerReply(event.id, shopify.id, postUpdate(event.id, shopify.id, "organizer", { kind: "reply", text: "For the catalog" }));
+    await forwardOrganizerReply(event.id, gift.id, postUpdate(event.id, gift.id, "token:tok_1", { kind: "shipped", text: "On the way" }));
+    await forwardOrganizerReply(event.id, gift.id, postUpdate(event.id, gift.id, "token:tok_1", { kind: "reply", text: "A vendor reply" }));
+    expect(shop.of("post_message")).toHaveLength(0);
+  });
+
+  it("a failed forward keeps the reply and writes a question from Gather instead of an error", async () => {
+    const shop = fakeShop();
+    const { event, gift } = seed();
+    await sendGift(event.id, gift.id, shop.deps, BUYER);
+    setCartDeps({ ...shop.deps, printshop: () => ({ host: "localhost:3114", url: URL_, callTool: async () => { throw new Error("down"); } }) });
+    const update = postUpdate(event.id, gift.id, "organizer", { kind: "reply", text: "Use the side door" });
+    await expect(forwardOrganizerReply(event.id, gift.id, update)).resolves.toBeUndefined();
+    expect(updatesFor(event.id, gift.id).map((u) => [u.caller, u.kind])).toEqual([["organizer", "reply"], ["gather", "question"]]);
+    expect(followUps(event.id).some((f) => f.kind === "vendor_question" && f.gift_id === gift.id)).toBe(true);
   });
 
   it("unitsFor sends a mapped definition's answer to the design field with the same key and nothing else", () => {

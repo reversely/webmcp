@@ -4,11 +4,11 @@
  * what the step produced, so a route stays a few lines.
  */
 import { z } from "zod";
-import { approveGift, CartStateError, liveDeps, lockAndCheckout, lockIsDue, pollOrder, refreshCart, sendGift, syncGift, type CartDeps, type ShortLine } from "../agent/cart";
+import { approveGift, CartStateError, GATHER_CALLER, liveDeps, lockAndCheckout, lockIsDue, pollOrder, refreshCart, sendGift, syncGift, type CartDeps, type ShortLine } from "../agent/cart";
 import * as printshop from "../agent/printshop-cart";
 import { getEvent } from "../domain/store";
-import { CartBuyer, DeliveryWindow, type Batch } from "../domain/types";
-import { BadRequestError, giftView, requireGift } from "./api";
+import { CartBuyer, DeliveryWindow, type Batch, type VendorUpdate } from "../domain/types";
+import { BadRequestError, giftView, postUpdate, requireGift } from "./api";
 
 let deps: CartDeps = liveDeps;
 
@@ -80,6 +80,22 @@ export async function syncGiftOp(eventId: string, giftId: string) {
   const sync = printshop.isPrintshopGift(gift) ? printshop.syncGift : syncGift;
   const result = await step(() => sync(eventId, giftId, deps));
   return { ...giftView(eventId, giftId), ...result };
+}
+
+/**
+ * Sends an organizer reply on a print-shop gift to the shop's post_message after the local write,
+ * so both threads show it (#113). The local update stands whatever the shop answers: a failed
+ * forward becomes a thread question from Gather, which the Overview surfaces as a follow-up until
+ * the organizer replies again, rather than an error on the post.
+ */
+export async function forwardOrganizerReply(eventId: string, giftId: string, update: VendorUpdate): Promise<void> {
+  const gift = requireGift(eventId, giftId);
+  if (!printshop.isPrintshopGift(gift) || update.kind !== "reply" || update.caller !== "organizer") return;
+  try {
+    await printshop.forwardReply(giftId, update.text, deps);
+  } catch {
+    postUpdate(eventId, giftId, GATHER_CALLER, { kind: "question", text: "The reply did not reach the shop." });
+  }
 }
 
 /** POST .../lock: the checkout now, whatever the cutoff says. */

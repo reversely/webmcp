@@ -156,6 +156,14 @@ export async function refreshCart(eventId: string, giftId: string, deps: CartDep
   return { proposal, follow_ups: issuesToFollowUps(gift, batch) };
 }
 
+/** Posts an organizer reply into the shop's batch thread so the shop's side shows it too (#113). */
+export async function forwardReply(giftId: string, text: string, deps: CartDeps): Promise<void> {
+  const gift = getGift(giftId);
+  const batchId = gift.order_id ?? gift.cart_id;
+  if (!batchId) return;
+  await shopClient(deps, gift.buyer?.email ?? null).callTool("post_message", { batch_id: batchId, text });
+}
+
 /**
  * Reads the shop's change feed after the last sequence number stored on the gift and writes each
  * new thread entry of a mapped kind as an update from the shop; the shop's own messages arrive as

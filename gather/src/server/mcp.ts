@@ -12,7 +12,7 @@ import { LockedValueError } from "../domain/store";
 import type { CallerToken } from "../domain/types";
 import { TOOLS, type ToolArgs, type ToolDefinition } from "../webmcp/tools";
 import { cartOperations } from "./registry";
-import "./cart-api";
+import { forwardOrganizerReply } from "./cart-api";
 
 export type McpResult = { content: [{ type: "text"; text: string }]; isError?: true };
 const text = (payload: unknown, isError = false): McpResult => (isError ? { content: [{ type: "text", text: JSON.stringify(payload) }], isError: true } : { content: [{ type: "text", text: JSON.stringify(payload) }] });
@@ -142,7 +142,9 @@ async function dispatch(eventId: string, token: CallerToken, tool: ToolDefinitio
     case "post_update": {
       const giftId = String(args.gift_id);
       if (!organizer) requireGiftScope(token, giftId);
-      return postUpdate(eventId, giftId, organizer ? "organizer" : `token:${token.id}`, { kind: args.kind, text: args.text ?? "", expected_date: args.expected_date ?? null, reference: args.reference ?? null, guest_id: args.guest_id ?? null });
+      const update = postUpdate(eventId, giftId, organizer ? "organizer" : `token:${token.id}`, { kind: args.kind, text: args.text ?? "", expected_date: args.expected_date ?? null, reference: args.reference ?? null, guest_id: args.guest_id ?? null });
+      await forwardOrganizerReply(eventId, giftId, update);
+      return update;
     }
     case "get_updates": {
       const giftId = String(args.gift_id);
