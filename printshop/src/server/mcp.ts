@@ -9,6 +9,8 @@ import { TOOLS, type ToolArgs } from "../webmcp/tools";
 
 export type RpcRequest = { jsonrpc?: string; id?: string | number | null; method: string; params?: Record<string, unknown> };
 const text = (payload: unknown, isError = false) => (isError ? { content: [{ type: "text", text: JSON.stringify(payload) }], isError: true } : { content: [{ type: "text", text: JSON.stringify(payload) }], structuredContent: payload });
+/** Tools that read or mutate a single buyer's batch (or their change feed); each needs a buyer email (issue #128). */
+const SCOPED = new Set(["get_batch", "update_batch", "order_batch", "approve_proof", "post_message", "get_changes"]);
 
 async function dispatch(name: string, args: ToolArgs, email: string | null): Promise<unknown> {
   switch (name) {
@@ -49,6 +51,7 @@ export async function handleRpc(rpc: RpcRequest): Promise<Record<string, unknown
     const meta = args.meta as { "ucp-agent"?: { profile?: string }; buyer_email?: string } | undefined;
     if (!meta?.["ucp-agent"]?.profile) return reply(text({ error: "meta.ucp-agent.profile is required" }, true));
     const email = (meta.buyer_email ?? (args.buyer as { email?: string } | undefined)?.email ?? null) as string | null;
+    if (SCOPED.has(name) && !email) return reply(text({ error: "a buyer email is required for this operation" }, true));
     const { meta: _m, ...rest } = args;
     void _m;
     try {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { designs, resetState, shop } from "../domain/store";
-import { approveProof, createBatch, orderBatch, quote, updateBatch } from "./api";
+import { getBatch } from "../domain/store";
+import { approveProof, batchView, createBatch, orderBatch, postMessage, quote, updateBatch } from "./api";
 import { handleRpc } from "./mcp";
 import { TOOLS } from "../webmcp/tools";
 
@@ -37,7 +38,18 @@ describe("the operations", () => {
     const design = d();
     const bad = createBatch({ design_id: design.id, units: [...units(design.minimum_quantity - 1), { recipient_ref: "gx", values: { name: "" } }], address: addr, needed_by: "2031-01-01", buyer });
     expect(bad.issues).toHaveLength(1);
-    expect(() => orderBatch(bad.id, null)).toThrow(/issues/);
+    expect(() => orderBatch(bad.id, buyer.email)).toThrow(/issues/);
+  });
+  it("refuses a scopeless read or mutation and leaves the batch unchanged (issue #128)", () => {
+    const design = d();
+    const batch = createBatch({ design_id: design.id, units: units(design.minimum_quantity), address: addr, needed_by: "2031-01-01", buyer });
+    expect(() => batchView(batch.id, null)).toThrow(/No batch/);
+    expect(() => orderBatch(batch.id, null)).toThrow(/No batch/);
+    expect(() => postMessage(batch.id, null, { text: "hi" })).toThrow(/No batch/);
+    expect(batchView(batch.id, buyer.email).id).toBe(batch.id);
+    const after = getBatch(batch.id)!;
+    expect(after.status).toBe("quoted");
+    expect(after.thread.map((t) => t.kind)).toEqual(["quoted"]);
   });
 });
 
@@ -59,5 +71,14 @@ describe("the endpoint", () => {
     expect(isError(await call("approve_proof", { batch_id: id }))).toBe(false);
     const feed = payload(await call("get_changes", { since_seq: 0 })).entries as { kind: string }[];
     expect(feed.map((e) => e.kind)).toEqual(["quoted", "ordered", "proof", "approved"]);
+  });
+  it("refuses a batch-scoped call that carries no buyer email (issue #128)", async () => {
+    const design = d();
+    const created = await call("create_batch", { design_id: design.id, units: units(design.minimum_quantity), address: addr, needed_by: "2031-01-01", buyer });
+    const id = payload(created).id as string;
+    const noEmail = (name: string, args: Record<string, unknown>) => handleRpc({ id: 9, method: "tools/call", params: { name, arguments: { ...args, meta: { "ucp-agent": { profile: PROFILE } } } } });
+    expect(isError(await noEmail("get_batch", { batch_id: id }))).toBe(true);
+    expect(isError(await noEmail("order_batch", { batch_id: id }))).toBe(true);
+    expect(isError(await noEmail("post_message", { batch_id: id, text: "hi" }))).toBe(true);
   });
 });

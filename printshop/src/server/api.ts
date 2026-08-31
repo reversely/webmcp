@@ -26,8 +26,10 @@ export function requireDesign(id: string) {
   return d;
 }
 export function requireBatch(id: string, email: string | null): Batch {
+  // A call with no buyer scope owns no batch, so it reads and mutates nothing (issue #128).
+  if (!email) throw new NotFoundError(`No batch ${id}`);
   const b = getBatch(id);
-  if (!b || (email && b.buyer.email.toLowerCase() !== email.toLowerCase())) throw new NotFoundError(`No batch ${id}`);
+  if (!b || b.buyer.email.toLowerCase() !== email.toLowerCase()) throw new NotFoundError(`No batch ${id}`);
   return b;
 }
 
