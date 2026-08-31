@@ -102,8 +102,23 @@ export function Overview({ snap, invite, onChanged }: { snap: Snapshot; invite: 
         </section>
 
         <section className="block" aria-labelledby="gifts">
-          <div className="labelrow"><h2 id="gifts">Gifts</h2></div>
-          <p className="hint" style={{ color: "var(--muted)" }} data-testid="gifts-empty">No gift chosen yet</p>
+          <div className="labelrow"><h2 id="gifts">Gifts</h2><span className="eyebrow">{snap.gifts.length} chosen</span></div>
+          {snap.gifts.length === 0 ? (
+            <p className="hint" style={{ color: "var(--muted)" }} data-testid="gifts-empty">No gift chosen yet</p>
+          ) : (
+            <div className="list" data-testid="gifts">
+              {snap.gifts.map((g) => {
+                const units = g.quantities.reduce((s, q) => s + q.quantity, 0);
+                const status = g.locked_at ? "locked" : g.cutoff ? "approved" : g.cart_id ? "priced" : "draft";
+                return (
+                  <div className="row" key={g.id} data-testid="gift-row" style={{ gridTemplateColumns: "1fr auto" }}>
+                    <span>{g.product_title}</span>
+                    <span className="type">{[g.shop_domain, `${units} ${units === 1 ? "unit" : "units"}`, status].filter(Boolean).join(" / ")}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="block" aria-labelledby="setup">
