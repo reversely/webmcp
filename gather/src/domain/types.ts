@@ -270,6 +270,8 @@ export const Batch = z.object({
   /** Set by the lock: the date and the guests whose units the checkout carries. */
   locked_at: z.string().nullable(),
   locked_guest_ids: z.array(z.string()),
+  /** Set by the lock: every definition the units read, so writeValue refuses a guest edit even where no value existed at the lock (#112). */
+  locked_definition_ids: z.array(z.string()).optional(),
   /** Set by send: the buyer the cart names and the cart as the shop last priced it, with the change-log seq that cart reflects. */
   buyer: CartBuyer.nullable().optional(),
   proposal: Proposal.nullable().optional(),

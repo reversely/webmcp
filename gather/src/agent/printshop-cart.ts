@@ -123,7 +123,9 @@ export async function approveGift(eventId: string, giftId: string, deps: CartDep
   const now = deps.now();
   const date = isoDate(now);
   updateGift(giftId, { approved_at: now.toISOString(), cutoff: date } as Partial<GiftInput>);
-  return lockGift(giftId, date);
+  // The design's name field reads the printed-name answer outside the option mapping (unitsFor), so the lock names it too (#112).
+  const printed = definitionsFor(gift.event_id).find((d) => d.key === PRINTED_NAME_KEY);
+  return lockGift(giftId, date, printed ? [printed.id] : []);
 }
 
 /** Rewrites the units while the batch is quoted; an ordered batch takes no unit change. */

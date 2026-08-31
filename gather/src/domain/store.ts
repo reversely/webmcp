@@ -214,11 +214,30 @@ export function getValue(subjectType: AttributeValue["subject_type"], subjectId:
  * Validates and stores one value. A locked value rejects the write with the lock, so the form can
  * show the organizer's path; an invalid value rejects with the reason. Both are change-log entries when they succeed.
  */
+/**
+ * The lock a frozen gift places on a subject's definition. lockValue marks only values that exist
+ * at the lock, so the write path also checks the definition ids the lock stored on the batch; a
+ * guest with no value at approval is refused the same way (#112).
+ */
+function giftLock(subjectType: AttributeValue["subject_type"], subjectId: string, definitionId: string): { batch_id: string; date: string } | null {
+  const s = state();
+  for (const gift of s.gifts.values()) {
+    if (!gift.locked_at || !gift.locked_definition_ids?.includes(definitionId)) continue;
+    const covers =
+      subjectType === "guest" ? gift.locked_guest_ids.includes(subjectId)
+      : subjectType === "party" ? gift.locked_guest_ids.some((id) => s.guests.get(id)?.party_id === subjectId)
+      : gift.event_id === subjectId;
+    if (covers) return { batch_id: gift.id, date: gift.locked_at };
+  }
+  return null;
+}
+
 export function writeValue(subjectType: AttributeValue["subject_type"], subjectId: string, definitionId: string, raw: unknown, source: string): AttributeValue {
   const s = state();
   const def = getDefinition(definitionId);
   const existing = getValue(subjectType, subjectId, definitionId);
-  if (existing?.lock && source !== "organizer" && !source.startsWith("token:")) throw new LockedValueError(def, existing.lock);
+  const lock = existing?.lock ?? giftLock(subjectType, subjectId, definitionId);
+  if (lock && source !== "organizer" && !source.startsWith("token:")) throw new LockedValueError(def, lock);
   const checked = validateValue(def, raw);
   if (!checked.ok) throw new InvalidValueError(checked.reason);
   const row: AttributeValue = { subject_type: subjectType, subject_id: subjectId, definition_id: definitionId, value: checked.value, source, lock: existing?.lock ?? null, updated_at: now(), seq: nextSeq() };

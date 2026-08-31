@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { publishEvent, resetState } from "../domain/store";
+import { LockedValueError, publishEvent, resetState } from "../domain/store";
 import { getGift } from "../domain/gifts";
 import { createEventFromBody, createGiftFromBody, patchRsvp, snapshot, submitRsvp, updatesFor } from "../server/api";
 import { cartView, setCartDeps } from "../server/cart-api";
@@ -20,9 +20,8 @@ const FOLDED: Design = { ...FLAT, id: "note-card-folded-a6", title: "Folded note
 type Call = { tool: string; args: Record<string, any>; meta: Record<string, any> };
 
 /** The shop behind a fake fetch at /api/mcp: two designs, a quote that refuses below the minimum, batches with the validation the shop applies, and a change feed. */
-function fakeShop() {
+function fakeShop(designs: Design[] = [FLAT, FOLDED]) {
   const shop = { calls: [] as Call[], batches: new Map<string, ShopBatch>(), seq: 0, changes: [] as { seq: number; at: string; batch_id: string; kind: string; text: string }[] };
-  const designs = [FLAT, FOLDED];
   const design = (id: string) => designs.find((d) => d.id === id)!;
   const record = (batch: ShopBatch, from: "shop" | "buyer", kind: string, text: string, reference: string | null = null) => {
     shop.seq += 1;
@@ -221,6 +220,27 @@ describe("a gift on a print-shop design", () => {
     expect(shop.of("approve_proof")[0].args).toEqual({ batch_id: "batch_1" });
     expect(shop.batch("batch_1").status).toBe("approved");
     expect(approved).toMatchObject({ approved_at: TODAY.toISOString(), cutoff: "2029-12-01", locked_at: "2029-12-01", locked_guest_ids: [guestIds[0], guestIds[1]] });
+  });
+
+  it("approve locks the printed name: a guest edit gets the lock and the organizer passes", async () => {
+    const shop = fakeShop();
+    const { event, gift, printed, guestIds } = seed();
+    await sendGift(event.id, gift.id, shop.deps, BUYER);
+    await approveGift(event.id, gift.id, shop.deps);
+    expect(() => patchRsvp(event.id, guestIds[0], { answers: { [printed.id]: "Adam" } })).toThrow(LockedValueError);
+    expect(patchRsvp(event.id, guestIds[0], { answers: { [printed.id]: "Adam" }, source: "organizer" }).values[printed.id]).toBe("Adam");
+    // The organizer's write leaves no unlocked row behind; the guest stays refused.
+    expect(() => patchRsvp(event.id, guestIds[0], { answers: { [printed.id]: "Eve" } })).toThrow(LockedValueError);
+  });
+
+  it("a guest with no printed name at approval is refused a write after it all the same", async () => {
+    const OPTIONAL: Design = { ...FLAT, fields: [{ key: "name", label: "Name", kind: "name", max_length: 32, required: false }] };
+    const shop = fakeShop([OPTIONAL, FOLDED]);
+    const { event, gift, printed, guestIds } = seed(["Ada", undefined]);
+    await sendGift(event.id, gift.id, shop.deps, BUYER);
+    await approveGift(event.id, gift.id, shop.deps);
+    expect(() => patchRsvp(event.id, guestIds[1], { answers: { [printed.id]: "Ben" } })).toThrow(LockedValueError);
+    expect(patchRsvp(event.id, guestIds[1], { answers: { [printed.id]: "Ben" }, source: "organizer" }).values[printed.id]).toBe("Ben");
   });
 
   it("the change feed writes the proof, the stages with their reference, and the shop's messages to the thread once each", async () => {
