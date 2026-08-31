@@ -30,7 +30,7 @@ const FIXTURE = {
     starts_at: "2027-05-20T18:00:00Z",
     venue: { name: "Griffith Observatory", line1: "2800 E Observatory Rd", city: "Los Angeles", region: "CA", postal_code: "90027", country: "US" },
     delivery: { destination: "venue", address: null, needed_by: "2027-05-01" },
-    contact: { email: "gather-vendor@example.com", phone: "5555550123" }
+    contact: { email: "gather-vendor@example.com", phone: "4165550123" }
   },
   guests: [
     { display_name: "Guest One", preferred_name: "Avery" },
