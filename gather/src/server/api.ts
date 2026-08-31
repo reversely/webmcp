@@ -35,9 +35,10 @@ import {
   writeValue,
   type EventInput
 } from "../domain/store";
-import { Constraints, EventSettings, FilterSchema, GiftOverride, GiftRule, Guest, GuestStatus, MissingValueFallback, PostLockCancellation, Segment, UpdateKind, ValueType, Variant, VariantMappingRow, Venue, type AttributeDefinition, type Batch, type VendorUpdate, DeliveryWindow, Delivery } from "../domain/types";
+import { Constraints, EventSettings, FilterSchema, GiftOverride, GiftRule, Guest, GuestStatus, MissingValueFallback, PersonalizationField, PersonalizationMapping, PostLockCancellation, Segment, UpdateKind, ValueType, Variant, VariantMappingRow, Venue, type AttributeDefinition, type Batch, type VendorUpdate, DeliveryWindow, Delivery } from "../domain/types";
 import { matches } from "../domain/filter";
 import { createGift, getGift, giftsFor, manifest, quantities, removeGift, setGiftOverride, unservable, updateGift, type GiftInput } from "../domain/gifts";
+import { validateMappings } from "../domain/personalization";
 import { afterRsvpWrite } from "./hooks";
 
 export class NotFoundError extends Error {}
@@ -171,6 +172,8 @@ export const GiftBody = z.object({
   mapping: z.array(VariantMappingRow).default([]),
   default_variant_id: z.string().nullable().default(null),
   variants: z.array(Variant).default([]),
+  /** The vendor's personalization schema the search read for the product, when it has one. */
+  personalization: z.object({ fields: z.array(PersonalizationField) }).nullable().optional(),
   missing_value_fallback: MissingValueFallback.default("default"),
   post_lock_cancellation: PostLockCancellation.default("keep"),
   cutoff: z.string().nullable().default(null),
@@ -236,6 +239,20 @@ export function setOverride(eventId: string, giftId: string, guestId: string, bo
   requireGift(eventId, giftId);
   requireGuest(eventId, guestId);
   setGiftOverride(giftId, guestId, parseBody(GiftOverride, body ?? {}));
+  return giftView(eventId, giftId);
+}
+
+const MappingsBody = z.object({ mappings: z.array(PersonalizationMapping) });
+
+/** Stores a gift's personalization mappings (set_personalization_mapping) after validating them against the product schema and the event's definitions (#117). */
+export function setPersonalizationMappings(eventId: string, giftId: string, body: unknown) {
+  const gift = requireGift(eventId, giftId);
+  const event = requireEvent(eventId);
+  if (!gift.personalization?.fields.length) throw new BadRequestError("The gift's product has no personalization schema.");
+  const data = parseBody(MappingsBody, body);
+  const errors = validateMappings(gift, event, data.mappings, definitionsFor(eventId));
+  if (errors.length) throw new BadRequestError(errors.map((e) => `${e.code}: ${e.message}`).join("; "));
+  updateGift(giftId, { personalization_mappings: data.mappings } as Partial<GiftInput>);
   return giftView(eventId, giftId);
 }
 

@@ -82,7 +82,7 @@ describe("withDelivery, eligibility, and rank", () => {
   });
   it("ranks a design with a name field above a boxed product when the request is personalized", async () => {
     const boxed = await withDelivery(base({ product_id: "boxed", price_cents: 1500 }), CTX, checkoutWith(["Arrives Dec 28 to Jan 2"]));
-    const design = { ...base({ product_id: "design", price_cents: 320 }), delivery: boxed.delivery, personalization: { fields: [{ key: "name", label: "Name", kind: "name", max_length: 40, required: true }] } };
+    const design = { ...base({ product_id: "design", price_cents: 320 }), delivery: boxed.delivery, personalization: { fields: [{ key: "name", label: "Name", kind: "name" as const, max_length: 40, required: true }] } };
     expect(rank([boxed, design], CTX).ranked.map((r) => r.product_id)).toEqual(["boxed", "design"]);
     const { ranked } = rank([boxed, design], { ...CTX, personalized: true });
     expect(ranked.map((r) => r.product_id)).toEqual(["design", "boxed"]);

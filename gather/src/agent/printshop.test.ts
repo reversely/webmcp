@@ -34,7 +34,7 @@ function fakeShop() {
     const unit = bandPrice(d, quantity);
     return { unit_cents: unit, quantity, subtotal_cents: unit * quantity, tax_cents: Math.round(unit * quantity * 0.13), total_cents: Math.round(unit * quantity * 1.13), ready_by: "2029-12-06", currency: "CAD" };
   };
-  const issues = (d: Design, units: ShopBatch["units"]) => units.flatMap((u) => d.fields.flatMap((f) => (f.required && !u.values[f.key] ? [{ recipient_ref: u.recipient_ref, field: f.key, reason: "missing" }] : (u.values[f.key] ?? "").length > f.max_length ? [{ recipient_ref: u.recipient_ref, field: f.key, reason: `over ${f.max_length}` }] : [])));
+  const issues = (d: Design, units: ShopBatch["units"]) => units.flatMap((u) => d.fields.flatMap((f) => (f.required && !u.values[f.key] ? [{ recipient_ref: u.recipient_ref, field: f.key, reason: "missing" }] : (u.values[f.key] ?? "").length > (f.max_length ?? Infinity) ? [{ recipient_ref: u.recipient_ref, field: f.key, reason: `over ${f.max_length}` }] : [])));
   const reply = (tool: string, args: Record<string, any>): unknown => {
     switch (tool) {
       case "list_designs":

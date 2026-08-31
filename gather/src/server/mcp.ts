@@ -6,7 +6,7 @@
  */
 import { z } from "zod";
 import { readLatestSeq } from "./seq";
-import { changes, counts, guestList, guestView, manifestView, missing, postUpdate, summary, updateGiftFromBody, updatesFor, readFilter, requireEvent, BadRequestError, NotFoundError } from "./api";
+import { changes, counts, guestList, guestView, manifestView, missing, postUpdate, setPersonalizationMappings, summary, updateGiftFromBody, updatesFor, readFilter, requireEvent, BadRequestError, NotFoundError } from "./api";
 import { newId, state } from "../domain/store";
 import { LockedValueError } from "../domain/store";
 import type { CallerToken } from "../domain/types";
@@ -73,6 +73,23 @@ function filterValues<T extends { values?: Record<string, unknown> }>(row: T, id
   return { ...row, values: Object.fromEntries(Object.entries(row.values).filter(([k]) => ids.includes(k))) };
 }
 
+type PersonalizedRow = { personalization?: Record<string, { source?: { type?: string; definition_id?: string } }> };
+
+/** Drops the personalization entries whose source definition the token may not read, mirroring filterValues (#117). */
+function filterPersonalization<T extends PersonalizedRow>(row: T, ids: string[]): T {
+  if (!row.personalization) return row;
+  return { ...row, personalization: Object.fromEntries(Object.entries(row.personalization).filter(([, v]) => v.source?.type !== "definition" || ids.includes(v.source.definition_id ?? ""))) };
+}
+
+/** The definition ids a mappings argument names, read loosely before validation. */
+function mappingDefinitionIds(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((m) => {
+    const source = (m as { source?: { type?: string; definition_id?: string } } | null)?.source;
+    return source?.type === "definition" && source.definition_id ? [source.definition_id] : [];
+  });
+}
+
 async function dispatch(eventId: string, token: CallerToken, tool: ToolDefinition, args: ToolArgs): Promise<unknown> {
   const organizer = token.callable_tools.includes("set_gift_plan");
   const strArg = (k: string) => (args[k] === undefined || args[k] === null ? undefined : String(args[k]));
@@ -100,10 +117,10 @@ async function dispatch(eventId: string, token: CallerToken, tool: ToolDefinitio
     case "get_manifest": {
       const giftId = String(args.gift_id);
       if (!organizer) requireGiftScope(token, giftId);
-      const view = manifestView(eventId, giftId) as { rows?: { values?: Record<string, unknown> }[] } & Record<string, unknown>;
+      const view = manifestView(eventId, giftId) as { rows?: ({ values?: Record<string, unknown> } & PersonalizedRow)[] } & Record<string, unknown>;
       if (organizer) return view;
       const ids = token.readable_definition_ids;
-      return { ...view, rows: (view.rows ?? []).map((r) => filterValues(r, ids)) };
+      return { ...view, rows: (view.rows ?? []).map((r) => filterPersonalization(filterValues(r, ids), ids)) };
     }
     case "get_changes": {
       const since = Number(args.since_seq ?? 0);
@@ -114,6 +131,14 @@ async function dispatch(eventId: string, token: CallerToken, tool: ToolDefinitio
     }
     case "set_gift_plan":
       return updateGiftFromBody(eventId, String(args.gift_id), { rules: args.rules });
+    case "set_personalization_mapping": {
+      const giftId = String(args.gift_id);
+      if (!organizer) {
+        requireGiftScope(token, giftId);
+        for (const id of mappingDefinitionIds(args.mappings)) if (!token.readable_definition_ids.includes(id)) throw new NotFoundError(`No definition ${id} for this token.`);
+      }
+      return setPersonalizationMappings(eventId, giftId, { mappings: args.mappings });
+    }
     case "post_update": {
       const giftId = String(args.gift_id);
       if (!organizer) requireGiftScope(token, giftId);

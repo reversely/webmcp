@@ -8,7 +8,9 @@ import { z } from "zod";
 export const Address = z.object({ name: z.string(), line1: z.string(), city: z.string(), region: z.string(), postal_code: z.string(), country: z.string() });
 export type Address = z.infer<typeof Address>;
 
-export const Field = z.object({ key: z.string(), label: z.string(), kind: z.enum(["text", "name", "monogram"]), max_length: z.number().int(), required: z.boolean() });
+/** The field kinds a design may state; text, name, and monogram render today, and the rest arrive with vendor integrations (#117). */
+export const FIELD_KINDS = ["text", "name", "monogram", "date", "location", "star_map", "color", "word_list"] as const;
+export const Field = z.object({ key: z.string(), label: z.string(), kind: z.enum(FIELD_KINDS), max_length: z.number().int(), required: z.boolean() });
 export type Field = z.infer<typeof Field>;
 
 export const PriceBand = z.object({ min_quantity: z.number().int(), unit_cents: z.number().int() });

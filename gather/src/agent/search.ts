@@ -20,8 +20,9 @@ export function cardsConfig(): CardsConfig {
 }
 
 export type Variant = { id: string; title: string; price_cents: number | null; currency: string | null; available: boolean; options: { name: string; label: string }[] };
-/** One value a printed unit carries, as the print shop's design schema states it. */
-export type PersonalizationField = { key: string; label: string; kind: string; max_length: number; required: boolean };
+/** One value a personalized unit carries, as the vendor's schema states it; domain/types.ts holds the kind list. */
+export type { PersonalizationField } from "../domain/types";
+import type { PersonalizationField } from "../domain/types";
 export type Candidate = {
   product_id: string;
   title: string;

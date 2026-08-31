@@ -173,6 +173,34 @@ export const ChangeEntry = z.discriminatedUnion("kind", [
 ]);
 export type ChangeEntry = z.infer<typeof ChangeEntry>;
 
+/* ---- Personalization ---- */
+
+/** The field kinds a vendor's personalization schema may state; the list is data, so a new kind is a row here (#117). */
+export const PERSONALIZATION_KINDS = ["text", "name", "monogram", "date", "location", "star_map", "color", "word_list"] as const;
+export const PersonalizationKind = z.enum(PERSONALIZATION_KINDS);
+export type PersonalizationKind = z.infer<typeof PersonalizationKind>;
+
+/** One value a personalized unit carries, as the vendor's schema states it. */
+export const PersonalizationField = z.object({ key: z.string(), label: z.string(), kind: PersonalizationKind, max_length: z.number().int().optional(), required: z.boolean(), allowed_values: z.array(z.string()).optional() });
+export type PersonalizationField = z.infer<typeof PersonalizationField>;
+
+/** The transforms a mapping may apply; personalization.ts states what each accepts. */
+export const PERSONALIZATION_TRANSFORMS = ["uppercase", "lowercase", "date_only", "location_query"] as const;
+export const PersonalizationTransform = z.enum(PERSONALIZATION_TRANSFORMS);
+export type PersonalizationTransform = z.infer<typeof PersonalizationTransform>;
+
+/** Where a vendor field's value comes from: an RSVP definition, an event field, or a fixed value. */
+export const MappingSource = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("definition"), definition_id: z.string(), subject_scope: z.enum(["guest", "party", "event"]) }),
+  z.object({ type: z.literal("event"), key: z.enum(["title", "starts_at", "venue"]) }),
+  z.object({ type: z.literal("literal"), value: z.unknown() })
+]);
+export type MappingSource = z.infer<typeof MappingSource>;
+
+/** One mapping row: the vendor field it fills, its source, and an optional transform. */
+export const PersonalizationMapping = z.object({ vendor_field_key: z.string(), source: MappingSource, transform: PersonalizationTransform.optional() });
+export type PersonalizationMapping = z.infer<typeof PersonalizationMapping>;
+
 /* ---- Gifts ---- */
 
 /** One clause of the filter grammar (filter.ts) as a schema, so a stored rule validates on write. */
@@ -227,6 +255,10 @@ export const Batch = z.object({
   mapping: z.array(VariantMappingRow),
   default_variant_id: z.string().nullable(),
   variants: z.array(Variant),
+  /** Set on a personalized product: the vendor's field schema the search read. */
+  personalization: z.object({ fields: z.array(PersonalizationField) }).nullable().optional(),
+  /** Set by set_personalization_mapping: one source per vendor field. */
+  personalization_mappings: z.array(PersonalizationMapping).nullable().optional(),
   missing_value_fallback: MissingValueFallback,
   post_lock_cancellation: PostLockCancellation,
   cutoff: z.string().nullable(),

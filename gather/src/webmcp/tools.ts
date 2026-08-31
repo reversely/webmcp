@@ -106,6 +106,21 @@ export const TOOLS: ToolDefinition[] = [
     route: { method: "PATCH", path: "/api/events/:eventId/gifts/{gift_id}", body: (a) => ({ rules: a.rules }) }
   },
   {
+    name: "set_personalization_mapping",
+    description: "Replaces a personalized gift's field mappings: each row sends an RSVP definition, an event field (title, starts_at, venue), or a literal into one vendor field of the selected product, with an optional transform (uppercase, lowercase, date_only, location_query). Use it after choosing a product with personalization fields.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        gift_id: { type: "string", description: "The gift's id" },
+        mappings: { type: "array", description: "Rows as {vendor_field_key, source, transform?}; source is {type: 'definition', definition_id, subject_scope}, {type: 'event', key} or {type: 'literal', value}", items: { type: "object" } }
+      },
+      required: ["gift_id", "mappings"],
+      additionalProperties: false
+    },
+    scopes: ["organizer"],
+    route: { method: "POST", path: "/api/events/:eventId/gifts/{gift_id}/personalization", body: (a) => ({ mappings: a.mappings }) }
+  },
+  {
     name: "send_to_vendor",
     description: "Sends a gift to its vendor: builds the priced proposal (the cart at the shop) from the current quantities.",
     inputSchema: { type: "object", properties: { gift_id: { type: "string", description: "The gift's id" } }, required: ["gift_id"], additionalProperties: false },

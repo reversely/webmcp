@@ -5,12 +5,13 @@
  * with no recompute step to schedule.
  */
 import { matches, type Subject } from "./filter";
-import { getDefinition, guestsFor, lockValue, newId, state, subjectFor } from "./store";
+import { personalized, personalizeRow, type RowPersonalization } from "./personalization";
+import { getDefinition, getEvent, guestsFor, lockValue, newId, state, subjectFor } from "./store";
 import type { AttributeDefinition, Batch, GiftOverride, Option, SynonymRow, UnitStatus, Variant, VariantMappingRow } from "./types";
 import synonymData from "./synonyms.json";
 
 export type Resolution = { product_id: string | null; variant_id: string | null; unit_status: UnitStatus; reason?: string };
-export type ManifestRow = Resolution & { guest_id: string; display_name: string; status: Subject["guest"]["status"]; values: Record<string, unknown> };
+export type ManifestRow = Resolution & { guest_id: string; display_name: string; status: Subject["guest"]["status"]; values: Record<string, unknown> } & Partial<RowPersonalization>;
 export type Quantity = { product_id: string; variant_id: string | null; quantity: number };
 
 export type GiftInput = Omit<Batch, "id" | "event_id" | "overrides" | "locked_at" | "locked_guest_ids">;
@@ -170,13 +171,14 @@ function cancelledAfterLock(gift: Batch, productId: string, override: GiftOverri
 /** The unit statuses a cart line counts: a kept or reassignable cancelled unit still ships. */
 export const COUNTED: ReadonlySet<UnitStatus> = new Set(["open", "locked", "cancelled_sunk", "cancelled_reassignable"]);
 
-/** One row per guest the recipients filter selects, plus any guest the lock recorded. */
+/** One row per guest the recipients filter selects, plus any guest the lock recorded. A personalized product's rows carry the resolved per-guest values (#117). */
 export function manifest(gift: Batch): ManifestRow[] {
   const locked = new Set(gift.locked_guest_ids);
+  const event = personalized(gift) ? getEvent(gift.event_id) : null;
   return guestsFor(gift.event_id)
     .map((guest) => subjectFor(guest))
     .filter((subject) => locked.has(subject.guest.id) || matches(gift.recipients, subject))
-    .map((subject) => ({ guest_id: subject.guest.id, display_name: subject.guest.display_name, status: subject.guest.status, values: subject.values, ...resolveGuest(gift, subject) }));
+    .map((subject) => ({ guest_id: subject.guest.id, display_name: subject.guest.display_name, status: subject.guest.status, values: subject.values, ...resolveGuest(gift, subject), ...(event ? personalizeRow(gift, event, subject) : {}) }));
 }
 
 /** Units per product and variant, excluding unservable, held, and excluded rows. */

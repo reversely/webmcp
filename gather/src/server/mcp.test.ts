@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { createGift } from "../domain/gifts";
+import { createGift, updateGift } from "../domain/gifts";
 import { publishEvent, resetState, upsertDefinition } from "../domain/store";
 import { createEventFromBody, snapshot, submitRsvp } from "./api";
 import { createToken, handleRpc, tokenFrom } from "./mcp";
@@ -93,5 +93,37 @@ describe("the MCP endpoint", () => {
     const expired = createToken(event.id, { holder: "x", callable_tools: ["get_changes"], expires_at: "2000-01-01T00:00:00Z" });
     expect(tokenFrom(event.id, new Request("http://x", { headers: { authorization: `Bearer ${expired.id}` } }))).toBeNull();
     expect(tokenFrom(event.id, new Request("http://x"))).toBeNull();
+  });
+
+  it("stores a personalization mapping through the organizer tool and refuses an invalid one", async () => {
+    const { event, gift, organizer, vendor, name } = seed();
+    updateGift(gift.id, { personalization: { fields: [{ key: "caption", label: "Caption", kind: "name", required: true }] } } as never);
+    const good = [{ vendor_field_key: "caption", source: { type: "definition", definition_id: name.id, subject_scope: "guest" } }];
+    const stored = await call(event.id, organizer, "set_personalization_mapping", { gift_id: gift.id, mappings: good });
+    expect(isError(stored)).toBe(false);
+    expect(payload(stored).personalization_mappings).toEqual(good);
+    const bad = await call(event.id, organizer, "set_personalization_mapping", { gift_id: gift.id, mappings: [{ vendor_field_key: "nope", source: { type: "literal", value: "x" } }] });
+    expect(isError(bad)).toBe(true);
+    expect(payload(bad).error).toContain("unknown_field");
+    expect(isError(await call(event.id, vendor, "set_personalization_mapping", { gift_id: gift.id, mappings: good }))).toBe(true);
+  });
+
+  it("hides the personalization entries a vendor token may not read", async () => {
+    const { event, gift, vendor, name, choice } = seed();
+    const fields = [
+      { key: "caption", label: "Caption", kind: "name", required: true },
+      { key: "flavour", label: "Flavour", kind: "word_list", required: false },
+      { key: "heading", label: "Heading", kind: "text", required: false }
+    ];
+    const rows = [
+      { vendor_field_key: "caption", source: { type: "definition", definition_id: name.id, subject_scope: "guest" } },
+      { vendor_field_key: "flavour", source: { type: "definition", definition_id: choice.id, subject_scope: "guest" } },
+      { vendor_field_key: "heading", source: { type: "event", key: "title" } }
+    ];
+    updateGift(gift.id, { personalization: { fields }, personalization_mappings: rows } as never);
+    const view = payload(await call(event.id, vendor, "get_manifest", { gift_id: gift.id }));
+    const first = (view.rows as { personalization: Record<string, unknown>; personalization_status: string }[])[0];
+    expect(Object.keys(first.personalization).sort()).toEqual(["flavour", "heading"]);
+    expect(first.personalization_status).toBe("ready");
   });
 });
