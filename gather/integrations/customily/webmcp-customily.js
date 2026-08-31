@@ -173,6 +173,15 @@
     return result(Object.assign({ error: message }, extra || {}), true);
   }
 
+  /**
+   * The bare numeric Shopify product id from either form: PRODUCT_ADAPTERS and the product page's id
+   * input both key on the number, while a UCP catalog carries the full "gid://shopify/Product/<n>".
+   * Every tool normalizes its product_id argument through this so a caller may pass either form.
+   */
+  function bareProductId(id) {
+    return String(id == null ? "" : id).replace(/^gid:\/\/shopify\/Product\//, "");
+  }
+
   function sleep(ms, signal) {
     return new Promise(function (resolve, reject) {
       if (signal && signal.aborted) return reject(new DOMException("Aborted", "AbortError"));
@@ -474,6 +483,7 @@
 
   /** Validates the shared batch arguments; returns an isError result or null to proceed. */
   function batchArgIssues(args) {
+    if (args) args.product_id = bareProductId(args.product_id);
     if (!PRODUCT_ADAPTERS[args.product_id]) {
       return fail("no personalization adapter for product " + JSON.stringify(String(args.product_id)), { known_product_ids: Object.keys(PRODUCT_ADAPTERS) });
     }
@@ -570,6 +580,7 @@
       },
       execute: async function (args, options) {
         const signal = options ? options.signal : undefined;
+        args.product_id = bareProductId(args.product_id);
         const adapter = PRODUCT_ADAPTERS[args.product_id];
         if (!adapter) return fail("no personalization adapter for product " + JSON.stringify(String(args.product_id)), { known_product_ids: Object.keys(PRODUCT_ADAPTERS) });
         const fields = Object.keys(adapter.fields).map(function (key) {
