@@ -298,7 +298,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
               <div className="kv"><span>{g.product_title}</span><span>{g.shop_domain}</span></div>
               {g.quantities.map((q) => {
                 const v = g.variants.find((x) => x.id === q.variant_id);
-                return <div className="kv" key={`${q.product_id}-${q.variant_id}`}><span style={{ paddingLeft: 12 }}>{v?.title ?? "Variant"}</span><span>{q.quantity}{v?.price_cents !== null && v?.price_cents !== undefined ? `, ${money(v.price_cents * q.quantity, v.currency ?? "CAD")}` : ""}</span></div>;
+                return <div className="kv" key={`${q.product_id}-${q.variant_id}`}><span style={{ paddingLeft: 12 }}>{v?.title ?? "Variant"}</span><span>{q.quantity}{v?.price_cents !== null && v?.price_cents !== undefined ? ` for ${money(v.price_cents * q.quantity, v.currency ?? "CAD")}` : ""}</span></div>;
               })}
               <div className="kv"><span style={{ paddingLeft: 12 }}>Locks</span><span>{g.cutoff ? dateOnly(g.cutoff) : "after approval"}</span></div>
             </div>
@@ -373,7 +373,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
             {reply.funnel && (
               <div className="list" style={{ marginBottom: 24 }} data-testid="funnel">
                 {reply.funnel.searches.map((s, i) => (
-                  <div className="row" key={i} style={{ gridTemplateColumns: "1fr auto" }}><span>"{s.query}"{s.categories?.length ? ` in ${s.categories.join(", ")}` : ""}</span><span className="type">{s.returned} of {s.total ?? "?"} in the catalog</span></div>
+                  <div className="row" key={i} style={{ gridTemplateColumns: "1fr auto" }}><span>"{s.query}"{s.categories?.length ? ` in ${s.categories.join(" and ")}` : ""}</span><span className="type">{s.returned} of {s.total ?? "?"} in the catalog</span></div>
                 ))}
                 <div className="row" style={{ gridTemplateColumns: "1fr auto" }}><span>Distinct products</span><span className="type">{reply.funnel.merged}</span></div>
                 <div className="row" style={{ gridTemplateColumns: "1fr auto" }}><span>Checked for delivery to the venue</span><span className="type">{reply.funnel.probed}</span></div>
@@ -428,7 +428,7 @@ export function Experience({ snap, onChanged, lastSearch, setLastSearch }: { sna
                     <span>{o.label}</span>
                     <select aria-label={`Variant for ${o.label}`} value={mapping[`${q.id}|${o.value}`] ?? ""} onChange={(e) => setMapping({ ...mapping, [`${q.id}|${o.value}`]: e.target.value || null })}>
                       <option value="">Use the default variant</option>
-                      {(editing ? editing.variants : chosen!.variants).map((v) => <option key={v.id} value={v.id}>{v.title}{v.price_cents !== null ? `, ${money(v.price_cents, v.currency ?? "CAD")}` : ""}</option>)}
+                      {(editing ? editing.variants : chosen!.variants).map((v) => <option key={v.id} value={v.id}>{v.title}{v.price_cents !== null ? ` at ${money(v.price_cents, v.currency ?? "CAD")}` : ""}</option>)}
                     </select>
                   </div>
                 ))}

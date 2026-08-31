@@ -283,7 +283,7 @@ export function DraftPage({ library }: { library: Library }) {
                 <h2>{draft.title.trim() || "Your event"}</h2>
                 <div className="when">
                   {draft.starts_at ? dateTime(new Date(draft.starts_at).toISOString()) : "Date and time"}
-                  {(draft.venue.name || draft.venue.line1 || draft.venue.city) && <><br />{[draft.venue.name, draft.venue.line1, draft.venue.city].filter(Boolean).join(", ")}</>}
+                  {(draft.venue.name || draft.venue.line1 || draft.venue.city) && <><br /><span style={{ display: "inline-flex", gap: 10, flexWrap: "wrap" }}>{[draft.venue.name, draft.venue.line1, draft.venue.city].filter(Boolean).map((part) => <span key={part}>{part}</span>)}</span></>}
                   {draft.cost_per_person && <><br />{money(Math.round(Number(draft.cost_per_person) * 100))} per person</>}
                 </div>
                 {draft.invite_extras.length > 0 && <div className="extras">{draft.invite_extras.map((x) => <span key={x}>{x}</span>)}</div>}

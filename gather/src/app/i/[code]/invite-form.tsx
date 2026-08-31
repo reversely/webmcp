@@ -127,7 +127,7 @@ export function InviteForm({ invite, guestId }: { invite: Invite; guestId: strin
     }
   }
 
-  const when = [dateTime(event.starts_at), [event.venue.name, event.venue.line1, event.venue.city].filter(Boolean).join(", ")].filter(Boolean);
+  const venue = [event.venue.name, event.venue.line1, event.venue.city].filter(Boolean);
 
   return (
     <>
@@ -142,7 +142,8 @@ export function InviteForm({ invite, guestId }: { invite: Invite; guestId: strin
               <div className="in">
                 <h2 data-testid="invite-title">{event.title}</h2>
                 <div className="when">
-                  {when.map((line) => <div key={line}>{line}</div>)}
+                  <div>{dateTime(event.starts_at)}</div>
+                  {venue.length > 0 && <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>{venue.map((part) => <span key={part}>{part}</span>)}</div>}
                   {event.cost_per_person_cents !== null && <div>{money(event.cost_per_person_cents)} per person</div>}
                   {event.rsvp_deadline && <div>Reply by {event.rsvp_deadline}</div>}
                 </div>
