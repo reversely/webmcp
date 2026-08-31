@@ -100,6 +100,16 @@ describe("validateMappings", () => {
     expect(at([...mappings(nameDef).slice(0, 3), { vendor_field_key: "accent", source: { type: "event", key: "title" }, transform: "location_query" }])).toEqual(["incompatible_transform"]);
     expect(at([...mappings(nameDef).slice(0, 3), { vendor_field_key: "accent", source: { type: "literal", value: 5 }, transform: "uppercase" }])).toEqual(["incompatible_transform"]);
   });
+
+  it("refuses a literal a transform cannot consume and accepts one it can", () => {
+    const { event, nameDef } = seed();
+    const g = gift(event.id);
+    const withStarDate = (value: unknown): PersonalizationMapping[] => [mappings(nameDef)[0], { vendor_field_key: "star_date", source: { type: "literal", value }, transform: "date_only" }, ...mappings(nameDef).slice(2)];
+    const bad = validateMappings(g, getEvent(event.id), withStarDate("hello"), [nameDef]);
+    expect(bad.map((e) => e.code)).toEqual(["incompatible_transform"]);
+    expect(bad[0].message).toMatch(/date_only/);
+    expect(validateMappings(g, getEvent(event.id), withStarDate("2030-01-10"), [nameDef])).toEqual([]);
+  });
 });
 
 describe("transforms", () => {

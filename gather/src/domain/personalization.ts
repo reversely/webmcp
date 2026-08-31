@@ -86,8 +86,10 @@ function sourceErrors(mapping: PersonalizationMapping, field: PersonalizationFie
       if (!TRANSFORM_EVENT_KEYS[transform].includes(source.key)) err("incompatible_transform", `${transform} does not fit the event ${source.key}`);
     } else if (!KIND_EVENT_KEYS[field.kind].includes(source.key)) err("incompatible_type", `the event ${source.key} does not fit a ${field.kind} field`);
   } else if (transform) {
-    const fits = transform === "location_query" ? typeof source.value === "object" && source.value !== null : typeof source.value === "string";
-    if (!fits) err("incompatible_transform", `${transform} does not fit the literal value`);
+    // Apply the transform to the literal exactly as personalizeRow will later, so a literal the
+    // transform can never consume (a "hello" into date_only) is refused here, not per unit downstream.
+    const applied = applyTransform(transform, source.value);
+    if (!applied.ok) err("incompatible_transform", applied.reason);
   }
   return errors;
 }
