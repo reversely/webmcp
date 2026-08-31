@@ -188,6 +188,32 @@ describe("the API operations", () => {
     expect(snapshot(event.id).guests).toHaveLength(4);
   });
 
+  it("captures a bare-email line and derives the name from its local part", () => {
+    const event = publishEvent(createEventFromBody(BODY).id);
+    const imported = importGuests(event.id, { text: "bare@example.com" });
+    expect(imported.added).toBe(1);
+    expect(snapshot(event.id).guests[0].display_name).toBe("bare");
+    // The address was captured, so a reply carrying that email matches the imported row by email.
+    const byEmail = submitRsvp(event.id, { party: { contact: { email: "BARE@example.com" } }, guests: [{ display_name: "Someone Else", status: "going" }] });
+    expect(byEmail.guest_ids).toEqual([imported.guest_ids[0]]);
+    expect(snapshot(event.id).guests).toHaveLength(1);
+  });
+
+  it("parses every documented guest-list format on one import", () => {
+    const event = publishEvent(createEventFromBody(BODY).id);
+    const imported = importGuests(event.id, { text: "Alone\nAngle <angle@example.com>\nComma, comma@example.com\nbare@example.com" });
+    expect(imported.added).toBe(4);
+    const names = snapshot(event.id).guests.map((g) => g.display_name);
+    expect(names).toEqual(["Alone", "Angle", "Comma", "bare"]);
+  });
+
+  it("keeps a line whose second field is not an email as a name with no email", () => {
+    const event = publishEvent(createEventFromBody(BODY).id);
+    const imported = importGuests(event.id, { text: "Comma Person, notanemail" });
+    expect(imported.added).toBe(1);
+    expect(snapshot(event.id).guests[0].display_name).toBe("Comma Person, notanemail");
+  });
+
   it("updates a listed guest on a second RSVP through the invite instead of duplicating the row", () => {
     const event = publishEvent(createEventFromBody(BODY).id);
     importGuests(event.id, { text: "Ada <a@x.com>" });

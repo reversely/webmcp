@@ -254,7 +254,7 @@ export function DraftPage({ library }: { library: Library }) {
 
             <section className="block" aria-labelledby="guestlist">
               <div className="labelrow"><h2 id="guestlist">Guest list</h2></div>
-              <div className="field"><label htmlFor="guest-list">One guest per line as Name or Name &lt;email&gt;</label><textarea id="guest-list" rows={5} value={guestList} onChange={(e) => setGuestList(e.target.value)} data-testid="guest-list" /></div>
+              <div className="field"><label htmlFor="guest-list">One guest per line as a name a bare email or a name with an email</label><textarea id="guest-list" rows={5} value={guestList} onChange={(e) => setGuestList(e.target.value)} data-testid="guest-list" /></div>
             </section>
 
             <section className="block" aria-labelledby="settings">

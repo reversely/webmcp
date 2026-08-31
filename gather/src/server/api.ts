@@ -288,9 +288,11 @@ export const RsvpBody = z.object({
 
 /** One party replies: guests, statuses, and answers, each answer validated by its definition. */
 /**
- * The guest list (PRD Section 5): one guest per line as "Name", "Name <email>", or "Name, email".
- * Each line becomes a party with that contact and a guest with no reply, so "everyone invited"
- * counts the list and a reply from a listed guest updates their row.
+ * The guest list (PRD Section 5): one guest per line as "Name", "Name <email>", "Name, email",
+ * or a bare email. A bare-email line captures the address and derives the name from its local part.
+ * A line whose second field is not an email (e.g. "Comma Person, notanemail") stays a name with no
+ * email, so no data is dropped. Each line becomes a party with that contact and a guest with no
+ * reply, so "everyone invited" counts the list and a reply from a listed guest updates their row.
  */
 export function importGuests(eventId: string, body: unknown) {
   requireEvent(eventId);
@@ -301,8 +303,13 @@ export function importGuests(eventId: string, body: unknown) {
   const added: Guest[] = [];
   for (const line of lines) {
     const m = line.match(/^(.*?)\s*(?:<([^>]+)>|,\s*(\S+@\S+))?\s*$/);
-    const display_name = (m?.[1] ?? line).trim();
-    const email = (m?.[2] ?? m?.[3] ?? "").trim() || null;
+    let display_name = (m?.[1] ?? line).trim();
+    let email = (m?.[2] ?? m?.[3] ?? "").trim() || null;
+    // A bare-email line has no name field: capture the address, name from the local part.
+    if (!email && /^\S+@\S+$/.test(display_name)) {
+      email = display_name;
+      display_name = display_name.slice(0, display_name.indexOf("@"));
+    }
     if (!display_name) continue;
     if (existing.some((g) => g.display_name.toLowerCase() === display_name.toLowerCase()) || added.some((g) => g.display_name.toLowerCase() === display_name.toLowerCase())) continue;
     const party = createParty(eventId, { contact: { email } });
