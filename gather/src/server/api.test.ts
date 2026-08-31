@@ -159,4 +159,13 @@ describe("the API operations", () => {
     expect(snapshot(event.id).counts).toEqual({ going: 2, maybe: 1, cant_go: 0, no_reply: 1 });
     expect(snapshot(event.id).guests).toHaveLength(4);
   });
+
+  it("updates a listed guest on a second RSVP through the invite instead of duplicating the row", () => {
+    const event = publishEvent(createEventFromBody(BODY).id);
+    importGuests(event.id, { text: "Ada <a@x.com>" });
+    submitRsvp(event.id, { guests: [{ display_name: "Ada", status: "going" }] });
+    submitRsvp(event.id, { guests: [{ display_name: "Ada", status: "cant_go" }] });
+    expect(snapshot(event.id).guests).toHaveLength(1);
+    expect(snapshot(event.id).counts).toEqual({ going: 0, maybe: 0, cant_go: 1, no_reply: 0 });
+  });
 });

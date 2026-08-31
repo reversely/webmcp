@@ -296,11 +296,16 @@ export function importGuests(eventId: string, body: unknown) {
   return { added: added.length, guest_ids: added.map((g) => g.id) };
 }
 
-/** An invited guest with no reply whose name or party email matches the reply. */
-function invitedMatch(eventId: string, displayName: string, email: string | null | undefined): Guest | undefined {
+/**
+ * An already-invited guest whose name or party email matches the reply, across any status, since
+ * the invite form is the re-RSVP path (a re-reply or a cancel updates the row, not adds one). Guests
+ * already taken in this submission are skipped so several guests sharing one party email each land on
+ * a distinct row.
+ */
+function invitedMatch(eventId: string, displayName: string, email: string | null | undefined, used: Set<string>): Guest | undefined {
   const s = state();
   return guestsFor(eventId).find((g) => {
-    if (g.status !== "no_reply") return false;
+    if (used.has(g.id)) return false;
     if (g.display_name.toLowerCase() === displayName.trim().toLowerCase()) return true;
     const party = s.parties.get(g.party_id);
     return !!email && !!party?.contact.email && party.contact.email.toLowerCase() === email.toLowerCase();
@@ -314,8 +319,9 @@ export function submitRsvp(eventId: string, body: unknown) {
   if (!parsed.success) throw new BadRequestError(parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; "));
   const email = parsed.data.party.contact?.email ?? null;
   const created: { party: ReturnType<typeof createParty> | null } = { party: null };
+  const used = new Set<string>();
   const guests = parsed.data.guests.map((g) => {
-    const invited = invitedMatch(eventId, g.display_name, email);
+    const invited = invitedMatch(eventId, g.display_name, email, used);
     let guest: Guest;
     if (invited) {
       // A listed guest replies: their row takes the status and the answers; the party keeps its contact.
@@ -326,6 +332,7 @@ export function submitRsvp(eventId: string, body: unknown) {
       created.party ??= createParty(eventId, parsed.data.party);
       guest = createGuest(eventId, created.party.id, { display_name: g.display_name, role: g.role, status: g.status, attendance: g.attendance });
     }
+    used.add(guest.id);
     for (const [definitionId, raw] of Object.entries(g.answers ?? {})) writeAnswer(eventId, guest, definitionId, raw, "guest");
     return guest;
   });
