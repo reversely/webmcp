@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dateOnly, dateTime } from "./format";
+import { dateOnly, dateTime, money } from "./format";
 
 /** Local-time ISO strings keep the expected text stable across the machine's timezone. */
 const DATETIME = "2026-09-03T18:05:00";
@@ -40,4 +40,9 @@ it("no formatter output carries a comma", () => {
     expect(dateOnly(input)).not.toContain(",");
     expect(dateTime(input)).not.toContain(",");
   }
+});
+
+it("prints money above one thousand dollars without a comma", () => {
+  expect(money(123456789)).not.toContain(",");
+  expect(money(100000)).toBe("$1000");
 });

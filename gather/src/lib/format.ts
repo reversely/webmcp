@@ -1,7 +1,7 @@
 /** Display helpers for money in cents and ISO dates; the records stay in cents and ISO. */
 export function money(cents: number | null | undefined, currency = "CAD"): string {
   if (cents === null || cents === undefined) return "";
-  return new Intl.NumberFormat("en-CA", { style: "currency", currency, maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
+  return new Intl.NumberFormat("en-CA", { style: "currency", currency, useGrouping: false, maximumFractionDigits: cents % 100 === 0 ? 0 : 2 }).format(cents / 100);
 }
 
 /** Intl separates date parts with commas; page strings are one clause with no comma, so join with spaces instead (issue #114). */
