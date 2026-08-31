@@ -48,20 +48,31 @@ export class BadRequestError extends Error {}
 /* ---- Events ---- */
 
 const defaults = library().event_defaults;
+
+// #134: the schedule fields (starts_at, rsvp_deadline, needed_by) must be ISO 8601 dates or
+// datetimes, and spots and cost_per_person_cents cannot be negative (cost feeds the catalog price
+// ceiling in cents, PRD Section 11). A past deadline and a guest count over spots stay display-only
+// per the PRD (Section 5 lists spots and the deadlines among the organizer's shown details, not as
+// gates), so the API validates format and sign, not temporal ordering or capacity.
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:\d{2})?)?$/;
+const isoString = z.string().refine((v) => ISO_DATE.test(v) && !Number.isNaN(Date.parse(v)), "must be an ISO 8601 date");
+const nonNegativeInt = z.number().int().min(0);
+const DeliveryBody = Delivery.extend({ needed_by: isoString.nullable().default(null) });
+
 export const EventBody = z.object({
   type: z.string().default(defaults.type),
   title: z.string().min(1),
   host: z.string().default(""),
-  starts_at: z.string(),
+  starts_at: isoString,
   venue: Venue,
-  spots: z.number().int().nullable().default(null),
-  cost_per_person_cents: z.number().int().nullable().default(null),
-  rsvp_deadline: z.string().nullable().default(null),
+  spots: nonNegativeInt.nullable().default(null),
+  cost_per_person_cents: nonNegativeInt.nullable().default(null),
+  rsvp_deadline: isoString.nullable().default(null),
   description: z.string().default(""),
   invite_extras: z.array(z.string()).default([]),
   response_options: z.array(GuestStatus).default(defaults.response_options),
   settings: EventSettings.default(defaults.settings),
-  delivery: Delivery.default({ destination: "venue", address: null, needed_by: null }),
+  delivery: DeliveryBody.default({ destination: "venue", address: null, needed_by: null }),
   contact: z.object({ email: z.string().nullable().default(null), phone: z.string().nullable().default(null) }).default({ email: null, phone: null }),
   segments: z.array(Segment).default([])
 });

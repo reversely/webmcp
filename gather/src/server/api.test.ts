@@ -48,6 +48,15 @@ describe("the API operations", () => {
     expect(invite.questions.map((q) => q.key)).toEqual(["printed_name", "dietary"]);
   });
 
+  it("rejects a non-ISO schedule field, a negative spots, and a negative cost", () => {
+    expect(() => createEventFromBody({ ...BODY, starts_at: "banana" })).toThrow(/starts_at/);
+    expect(() => createEventFromBody({ ...BODY, rsvp_deadline: "soon" })).toThrow(/rsvp_deadline/);
+    expect(() => createEventFromBody({ ...BODY, delivery: { destination: "venue", address: null, needed_by: "whenever" } })).toThrow(/needed_by/);
+    expect(() => createEventFromBody({ ...BODY, spots: -1 })).toThrow(/spots/);
+    expect(() => createEventFromBody({ ...BODY, cost_per_person_cents: -5 })).toThrow(/cost_per_person_cents/);
+    expect(createEventFromBody(BODY)).toMatchObject({ status: "draft" });
+  });
+
   it("rejects an RSVP before publish and a bad answer with the reason", () => {
     const event = createEventFromBody(BODY);
     expect(() => submitRsvp(event.id, { guests: [{ display_name: "Ana" }] })).toThrow(/not published/);
