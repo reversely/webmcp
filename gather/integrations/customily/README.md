@@ -87,8 +87,27 @@ create answer with a per-item `control not rendered` issue on the mug page until
 
 ## Vendor execution
 
-`gather/scripts/personalize-agent.ts` still drives the earlier per-unit tool surface and does
-not run against this adapter; #124 migrates it to the batch tools.
+`gather/scripts/personalize-agent.ts` reads a gift's manifest from Gather's tokenized MCP endpoint
+and carts every ready row through `create_personalized_batch`. It sends one item per product-page
+load and reloads the page between items: the Customily location widget commits coordinates only on a
+fresh page (a reused location field never re-commits, and an in-page tool cannot reload itself), so
+the reset lives in the driver while the calls share one `batch_id`, `idempotency_key`, and cart. It
+then posts one update carrying the `checkout_url` and the per-recipient preview URLs.
+
+Because the shop runs in test mode, the run then drives the returned checkout toward a placed order
+with Shopify's Bogus Gateway. The checkout step is best-effort: a blocked or changed checkout returns
+no order and the run keeps the batch and its cart lines, so `placeOrder: false` (the spec's
+`CUSTOMILY_ORDER=0`) stops at the cart. Two facts about the live store shape the flow: it ships to
+Canada only, so a US event venue falls back to a Canadian placeholder ship-to for the test order
+(the batch's `delivery` object still carries the real intent), and its newer React checkout
+client-validates the card, so the run enters a Luhn-valid test number (`CUSTOMILY_TEST_CARD`, default
+`4242424242424242`) rather than the classic Bogus `1`.
+
+Known limitation (2026-08-31): that React checkout accepts the address, the shipping rate, and the
+card number, but its expiry and security-code card iframes resist synthetic key input, so the order
+does not reach the confirmation page under automation and the run posts no order name. The batch and
+its cart lines are the deliverable and are asserted regardless; the placed-order assertion runs only
+when the checkout completes, and `CUSTOMILY_REQUIRE_ORDER=1` turns a missing order into a failure.
 
 ## Testing
 

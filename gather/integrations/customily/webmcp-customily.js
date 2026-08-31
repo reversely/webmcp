@@ -308,43 +308,61 @@
 
     /**
      * The location field runs Mapbox's geocoder: it geocodes on keydown and only commits
-     * coordinates when a suggestion is picked, so this types the query, waits for the
-     * suggestion list, and clicks the first entry.
+     * coordinates when a suggestion is picked, so this types the query, waits for the suggestion
+     * list, and clicks the first entry. The whole sequence retries a few times: under batch load
+     * the suggestion list is slow to render and a pick can miss, and re-selecting the same place
+     * (an event star map is one place for every guest) must still commit. Each attempt clears the
+     * committed coordinates and re-types, so a failed pick leaves the inputs empty and the next
+     * attempt reads a fresh commit rather than a stale one (#124).
      */
     mapbox_autocomplete: async function (field, value, signal) {
       const input = q(field.selectors.input);
       if (!input) return "control not found: " + field.selectors.input;
-      const latBefore = q(field.selectors.latitude) ? q(field.selectors.latitude).value : null;
-      input.focus();
-      setNativeValue(input, String(value));
-      fire(input, "input");
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true }));
-      const suggestion = await waitFor(function () {
-        const el = q(field.selectors.suggestions);
-        return el && (el.offsetWidth || el.offsetHeight) ? el : null;
-      }, 8000, signal);
-      if (!suggestion) return "the location geocoder returned no suggestions for " + JSON.stringify(String(value));
       const committedCoords = function () {
         const lat = q(field.selectors.latitude);
-        return lat && lat.value && lat.value !== "0" && lat.value !== latBefore ? lat.value : null;
+        return lat && lat.value && lat.value !== "0" ? lat.value : null;
       };
-      // The Mapbox geocoder's suggestion handler reads the pointer coordinates off the event, so
-      // a bare MouseEvent with no clientX/clientY is ignored; send the sequence at the suggestion's
-      // own centre. Verified live on 2026-08-31: coordinate-carrying events commit, bare ones do not.
-      const rect = suggestion.getBoundingClientRect();
-      const mouse = { bubbles: true, cancelable: true, view: window, button: 0, clientX: Math.round(rect.left + rect.width / 2), clientY: Math.round(rect.top + rect.height / 2) };
-      for (const type of ["mousemove", "mouseover", "mousedown", "mouseup", "click"]) {
-        suggestion.dispatchEvent(new MouseEvent(type, mouse));
+      let lastIssue = "picking the location suggestion set no coordinates";
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const latEl = q(field.selectors.latitude);
+        const lonEl = q(field.selectors.longitude);
+        if (latEl) setNativeValue(latEl, "");
+        if (lonEl) setNativeValue(lonEl, "");
+        input.focus();
+        setNativeValue(input, "");
+        fire(input, "input");
+        setNativeValue(input, String(value));
+        fire(input, "input");
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "e", bubbles: true }));
+        const suggestion = await waitFor(function () {
+          const el = q(field.selectors.suggestions);
+          return el && (el.offsetWidth || el.offsetHeight) ? el : null;
+        }, 8000, signal);
+        if (!suggestion) {
+          lastIssue = "the location geocoder returned no suggestions for " + JSON.stringify(String(value));
+          await sleep(800, signal);
+          continue;
+        }
+        // The Mapbox geocoder's suggestion handler reads the pointer coordinates off the event, so
+        // a bare MouseEvent with no clientX/clientY is ignored; send the sequence at the suggestion's
+        // own centre. Verified live on 2026-08-31: coordinate-carrying events commit, bare ones do not.
+        const rect = suggestion.getBoundingClientRect();
+        const mouse = { bubbles: true, cancelable: true, view: window, button: 0, clientX: Math.round(rect.left + rect.width / 2), clientY: Math.round(rect.top + rect.height / 2) };
+        for (const type of ["mousemove", "mouseover", "mousedown", "mouseup", "click"]) {
+          suggestion.dispatchEvent(new MouseEvent(type, mouse));
+        }
+        let committed = await waitFor(committedCoords, 5000, signal);
+        if (!committed) {
+          // Second path: the geocoder also commits on ArrowDown plus Enter in the search input.
+          input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", keyCode: 40, bubbles: true }));
+          input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true }));
+          committed = await waitFor(committedCoords, 5000, signal);
+        }
+        if (committed) return null;
+        lastIssue = "picking the location suggestion set no coordinates";
+        await sleep(800, signal);
       }
-      let committed = await waitFor(committedCoords, 5000, signal);
-      if (!committed) {
-        // Second path: the geocoder also commits on ArrowDown plus Enter in the search input.
-        input.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", keyCode: 40, bubbles: true }));
-        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true }));
-        committed = await waitFor(committedCoords, 5000, signal);
-      }
-      if (!committed) return "picking the location suggestion set no coordinates";
-      return null;
+      return lastIssue;
     },
 
     /**
